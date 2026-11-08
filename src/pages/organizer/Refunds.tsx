@@ -31,7 +31,7 @@ export default function Refunds() {
     await decideRefund(id, s);
     setDeciding(null);
     toast(s === 'approved' ? t('Remboursement accepté : le participant est prévenu') : t('Demande refusée : le participant est prévenu'), 'success', {
-      label: t('Annuler'),
+      label: t('Annuler l’action'),
       run: async () => {
         await decideRefund(id, 'pending');
         reload();

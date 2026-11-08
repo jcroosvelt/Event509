@@ -1,5 +1,5 @@
 import type { Lang } from '@/types';
-import { en } from '@/locales/en';
+import en from '@/locales/en.json';
 
 /**
  * Traduction façon gettext : la phrase française sert de clé, l'anglais vient du
@@ -15,7 +15,7 @@ const warned = new Set<string>();
 export function translate(lang: Lang, source: string, vars?: Vars) {
   let s = source;
   if (lang === 'en') {
-    const hit = en[source];
+    const hit = (en as Record<string, string>)[source];
     if (hit !== undefined) s = hit;
     else if (import.meta.env.DEV && !warned.has(source)) {
       warned.add(source);
