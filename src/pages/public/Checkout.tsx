@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2, Check, CreditCard, Lock, Mail, MessageCircle, Smartphone, Tag, Wallet, X } from 'lucide-react';
-import { createOrder, getEvent, takenSeats, validatePromo } from '@/services/api';
-import { useAsync } from '@/lib/hooks';
+import { ArrowLeft, Building2, CalendarDays, Check, CreditCard, Gift, Lock, Mail, MessageCircle, Smartphone, Tag, Wallet, X } from 'lucide-react';
+import { createOrder, getEvent, seatMapOf, takenSeats, validatePromo, DEMO } from '@/services/api';
+import { ambassadors } from '@/data/mock';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
+import { isEmail, isPhone, useForm } from '@/lib/form';
 import { trackPixel } from '@/lib/pixels';
 import { Button, Card, Field, IconBadge, Input, Loading, Segmented } from '@/components/ui';
 import { EventCover } from '@/components/events';
 import { SeatMap } from '@/components/SeatMap';
+import { useSessionLabel } from '@/components/TicketCard';
 import type { Currency, PaymentMethod, PromoCode } from '@/types';
 
 const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string }[] = [
@@ -19,12 +22,23 @@ const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof Cre
   { id: 'transfer', label: 'Virement bancaire', sub: 'Validation sous 24–48 h', icon: Building2, color: 'bg-emerald-50 text-emerald-600' },
 ];
 
+/** Formate un numéro de carte par groupes de 4 chiffres. */
+const formatCard = (v: string) => v.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+const formatExp = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 4);
+  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+};
+
 export default function Checkout() {
   const { slug = '' } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
   const app = useApp();
+  const { t, lang } = app;
+  useTitle(t('Finaliser la commande'));
   const { data: ev, loading } = useAsync(() => getEvent(slug), [slug]);
+  const sessionLabel = useSessionLabel();
+  const occ = params.get('s') ?? undefined;
 
   const selection = useMemo(
     () =>
@@ -40,10 +54,8 @@ export default function Checkout() {
   );
 
   const [currency, setCurrency] = useState<Currency>(app.currency);
-  const [seats, setSeats] = useState<string[]>([]);
-  const [name, setName] = useState(app.user?.name ?? '');
-  const [email, setEmail] = useState(app.user?.email ?? '');
-  const [phone, setPhone] = useState(app.user?.phone ?? '');
+  const [seats, setSeats] = useState<Record<string, string[]>>({});
+  const [activeLine, setActiveLine] = useState<string>('');
   const [delivery, setDelivery] = useState({ email: true, whatsapp: true, app: true });
   const [method, setMethod] = useState<PaymentMethod>('moncash');
   const [promoInput, setPromoInput] = useState('');
@@ -51,179 +63,238 @@ export default function Checkout() {
   const [promoErr, setPromoErr] = useState('');
   const [checking, setChecking] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [card, setCard] = useState({ number: '', exp: '', cvc: '' });
+  const [seatErr, setSeatErr] = useState('');
+
+  const form = useForm(
+    { name: app.user?.name ?? '', email: app.user?.email ?? '', phone: app.user?.phone ?? '', card: '', exp: '', cvc: '' },
+    {
+      name: (v) => (!String(v).trim() ? t('Indiquez le nom qui figurera sur les billets') : undefined),
+      email: (v) => (!isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined),
+      phone: (v) => ((delivery.whatsapp || method === 'moncash' || method === 'natcash') && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
+      card: (v) => (method === 'card' && String(v).replace(/\D/g, '').length < 15 ? t('Saisissez les 15 ou 16 chiffres de la carte') : undefined),
+      exp: (v) => (method === 'card' && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(String(v)) ? t('Format MM/AA') : undefined),
+      cvc: (v) => (method === 'card' && !/^\d{3,4}$/.test(String(v)) ? t('3 ou 4 chiffres au dos de la carte') : undefined),
+    },
+  );
 
   if (loading) return <Loading />;
   if (!ev || !selection.length)
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
-        <h1 className="text-2xl font-bold">Panier vide</h1>
-        <Link to={ev ? `/e/${ev.slug}` : '/explorer'} className="mt-4 inline-block font-semibold text-brand">Choisir des billets</Link>
+        <h1 className="text-2xl font-bold">{t('Aucun billet sélectionné')}</h1>
+        <p className="mt-2 text-ink-soft">{t('Choisissez vos billets sur la page de l’événement.')}</p>
+        <Link to={ev ? `/e/${ev.slug}` : '/explorer'} className="mt-4 inline-block font-semibold text-brand">{t('Choisir des billets')}</Link>
       </div>
     );
 
-  const lines = selection.map((s) => ({ ...s, tt: ev.tickets.find((t) => t.id === s.ticketTypeId)! })).filter((l) => l.tt);
-  const seatCount = ev.seated ? lines.reduce((a, l) => a + l.qty * (l.tt.groupSize ?? 1), 0) : 0;
+  const lines = selection.map((s) => ({ ...s, tt: ev.tickets.find((x) => x.id === s.ticketTypeId)! })).filter((l) => l.tt);
+  const map = seatMapOf(ev);
+  const needed = (id: string) => {
+    const l = lines.find((x) => x.tt.id === id)!;
+    return l.qty * (l.tt.groupSize ?? 1);
+  };
+  const currentLine = activeLine || lines[0]?.tt.id;
+  const allSeats = Object.values(seats).flat();
+  const seatsOk = !ev.seated || lines.every((l) => (seats[l.tt.id]?.length ?? 0) === needed(l.tt.id));
+
   const c = (v: number) => Math.round(convert(v, ev.currency, currency) * 100) / 100;
   const subtotal = c(lines.reduce((a, l) => a + l.qty * l.tt.price, 0));
-  const discount = promo ? Math.min(subtotal, promo.type === 'percent' ? (subtotal * promo.value) / 100 : c(promo.value)) : 0;
+  const discount = promo ? Math.min(subtotal, promo.type === 'percent' ? Math.round(subtotal * promo.value) / 100 : c(promo.value)) : 0;
   const isFree = subtotal === 0;
-  const fees = isFree ? 0 : Math.round((subtotal - discount) * (app.feePercent / 100) * 100) / 100;
-  const total = Math.round((subtotal - discount + fees) * 100) / 100;
-  const fmt = (v: number) => moneyRaw(v, currency, app.lang);
+  const rawFees = isFree ? 0 : (subtotal - discount) * (app.feePercent / 100);
+  // Les gourdes s'arrondissent à l'unité, les dollars au centime
+  const round = (v: number) => (currency === 'HTG' ? Math.round(v) : Math.round(v * 100) / 100);
+  const fees = round(rawFees);
+  const total = round(subtotal - discount + fees);
+  const fmt = (v: number) => moneyRaw(v, currency, lang);
+  const referrer = app.referral ? ambassadors.find((a) => a.code === app.referral!.code) : undefined;
 
   const applyPromo = async () => {
+    if (!promoInput.trim()) {
+      setPromoErr(t('Saisissez un code promo'));
+      return;
+    }
     setChecking(true);
     setPromoErr('');
     const p = await validatePromo(promoInput, ev.id);
     setChecking(false);
     if (p) {
       setPromo(p);
-      app.toast(`Code ${p.code} appliqué`);
-    } else setPromoErr('Code invalide, expiré ou épuisé');
+      app.toast(t('Code {code} appliqué', { code: p.code }));
+    } else setPromoErr(t('Ce code n’est pas valable pour cet événement. Vérifiez l’orthographe ou sa date de fin.'));
   };
 
   const pay = async () => {
-    const e: Record<string, string> = {};
-    if (!name.trim()) e.name = 'Nom requis';
-    if (!/^\S+@\S+\.\S+$/.test(email)) e.email = 'Email invalide';
-    if ((delivery.whatsapp || method === 'moncash' || method === 'natcash') && phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro requis (WhatsApp / paiement mobile)';
-    if (ev.seated && seats.length !== seatCount) e.seats = `Sélectionnez ${seatCount} place(s)`;
-    if (!isFree && method === 'card' && card.number.replace(/\s/g, '').length < 15) e.card = 'Numéro de carte incomplet';
-    setErrors(e);
-    if (Object.keys(e).length) {
-      app.toast('Vérifiez le formulaire', 'error');
-      return;
+    const formOk = form.validate();
+    if (!seatsOk) {
+      setSeatErr(t('Choisissez toutes vos places avant de payer'));
+      if (formOk) document.getElementById('places')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+    if (!formOk || !seatsOk) return;
     setPaying(true);
-    let seatIdx = 0;
-    const { order, tickets } = await createOrder({
-      eventId: ev.id,
-      items: lines.map((l) => {
-        const n = l.qty * (l.tt.groupSize ?? 1);
-        const s = ev.seated ? seats.slice(seatIdx, seatIdx + n) : undefined;
-        seatIdx += n;
-        return { ticketTypeId: l.tt.id, qty: l.qty, seats: s };
-      }),
-      promo,
-      method: isFree ? 'card' : method,
-      currency,
-      buyer: { name, email, phone },
-      delivery,
-      feePercent: app.feePercent,
-      totals: { subtotal, discount, fees, total },
-    });
-    app.addOrder(order);
-    app.addTickets(tickets);
-    trackPixel('Purchase', { value: total, currency, event: ev.id });
-    nav(`/commande/${order.id}`, { state: { order, tickets, delivery } });
+    try {
+      const { order, tickets } = await createOrder({
+        eventId: ev.id,
+        items: lines.map((l) => ({ ticketTypeId: l.tt.id, qty: l.qty, seats: ev.seated ? seats[l.tt.id] : undefined })),
+        promo,
+        method: isFree ? 'card' : method,
+        currency,
+        buyer: { name: form.values.name, email: form.values.email, phone: form.values.phone },
+        delivery,
+        feePercent: app.feePercent,
+        totals: { subtotal, discount, fees, total },
+        sessionLabel: occ,
+        referral: app.referral?.code,
+      });
+      app.addOrder(order);
+      app.addTickets(tickets);
+      app.pushNotification({ title: t('Commande confirmée'), body: `${ev.title} — ${order.id}`, kind: 'sale' });
+      trackPixel('Purchase', { value: total, currency, event: ev.id });
+      nav(`/commande/${order.id}`, { state: { order, tickets, delivery } });
+    } catch {
+      setPaying(false);
+      app.toast(t('Le paiement n’a pas abouti et vous n’avez pas été débité. Vos informations sont conservées.'), 'error', { label: t('Réessayer'), run: pay });
+    }
   };
 
-  const step = (n: number, title: string) => (
+  let n = 0;
+  const step = (title: string) => (
     <div className="mb-4 flex items-center gap-3">
-      <span className="grid h-8 w-8 place-items-center rounded-full bg-ink text-sm font-bold text-white">{n}</span>
+      <span aria-hidden className="grid h-8 w-8 place-items-center rounded-full bg-contrast text-sm font-bold text-on-contrast">{++n}</span>
       <h2 className="text-lg font-bold">{title}</h2>
     </div>
   );
-  let n = 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:pt-10">
       <Link to={`/e/${ev.slug}`} className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink">
-        <ArrowLeft className="h-4 w-4" /> Retour à l’événement
+        <ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour à l’événement')}
       </Link>
-      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">Finaliser la commande</h1>
+      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">{t('Finaliser la commande')}</h1>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          pay();
+        }}
+        className="grid gap-6 lg:grid-cols-[1fr_380px]"
+      >
         <div className="space-y-6">
           {ev.seated && (
-            <Card>
-              {step(++n, 'Choisissez vos places')}
-              <SeatMap taken={takenSeats(ev.id)} selected={seats} max={seatCount} onChange={setSeats} />
-              <p className={cx('mt-3 text-center text-sm', errors.seats ? 'text-red-600' : 'text-ink-muted')}>
-                {seats.length}/{seatCount} place(s) sélectionnée(s){seats.length ? ` : ${seats.join(', ')}` : ''}
+            <Card id="places">
+              {step(t('Choisissez vos places'))}
+              {lines.length > 1 && (
+                <Segmented
+                  label={t('Type de billet')}
+                  className="mb-4"
+                  value={currentLine}
+                  onChange={setActiveLine}
+                  options={lines.map((l) => ({ value: l.tt.id, label: `${l.tt.name} (${seats[l.tt.id]?.length ?? 0}/${needed(l.tt.id)})` }))}
+                />
+              )}
+              <SeatMap
+                config={map}
+                tickets={ev.tickets}
+                taken={takenSeats(ev)}
+                selected={seats[currentLine] ?? []}
+                activeTicketId={currentLine}
+                max={needed(currentLine)}
+                onChange={(s) => {
+                  setSeatErr('');
+                  setSeats((all) => ({ ...all, [currentLine]: s.filter((x) => !Object.entries(all).some(([k, v]) => k !== currentLine && v.includes(x))) }));
+                }}
+              />
+              <p className={cx('mt-3 text-center text-sm', seatErr ? 'font-semibold text-red-600' : 'text-ink-muted')} role={seatErr ? 'alert' : undefined} aria-live="polite">
+                {seatErr || t('{n}/{m} place(s) choisie(s)', { n: allSeats.length, m: lines.reduce((a, l) => a + needed(l.tt.id), 0) })}
+                {allSeats.length > 0 && !seatErr ? ` : ${allSeats.join(', ')}` : ''}
               </p>
             </Card>
           )}
 
           <Card>
-            {step(++n, 'Vos informations')}
+            {step(t('Vos informations'))}
             {!app.user && (
               <div className="mb-4 rounded-2xl bg-brand-50 p-4 text-sm">
-                Déjà inscrit ? <Link to="/connexion" className="font-bold text-brand">Connectez-vous</Link> pour retrouver vos billets dans l’app.
+                {t('Déjà inscrit ?')} <Link to={`/connexion?next=${encodeURIComponent(location.pathname + location.search)}`} className="font-bold text-brand">{t('Connectez-vous')}</Link> {t('pour retrouver vos billets dans l’app.')}
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nom complet" error={errors.name}><Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></Field>
-              <Field label="Email" error={errors.email}><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></Field>
-              <Field label="Téléphone / WhatsApp" error={errors.phone} className="sm:col-span-2"><Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+509 3x xx xx xx" autoComplete="tel" /></Field>
+              <Field label={t('Nom complet')} error={form.errors.name} required><Input {...form.bind('name')} autoComplete="name" /></Field>
+              <Field label={t('Email')} error={form.errors.email} hint={t('Vos billets y seront envoyés')} required><Input type="email" inputMode="email" {...form.bind('email')} autoComplete="email" /></Field>
+              <Field label={t('Téléphone / WhatsApp')} error={form.errors.phone} className="sm:col-span-2" required={delivery.whatsapp || method === 'moncash' || method === 'natcash'}>
+                <Input type="tel" inputMode="tel" {...form.bind('phone')} placeholder="+509 3712 3456" autoComplete="tel" />
+              </Field>
             </div>
-            <div className="mt-5">
-              <div className="mb-2 text-sm font-semibold">Recevoir mes billets par</div>
+            <fieldset className="mt-5">
+              <legend className="mb-2 text-sm font-semibold">{t('Recevoir mes billets par')}</legend>
               <div className="grid gap-2 sm:grid-cols-3">
                 {([
-                  ['email', 'Email', Mail],
+                  ['email', t('Email'), Mail],
                   ['whatsapp', 'WhatsApp', MessageCircle],
-                  ['app', 'Dans l’app', Smartphone],
+                  ['app', t('Dans l’app'), Smartphone],
                 ] as const).map(([k, l, I]) => (
                   <button
                     key={k}
                     type="button"
+                    role="checkbox"
+                    aria-checked={delivery[k]}
                     onClick={() => setDelivery((d) => ({ ...d, [k]: !d[k] }))}
                     className={cx('flex items-center gap-2 rounded-2xl border p-3 text-sm font-semibold transition', delivery[k] ? 'border-brand bg-brand-50' : 'border-line')}
                   >
-                    <I className="h-4 w-4" /> {l}
-                    <span className={cx('ml-auto grid h-5 w-5 place-items-center rounded-full', delivery[k] ? 'bg-brand text-white' : 'border border-line')}>{delivery[k] && <Check className="h-3 w-3" />}</span>
+                    <I className="h-4 w-4" aria-hidden /> {l}
+                    <span aria-hidden className={cx('ml-auto grid h-5 w-5 place-items-center rounded-full', delivery[k] ? 'bg-brand text-white' : 'border border-line')}>{delivery[k] && <Check className="h-3 w-3" />}</span>
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
           </Card>
 
           {!isFree && (
             <Card>
-              {step(++n, 'Paiement')}
+              {step(t('Paiement'))}
               <div className="mb-4 flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold">Devise</span>
-                <Segmented value={currency} onChange={setCurrency} options={[{ value: 'HTG', label: 'HTG' }, { value: 'USD', label: 'USD' }]} size="sm" />
+                <span className="text-sm font-semibold">{t('Devise')}</span>
+                <Segmented label={t('Devise')} value={currency} onChange={setCurrency} options={[{ value: 'HTG', label: 'HTG' }, { value: 'USD', label: 'USD' }]} size="sm" />
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t('Moyen de paiement')}>
                 {methods.map((m) => (
                   <button
                     key={m.id}
                     type="button"
+                    role="radio"
+                    aria-checked={method === m.id}
                     onClick={() => setMethod(m.id)}
                     className={cx('flex items-center gap-3 rounded-2xl border p-3 text-left transition', method === m.id ? 'border-brand bg-brand-50/60 ring-4 ring-brand/10' : 'border-line hover:border-ink/20')}
                   >
-                    <span className={cx('grid h-10 w-10 place-items-center rounded-full', m.color)}><m.icon className="h-[18px] w-[18px]" /></span>
+                    <span aria-hidden className={cx('grid h-10 w-10 place-items-center rounded-full', m.color)}><m.icon className="h-[18px] w-[18px]" /></span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold">{m.label}</span>
-                      <span className="block truncate text-xs text-ink-muted">{m.sub}</span>
+                      <span className="block text-sm font-bold">{t(m.label)}</span>
+                      <span className="block truncate text-xs text-ink-muted">{t(m.sub)}</span>
                     </span>
-                    <span className={cx('h-5 w-5 rounded-full border-2', method === m.id ? 'border-[6px] border-brand' : 'border-line')} />
+                    <span aria-hidden className={cx('h-5 w-5 rounded-full border-2', method === m.id ? 'border-[6px] border-brand' : 'border-line')} />
                   </button>
                 ))}
               </div>
 
-              <div className="mt-5 rounded-2xl bg-canvas p-4">
+              <div className="mt-5 rounded-2xl bg-canvas p-4" aria-live="polite">
                 {method === 'card' && (
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Numéro de carte" error={errors.card} className="col-span-2">
-                      <Input inputMode="numeric" placeholder="4242 4242 4242 4242" value={card.number} onChange={(e) => setCard({ ...card, number: e.target.value.replace(/[^\d ]/g, '').slice(0, 19) })} />
+                    <Field label={t('Numéro de carte')} error={form.errors.card} className="col-span-2" required>
+                      <Input inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242" {...form.bind('card')} onChange={(e) => form.set('card', formatCard(e.target.value))} />
                     </Field>
-                    <Field label="Expiration"><Input placeholder="MM/AA" value={card.exp} onChange={(e) => setCard({ ...card, exp: e.target.value.slice(0, 5) })} /></Field>
-                    <Field label="CVC"><Input inputMode="numeric" placeholder="123" value={card.cvc} onChange={(e) => setCard({ ...card, cvc: e.target.value.replace(/\D/g, '').slice(0, 4) })} /></Field>
+                    <Field label={t('Expiration')} error={form.errors.exp} required><Input inputMode="numeric" autoComplete="cc-exp" placeholder={t('MM/AA')} {...form.bind('exp')} onChange={(e) => form.set('exp', formatExp(e.target.value))} /></Field>
+                    <Field label="CVC" error={form.errors.cvc} required><Input inputMode="numeric" autoComplete="cc-csc" placeholder="123" {...form.bind('cvc')} onChange={(e) => form.set('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))} /></Field>
                   </div>
                 )}
                 {(method === 'moncash' || method === 'natcash') && (
-                  <p className="text-sm text-ink-soft">Une demande de paiement sera envoyée au <b className="text-ink">{phone || 'numéro indiqué'}</b>. Validez-la avec votre code PIN {method === 'moncash' ? 'MonCash' : 'NatCash'}.</p>
+                  <p className="text-sm text-ink-soft">{t('Une demande de paiement sera envoyée au {phone}. Validez-la avec votre code PIN {name}.', { phone: form.values.phone || t('numéro indiqué'), name: method === 'moncash' ? 'MonCash' : 'NatCash' })}</p>
                 )}
-                {method === 'paypal' && <p className="text-sm text-ink-soft">Vous serez redirigé vers PayPal pour confirmer le paiement, puis ramené ici.</p>}
+                {method === 'paypal' && <p className="text-sm text-ink-soft">{t('Vous serez redirigé vers PayPal pour confirmer le paiement, puis ramené ici.')}</p>}
                 {method === 'transfer' && (
                   <div className="space-y-1 text-sm text-ink-soft">
-                    <p>Effectuez le virement avec la référence de commande. Vos billets seront émis dès réception.</p>
-                    <p><b className="text-ink">Banque :</b> Banque de démonstration · <b className="text-ink">Compte :</b> 000-123-4567</p>
+                    <p>{t('Effectuez le virement avec la référence de commande. Vos billets seront émis dès réception.')}</p>
+                    <p><b className="text-ink">{t('Banque :')}</b> Banque de démonstration · <b className="text-ink">{t('Compte :')}</b> 000-123-4567</p>
                   </div>
                 )}
               </div>
@@ -231,63 +302,76 @@ export default function Checkout() {
           )}
         </div>
 
-        {/* Récapitulatif */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="lg:sticky lg:top-24 lg:self-start" aria-labelledby="h-summary">
           <Card>
+            <h2 id="h-summary" className="sr-only">{t('Récapitulatif')}</h2>
             <div className="flex gap-3">
               <EventCover event={ev} className="h-16 w-16 shrink-0 rounded-2xl [&>span]:!-bottom-1 [&>span]:!text-[2.4rem]" />
               <div className="min-w-0">
                 <div className="line-clamp-2 font-bold">{ev.title}</div>
-                <div className="text-xs capitalize text-ink-muted">{dateLong(ev.start, app.lang)} · {time(ev.start, app.lang)}</div>
+                <div className="text-xs text-ink-muted first-letter:uppercase">{dateLong(ev.start, lang)} · {time(ev.start, lang)}</div>
               </div>
             </div>
-            <div className="my-4 space-y-2 border-y border-dashed border-line py-4 text-sm">
+            {occ && (
+              <p className="mt-3 flex items-center gap-2 rounded-2xl bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-dark">
+                <CalendarDays className="h-3.5 w-3.5" aria-hidden /> {ev.sessions?.length ? occ : sessionLabel(occ)}
+              </p>
+            )}
+            <ul className="my-4 space-y-2 border-y border-dashed border-line py-4 text-sm">
               {lines.map((l) => (
-                <div key={l.tt.id} className="flex justify-between gap-2">
+                <li key={l.tt.id} className="flex justify-between gap-2">
                   <span className="text-ink-soft">{l.qty} × {l.tt.name}</span>
                   <span className="font-semibold">{fmt(c(l.tt.price * l.qty))}</span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
 
             {!isFree && (
               <div className="mb-4">
                 {promo ? (
                   <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm">
-                    <span className="flex items-center gap-2 font-semibold text-emerald-700"><Tag className="h-4 w-4" /> {promo.code} (−{promo.type === 'percent' ? `${promo.value}%` : money(promo.value, ev.currency)})</span>
-                    <button aria-label="Retirer le code" onClick={() => setPromo(null)}><X className="h-4 w-4 text-emerald-700" /></button>
+                    <span className="flex items-center gap-2 font-semibold text-emerald-700"><Tag className="h-4 w-4" aria-hidden /> {promo.code} (−{promo.type === 'percent' ? `${promo.value}%` : money(promo.value, ev.currency, lang)})</span>
+                    <button type="button" aria-label={t('Retirer le code promo')} onClick={() => setPromo(null)}><X className="h-4 w-4 text-emerald-700" aria-hidden /></button>
                   </div>
                 ) : (
-                  <div className="flex gap-2">
-                    <Input placeholder="Code promo" value={promoInput} onChange={(e) => setPromoInput(e.target.value.toUpperCase())} className="h-11" />
-                    <Button variant="dark" onClick={applyPromo} loading={checking} disabled={!promoInput}>Appliquer</Button>
-                  </div>
+                  <Field error={promoErr}>
+                    <div className="flex gap-2">
+                      <label htmlFor="promo" className="sr-only">{t('Code promo')}</label>
+                      <Input id="promo" placeholder={t('Code promo')} value={promoInput} onChange={(e) => { setPromoErr(''); setPromoInput(e.target.value.toUpperCase()); }} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), applyPromo())} className="h-11" />
+                      <Button variant="dark" onClick={applyPromo} loading={checking}>{t('Appliquer')}</Button>
+                    </div>
+                  </Field>
                 )}
-                {promoErr && <p className="mt-1 text-xs text-red-600">{promoErr}</p>}
-                <p className="mt-1 text-[11px] text-ink-muted">Essayez KOMPA10 ou NOEL2026</p>
+                {DEMO && <p className="mt-1 text-[11px] text-ink-muted">{t('Démo : essayez KOMPA10 ou NOEL2026')}</p>}
               </div>
             )}
 
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-ink-soft">Sous-total</span><span>{fmt(subtotal)}</span></div>
-              {discount > 0 && <div className="flex justify-between text-emerald-600"><span>Réduction</span><span>−{fmt(discount)}</span></div>}
-              {!isFree && <div className="flex justify-between"><span className="text-ink-soft">Frais de service ({app.feePercent}%)</span><span>{fmt(fees)}</span></div>}
+            {referrer && (
+              <p className="mb-4 flex items-center gap-2 rounded-2xl bg-violet-50 px-3 py-2 text-xs text-violet-600">
+                <Gift className="h-3.5 w-3.5" aria-hidden /> {t('Recommandé par {name}', { name: referrer.name })}
+              </p>
+            )}
+
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between"><dt className="text-ink-soft">{t('Sous-total')}</dt><dd>{fmt(subtotal)}</dd></div>
+              {discount > 0 && <div className="flex justify-between text-emerald-700"><dt>{t('Réduction')}</dt><dd>−{fmt(discount)}</dd></div>}
+              {!isFree && <div className="flex justify-between"><dt className="text-ink-soft">{t('Frais de service ({n} %)', { n: app.feePercent })}</dt><dd>{fmt(fees)}</dd></div>}
               <div className="flex items-baseline justify-between border-t border-line pt-3">
-                <span className="font-bold">Total</span>
-                <span className="text-2xl font-extrabold">{isFree ? 'Gratuit' : fmt(total)}</span>
+                <dt className="font-bold">{t('Total')}</dt>
+                <dd className="text-2xl font-extrabold">{isFree ? t('Gratuit') : fmt(total)}</dd>
               </div>
-            </div>
-            <Button size="lg" className="mt-5 w-full" onClick={pay} loading={paying}>
-              {!paying && <Lock className="h-4 w-4" />}
-              {isFree ? 'Confirmer la réservation' : `Payer ${fmt(total)}`}
+            </dl>
+            <Button type="submit" size="lg" className="mt-5 w-full" loading={paying}>
+              {!paying && <Lock className="h-4 w-4" aria-hidden />}
+              {isFree ? t('Confirmer la réservation') : t('Payer {amount}', { amount: fmt(total) })}
             </Button>
             <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-ink-muted">
               <IconBadge size="sm" tone="green" className="h-5 w-5"><Lock className="h-3 w-3" /></IconBadge>
-              Paiement sécurisé · Billet QR unique et non duplicable
+              {t('Paiement sécurisé · billet QR unique et non duplicable')}
             </p>
           </Card>
         </aside>
-      </div>
+      </form>
     </div>
   );
 }

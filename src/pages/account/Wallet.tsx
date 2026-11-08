@@ -2,52 +2,49 @@ import { useState } from 'react';
 import { Ticket } from 'lucide-react';
 import { events } from '@/data/mock';
 import { useApp } from '@/store/app';
+import { useTitle } from '@/lib/hooks';
 import { ButtonLink, EmptyState, PageHeader, Segmented } from '@/components/ui';
 import { TicketCard } from '@/components/TicketCard';
 
-const NOW = new Date('2026-11-08T12:00:00');
-
 export default function Wallet() {
-  const { tickets, user, t } = useApp();
+  const { tickets, t } = useApp();
+  useTitle(t('Mes billets'));
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
 
-  if (!user)
-    return (
-      <div className="mx-auto max-w-xl px-4 pt-10">
-        <EmptyState icon={<Ticket className="h-5 w-5" />} title="Connectez-vous pour voir vos billets" action={<ButtonLink to="/connexion">{t('nav.login')}</ButtonLink>} />
-      </div>
-    );
-
+  const now = new Date();
+  const ev = (id: string) => events.find((x) => x.id === id);
   const isPast = (id: string) => {
-    const e = events.find((x) => x.id === id);
-    return e ? new Date(e.end) < NOW : false;
+    const e = ev(id);
+    return e ? new Date(e.end) < now : false;
   };
+  const isActive = (s: string) => s === 'valid' || s === 'resale';
   const list = tickets
-    .filter((x) => (tab === 'past' ? isPast(x.eventId) || x.status === 'used' : !isPast(x.eventId) && x.status !== 'used'))
-    .sort((a, b) => (events.find((e) => e.id === a.eventId)?.start ?? '').localeCompare(events.find((e) => e.id === b.eventId)?.start ?? ''));
+    .filter((x) => (tab === 'past' ? isPast(x.eventId) || !isActive(x.status) : !isPast(x.eventId) && isActive(x.status)))
+    .sort((a, b) => (ev(a.eventId)?.start ?? '').localeCompare(ev(b.eventId)?.start ?? ''));
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 lg:pt-10">
-      <PageHeader title={t('nav.tickets')} subtitle="Présentez le QR code à l’entrée. Il fonctionne aussi sans connexion." />
+      <PageHeader title={t('Mes billets')} subtitle={t('Présentez le QR code à l’entrée. Il reste disponible sans connexion.')} />
       <Segmented
+        label={t('Période')}
         className="mb-6"
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'upcoming', label: 'À venir' },
-          { value: 'past', label: 'Passés' },
+          { value: 'upcoming', label: t('À venir') },
+          { value: 'past', label: t('Passés et inactifs') },
         ]}
       />
       {list.length ? (
-        <div className="grid gap-4">
-          {list.map((x) => <TicketCard key={x.id} ticket={x} />)}
-        </div>
+        <ul className="grid gap-4">
+          {list.map((x) => <li key={x.id}><TicketCard ticket={x} /></li>)}
+        </ul>
       ) : (
         <EmptyState
           icon={<Ticket className="h-5 w-5" />}
-          title={tab === 'upcoming' ? 'Aucun billet à venir' : 'Aucun billet passé'}
-          body="Vos billets achetés apparaîtront ici."
-          action={<ButtonLink to="/explorer">Explorer les événements</ButtonLink>}
+          title={tab === 'upcoming' ? t('Aucun billet à venir') : t('Aucun billet passé')}
+          body={t('Les billets que vous achetez apparaissent ici, même hors connexion.')}
+          action={<ButtonLink to="/explorer">{t('Explorer les événements')}</ButtonLink>}
         />
       )}
     </div>

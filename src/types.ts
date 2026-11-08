@@ -36,6 +36,15 @@ export interface Session {
   end: string;
 }
 
+/** Plan de salle configurable : grille de rangs, allée, zones tarifaires. */
+export interface SeatMapConfig {
+  rows: number; // nombre de rangs (A, B, C…)
+  cols: number; // places par rang
+  aisleAfter: number; // allée après cette place (0 = aucune)
+  zones: { ticketTypeId: string; fromRow: number; toRow: number }[]; // rangs 0-indexés inclus
+  blocked: string[]; // places neutralisées (ex. « C-4 »)
+}
+
 export interface Venue {
   name: string;
   address: string;
@@ -62,6 +71,9 @@ export interface EventItem {
   organizerId: string;
   status: EventStatus;
   seated: boolean; // plan de salle (places numérotées)
+  seatMap?: SeatMapConfig;
+  /** Pixels de suivi propres à l'événement. */
+  pixels?: { fb?: string; ga?: string };
   maxPerPerson: number;
   views: number;
   featured?: boolean;
@@ -70,7 +82,12 @@ export interface EventItem {
 
 export interface Organizer {
   id: string;
+  slug: string;
   name: string;
+  bio?: string;
+  website?: string;
+  instagram?: string;
+  cover?: string;
   verified: boolean;
   avatar: string;
   followers: number;
@@ -93,6 +110,10 @@ export interface IssuedTicket {
   status: TicketStatus;
   orderId: string;
   checkedInAt?: string;
+  /** Session ou date choisie (événements multi-sessions ou récurrents). */
+  sessionLabel?: string;
+  resalePrice?: number;
+  transferredTo?: string;
 }
 
 export interface Order {
@@ -111,6 +132,9 @@ export interface Order {
   buyerEmail: string;
   buyerPhone?: string;
   promoCode?: string;
+  referral?: string;
+  sessionLabel?: string;
+  refundRequest?: { reason: string; at: string; status: 'pending' | 'approved' | 'declined' };
 }
 
 export interface PromoCode {
@@ -138,6 +162,7 @@ export interface TeamMember {
 
 export interface Attendee {
   id: string;
+  eventId: string;
   name: string;
   email: string;
   phone: string;
@@ -174,6 +199,7 @@ export interface Payout {
 
 export interface Campaign {
   id: string;
+  body?: string;
   name: string;
   channel: 'email' | 'sms' | 'whatsapp';
   audience: string;
@@ -205,6 +231,8 @@ export interface AppUser {
   status: 'active' | 'suspended';
   joinedAt: string;
   verified?: boolean;
+  /** Rôle dans l'équipe d'un organisateur (organisateurs uniquement). */
+  teamRole?: TeamRole;
 }
 
 export interface Dispute {

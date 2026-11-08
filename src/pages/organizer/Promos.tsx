@@ -2,84 +2,115 @@ import { useState } from 'react';
 import { BadgePercent, Copy, Plus } from 'lucide-react';
 import { events } from '@/data/mock';
 import { listPromoCodes, savePromo } from '@/services/api';
-import { useAsync } from '@/lib/hooks';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric, uid } from '@/lib/format';
-import { Badge, Button, Card, Field, Input, Loading, Modal, PageHeader, ProgressBar, Segmented, Select, Table, Td, Toggle } from '@/components/ui';
+import { orgOf } from '@/lib/permissions';
+import { useForm } from '@/lib/form';
+import { ApiError } from '@/lib/errors';
+import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, ProgressBar, Segmented, Select, Table, Td, Toggle } from '@/components/ui';
 import type { PromoCode } from '@/types';
 
 export default function Promos() {
-  const { toast, lang } = useApp();
+  const { toast, lang, t, user } = useApp();
+  useTitle(t('Codes promo'));
   const { data, loading, reload } = useAsync(() => listPromoCodes(), []);
-  const [edit, setEdit] = useState<PromoCode | null>(null);
+  const [editing, setEditing] = useState<PromoCode | null>(null);
+  const [busy, setBusy] = useState(false);
+  const myEvents = events.filter((e) => e.organizerId === orgOf(user));
+
+  const form = useForm(
+    { code: '', type: 'percent', value: '10', limit: '100', expiresAt: '', eventId: 'all', active: 'true' },
+    {
+      code: (v) => (String(v).length < 3 ? t('Au moins 3 lettres ou chiffres') : undefined),
+      value: (v, all) => (!(Number(v) > 0) ? t('Indiquez une valeur supérieure à 0') : all.type === 'percent' && Number(v) > 100 ? t('Un pourcentage ne peut pas dépasser 100') : undefined),
+      limit: (v) => (!(Number(v) >= 1) ? t('Au moins 1 utilisation') : undefined),
+      expiresAt: (v) => (!v ? t('Choisissez une date de fin') : new Date(String(v)) < new Date() ? t('La date de fin doit être dans le futur') : undefined),
+    },
+  );
 
   if (loading) return <Loading />;
-  const newPromo = (): PromoCode => ({ id: uid('p'), code: '', type: 'percent', value: 10, used: 0, limit: 100, expiresAt: '2026-12-31T23:59:00', eventId: 'all', active: true });
+
+  const open = (p?: PromoCode) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    const base = p ?? { id: uid('p'), code: '', type: 'percent' as const, value: 10, used: 0, limit: 100, expiresAt: d.toISOString().slice(0, 16), eventId: 'all', active: true };
+    setEditing(base);
+    form.reset({ code: base.code, type: base.type, value: String(base.value), limit: String(base.limit), expiresAt: base.expiresAt.slice(0, 16), eventId: base.eventId, active: String(base.active) });
+  };
+
+  const save = async () => {
+    if (!editing || !form.validate()) return;
+    setBusy(true);
+    try {
+      const v = form.values;
+      await savePromo({ ...editing, code: v.code, type: v.type as PromoCode['type'], value: Number(v.value), limit: Number(v.limit), expiresAt: v.expiresAt, eventId: v.eventId, active: v.active === 'true' });
+      setEditing(null);
+      toast(t('Code promo enregistré'));
+      reload();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) form.setErrors({ code: t('Ce code existe déjà : choisissez-en un autre') });
+      else toast(t('L’enregistrement a échoué. Réessayez.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div>
-      <PageHeader title="Codes promo" subtitle="Réductions en pourcentage ou montant fixe, limitées en nombre et dans le temps." actions={<Button onClick={() => setEdit(newPromo())}><Plus className="h-4 w-4" /> Nouveau code</Button>} />
-      <Card>
-        <Table head={['Code', 'Réduction', 'Événement', 'Utilisation', 'Expire le', 'Statut', '']}>
-          {(data ?? []).map((p) => (
-            <tr key={p.id}>
-              <Td><span className="flex items-center gap-2 font-mono font-bold"><BadgePercent className="h-4 w-4 text-brand" />{p.code}</span></Td>
-              <Td className="font-semibold">{p.type === 'percent' ? `−${p.value}%` : `−${p.value} HTG`}</Td>
-              <Td className="max-w-[180px] truncate text-ink-soft">{p.eventId === 'all' ? 'Tous les événements' : events.find((e) => e.id === p.eventId)?.title}</Td>
-              <Td><div className="w-32"><div className="mb-1 text-xs text-ink-muted">{p.used}/{p.limit}</div><ProgressBar value={p.used / p.limit} /></div></Td>
-              <Td className="text-ink-soft">{dateNumeric(p.expiresAt, lang)}</Td>
-              <Td><Badge tone={p.active && p.used < p.limit ? 'green' : 'gray'}>{p.used >= p.limit ? 'Épuisé' : p.active ? 'Actif' : 'Désactivé'}</Badge></Td>
-              <Td>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(p.code); toast('Code copié'); }} aria-label="Copier"><Copy className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEdit(p)}>Modifier</Button>
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </Table>
-      </Card>
-
-      {edit && (
-        <Modal
-          open
-          onClose={() => setEdit(null)}
-          title={edit.code ? `Code ${edit.code}` : 'Nouveau code promo'}
-          footer={
-            <Button
-              className="flex-1"
-              disabled={edit.code.length < 3}
-              onClick={async () => {
-                await savePromo(edit);
-                setEdit(null);
-                toast('Code promo enregistré');
-                reload();
-              }}
-            >
-              Enregistrer
-            </Button>
-          }
-        >
-          <div className="space-y-4">
-            <Field label="Code"><Input value={edit.code} onChange={(e) => setEdit({ ...edit, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} placeholder="NOEL2026" /></Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Type">
-                <Segmented value={edit.type} onChange={(v) => setEdit({ ...edit, type: v })} options={[{ value: 'percent', label: '%' }, { value: 'fixed', label: 'Montant' }]} />
-              </Field>
-              <Field label="Valeur"><Input type="number" min={1} max={edit.type === 'percent' ? 100 : undefined} value={edit.value} onChange={(e) => setEdit({ ...edit, value: +e.target.value })} /></Field>
-              <Field label="Utilisations max."><Input type="number" min={1} value={edit.limit} onChange={(e) => setEdit({ ...edit, limit: +e.target.value })} /></Field>
-              <Field label="Expiration"><Input type="datetime-local" value={edit.expiresAt.slice(0, 16)} onChange={(e) => setEdit({ ...edit, expiresAt: e.target.value })} /></Field>
-            </div>
-            <Field label="Événement">
-              <Select value={edit.eventId} onChange={(e) => setEdit({ ...edit, eventId: e.target.value })}>
-                <option value="all">Tous mes événements</option>
-                {events.filter((e) => e.organizerId === 'org1').map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
-              </Select>
-            </Field>
-            <Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Actif" />
-          </div>
-        </Modal>
+      <PageHeader title={t('Codes promo')} subtitle={t('Réductions en pourcentage ou montant fixe, limitées en nombre et dans le temps.')} actions={<Button onClick={() => open()}><Plus className="h-4 w-4" aria-hidden /> {t('Nouveau code')}</Button>} />
+      {!data?.length ? (
+        <EmptyState icon={<BadgePercent className="h-5 w-5" />} title={t('Aucun code promo')} body={t('Créez un code pour vos ambassadeurs, vos abonnés ou une offre de lancement.')} action={<Button onClick={() => open()}>{t('Nouveau code')}</Button>} />
+      ) : (
+        <Card>
+          <Table caption={t('Codes promo')} head={[t('Code'), t('Réduction'), t('Événement'), t('Utilisation'), t('Expire le'), t('Statut'), '']}>
+            {data.map((p) => {
+              const expired = new Date(p.expiresAt) < new Date();
+              const statusLabel = p.used >= p.limit ? t('Épuisé') : expired ? t('Expiré') : p.active ? t('Actif') : t('Désactivé');
+              return (
+                <tr key={p.id}>
+                  <Td><span className="flex items-center gap-2 font-mono font-bold"><BadgePercent className="h-4 w-4 text-brand" aria-hidden />{p.code}</span></Td>
+                  <Td className="font-semibold">{p.type === 'percent' ? `−${p.value} %` : `−${p.value} HTG`}</Td>
+                  <Td className="max-w-[200px] truncate text-ink-soft">{p.eventId === 'all' ? t('Tous les événements') : events.find((e) => e.id === p.eventId)?.title}</Td>
+                  <Td><div className="w-32"><div className="mb-1 text-xs text-ink-muted">{p.used}/{p.limit}</div><ProgressBar value={p.used / p.limit} label={t('Utilisation de {code}', { code: p.code })} /></div></Td>
+                  <Td className="text-ink-soft">{dateNumeric(p.expiresAt, lang)}</Td>
+                  <Td><Badge tone={p.active && p.used < p.limit && !expired ? 'green' : 'gray'}>{statusLabel}</Badge></Td>
+                  <Td>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => navigator.clipboard?.writeText(p.code).then(() => toast(t('Code copié')))} aria-label={t('Copier le code {code}', { code: p.code })}><Copy className="h-4 w-4" aria-hidden /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => open(p)}>{t('Modifier')}</Button>
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+          </Table>
+        </Card>
       )}
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.code ? t('Code {code}', { code: editing.code }) : t('Nouveau code promo')} footer={<Button className="flex-1" onClick={save} loading={busy}>{t('Enregistrer')}</Button>}>
+        <form noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-4">
+          <Field label={t('Code')} error={form.errors.code} hint={t('Lettres et chiffres, sans espace')} required>
+            <Input placeholder="NOEL2026" autoCapitalize="characters" {...form.bind('code')} onChange={(e) => form.set('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold">{t('Type')}</span>
+              <Segmented label={t('Type de réduction')} value={form.values.type} onChange={(v) => form.set('type', v)} options={[{ value: 'percent', label: '%' }, { value: 'fixed', label: t('Montant') }]} />
+            </div>
+            <Field label={t('Valeur')} error={form.errors.value} required><Input type="number" inputMode="decimal" min={1} {...form.bind('value')} /></Field>
+            <Field label={t('Utilisations max.')} error={form.errors.limit} required><Input type="number" inputMode="numeric" min={1} {...form.bind('limit')} /></Field>
+            <Field label={t('Expiration')} error={form.errors.expiresAt} required><Input type="datetime-local" {...form.bind('expiresAt')} /></Field>
+          </div>
+          <Field label={t('Événement')}>
+            <Select {...form.bind('eventId')}>
+              <option value="all">{t('Tous mes événements')}</option>
+              {myEvents.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
+            </Select>
+          </Field>
+          <Toggle checked={form.values.active === 'true'} onChange={(v) => form.set('active', String(v))} label={t('Actif')} />
+        </form>
+      </Modal>
     </div>
   );
 }
