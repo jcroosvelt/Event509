@@ -1,18 +1,34 @@
 /** @type {import('tailwindcss').Config} */
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: { sans: ['"Plus Jakarta Sans Variable"', 'system-ui', 'sans-serif'] },
       colors: {
-        ink: { DEFAULT: '#0B1533', soft: '#4A5573', muted: '#8A93AB' },
-        brand: { DEFAULT: '#1F5EFF', dark: '#0F44D6', 50: '#EEF3FF', 100: '#DCE7FF', 200: '#BFD2FF', 300: '#93B3FF' },
-        canvas: '#F1F3F8',
-        line: '#E6E9F2',
+        // Couleurs sémantiques : elles s'inversent en mode sombre (voir index.css)
+        ink: { DEFAULT: v('ink'), soft: v('ink-soft'), muted: v('ink-muted') },
+        canvas: v('canvas'),
+        surface: v('surface'),
+        line: v('line'),
+        contrast: v('contrast'),
+        'on-contrast': v('on-contrast'),
+        brand: {
+          DEFAULT: v('brand'),
+          dark: v('brand-dark'),
+          50: v('brand-50'),
+          100: v('brand-100'),
+          200: v('brand-200'),
+          300: v('brand-300'),
+        },
+        // Bleu nuit du logo, identique dans les deux thèmes (panneaux de marque, voiles sur images)
+        navy: '#0B1533',
       },
       borderRadius: { '4xl': '2rem' },
       boxShadow: {
-        card: '0 1px 2px rgba(11,21,51,0.04), 0 8px 24px -12px rgba(11,21,51,0.08)',
+        card: 'var(--shadow-card)',
         float: '0 12px 30px -8px rgba(31,94,255,0.55)',
       },
     },

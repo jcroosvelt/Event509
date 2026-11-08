@@ -1,139 +1,32 @@
 import type { Lang } from '@/types';
+import { en } from '@/locales/en';
 
-// Dictionnaire de l'interface. Français (par défaut) et anglais.
-const fr = {
-  'nav.discover': 'Découvrir',
-  'nav.explore': 'Explorer',
-  'nav.tickets': 'Mes billets',
-  'nav.favorites': 'Favoris',
-  'nav.profile': 'Profil',
-  'nav.organizer': 'Espace organisateur',
-  'nav.admin': 'Administration',
-  'nav.create': 'Créer un événement',
-  'nav.login': 'Connexion',
-  'nav.signup': 'Inscription',
-  'nav.logout': 'Déconnexion',
-  'nav.orders': 'Historique des achats',
-  'nav.notifications': 'Notifications',
-  'nav.ambassador': 'Ambassadeurs',
-  'nav.settings': 'Paramètres',
-  'home.greeting.morning': 'Bonjour',
-  'home.greeting.evening': 'Bonsoir',
-  'home.hero.kicker': 'Cette semaine',
-  'home.hero.title': 'Découvrez les événements près de chez vous',
-  'home.search': 'Rechercher un événement, un lieu, un artiste…',
-  'home.categories': 'Catégories',
-  'home.featured': 'À la une',
-  'home.thisWeek': 'Cette semaine',
-  'home.recommended': 'Recommandés pour vous',
-  'home.online': 'Événements en ligne',
-  'home.seeAll': 'Tout voir',
-  'home.nextTicket': 'Votre prochain événement',
-  'common.from': 'Dès',
-  'common.free': 'Gratuit',
-  'common.buy': 'Acheter',
-  'common.getTickets': 'Obtenir des billets',
-  'common.save': 'Enregistrer',
-  'common.cancel': 'Annuler',
-  'common.continue': 'Continuer',
-  'common.back': 'Retour',
-  'common.search': 'Rechercher',
-  'common.filters': 'Filtres',
-  'common.reset': 'Réinitialiser',
-  'common.share': 'Partager',
-  'common.online': 'En ligne',
-  'common.all': 'Tous',
-  'common.export': 'Exporter',
-  'common.soldOut': 'Complet',
-  'common.left': 'restants',
-  'common.today': "Aujourd'hui",
-  'filters.city': 'Ville',
-  'filters.date': 'Date',
-  'filters.category': 'Catégorie',
-  'filters.price': 'Prix',
-  'filters.when.today': "Aujourd'hui",
-  'filters.when.weekend': 'Ce week-end',
-  'filters.when.week': '7 prochains jours',
-  'filters.when.month': 'Ce mois-ci',
-  'filters.price.free': 'Gratuit',
-  'filters.price.paid': 'Payant',
-  'filters.sort.date': 'Date',
-  'filters.sort.popular': 'Popularité',
-  'filters.sort.price': 'Prix',
-  'filters.results': 'résultats',
-  'settings.language': 'Langue',
-  'settings.currency': 'Devise',
-} as const;
+/**
+ * Traduction façon gettext : la phrase française sert de clé, l'anglais vient du
+ * catalogue `src/locales/en.ts`. Une phrase absente du catalogue reste en
+ * français (et un test vérifie que le catalogue est complet).
+ *
+ * Variables : t('Payer {amount}', { amount: '1 000 HTG' })
+ */
+export type Vars = Record<string, string | number>;
 
-export type TKey = keyof typeof fr;
+const warned = new Set<string>();
 
-const en: Record<TKey, string> = {
-  'nav.discover': 'Discover',
-  'nav.explore': 'Explore',
-  'nav.tickets': 'My tickets',
-  'nav.favorites': 'Favorites',
-  'nav.profile': 'Profile',
-  'nav.organizer': 'Organizer space',
-  'nav.admin': 'Admin',
-  'nav.create': 'Create an event',
-  'nav.login': 'Log in',
-  'nav.signup': 'Sign up',
-  'nav.logout': 'Log out',
-  'nav.orders': 'Purchase history',
-  'nav.notifications': 'Notifications',
-  'nav.ambassador': 'Ambassadors',
-  'nav.settings': 'Settings',
-  'home.greeting.morning': 'Good morning',
-  'home.greeting.evening': 'Good evening',
-  'home.hero.kicker': 'This week',
-  'home.hero.title': 'Discover events near you',
-  'home.search': 'Search an event, a venue, an artist…',
-  'home.categories': 'Categories',
-  'home.featured': 'Featured',
-  'home.thisWeek': 'This week',
-  'home.recommended': 'Recommended for you',
-  'home.online': 'Online events',
-  'home.seeAll': 'See all',
-  'home.nextTicket': 'Your next event',
-  'common.from': 'From',
-  'common.free': 'Free',
-  'common.buy': 'Buy',
-  'common.getTickets': 'Get tickets',
-  'common.save': 'Save',
-  'common.cancel': 'Cancel',
-  'common.continue': 'Continue',
-  'common.back': 'Back',
-  'common.search': 'Search',
-  'common.filters': 'Filters',
-  'common.reset': 'Reset',
-  'common.share': 'Share',
-  'common.online': 'Online',
-  'common.all': 'All',
-  'common.export': 'Export',
-  'common.soldOut': 'Sold out',
-  'common.left': 'left',
-  'common.today': 'Today',
-  'filters.city': 'City',
-  'filters.date': 'Date',
-  'filters.category': 'Category',
-  'filters.price': 'Price',
-  'filters.when.today': 'Today',
-  'filters.when.weekend': 'This weekend',
-  'filters.when.week': 'Next 7 days',
-  'filters.when.month': 'This month',
-  'filters.price.free': 'Free',
-  'filters.price.paid': 'Paid',
-  'filters.sort.date': 'Date',
-  'filters.sort.popular': 'Popularity',
-  'filters.sort.price': 'Price',
-  'filters.results': 'results',
-  'settings.language': 'Language',
-  'settings.currency': 'Currency',
-};
+export function translate(lang: Lang, source: string, vars?: Vars) {
+  let s = source;
+  if (lang === 'en') {
+    const hit = en[source];
+    if (hit !== undefined) s = hit;
+    else if (import.meta.env.DEV && !warned.has(source)) {
+      warned.add(source);
+      console.warn('[i18n] traduction manquante :', source);
+    }
+  }
+  if (vars) s = s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+  return s;
+}
 
-export const dictionaries: Record<Lang, Record<TKey, string>> = { fr, en };
-
-export const languages: { id: Lang; label: string; flag: string }[] = [
-  { id: 'fr', label: 'Français', flag: 'FR' },
-  { id: 'en', label: 'English', flag: 'EN' },
+export const languages: { id: Lang; label: string; short: string }[] = [
+  { id: 'fr', label: 'Français', short: 'FR' },
+  { id: 'en', label: 'English', short: 'EN' },
 ];

@@ -2,24 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Jetons de couleur (canaux RGB pour l'opacité Tailwind) */
+:root {
+  --ink: 11 21 51;
+  --ink-soft: 74 85 115;
+  --ink-muted: 100 110 137; /* 4,9:1 sur blanc */
+  --canvas: 241 243 248;
+  --surface: 255 255 255;
+  --line: 230 233 242;
+  --contrast: 11 21 51;
+  --on-contrast: 255 255 255;
+  --brand: 31 94 255;
+  --brand-dark: 15 68 214;
+  --brand-50: 238 243 255;
+  --brand-100: 220 231 255;
+  --brand-200: 191 210 255;
+  --brand-300: 147 179 255;
+  --hatch: 223 228 240;
+  --hatch-bg: 245 247 251;
+  --shadow-card: 0 1px 2px rgba(11, 21, 51, 0.04), 0 8px 24px -12px rgba(11, 21, 51, 0.08);
+  color-scheme: light;
+}
+
+.dark {
+  --ink: 232 236 247;
+  --ink-soft: 174 183 207;
+  --ink-muted: 137 149 180;
+  --canvas: 10 16 34;
+  --surface: 19 27 51;
+  --line: 37 48 85;
+  --contrast: 232 236 247;
+  --on-contrast: 11 21 51;
+  --brand: 77 125 255;
+  --brand-dark: 110 150 255;
+  --brand-50: 23 36 71;
+  --brand-100: 28 43 87;
+  --brand-200: 38 57 122;
+  --brand-300: 64 90 170;
+  --hatch: 45 58 98;
+  --hatch-bg: 25 35 64;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-canvas font-sans text-ink antialiased;
-    font-feature-settings: 'ss01', 'cv11';
   }
   ::selection {
     @apply bg-brand-200;
   }
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+  }
 }
 
 @layer utilities {
-  /* Piste hachurée des histogrammes (style maquette) */
+  /* Piste hachurée des histogrammes et places occupées */
   .hatch {
-    background-image: repeating-linear-gradient(135deg, #dfe4f0 0 2px, transparent 2px 6px);
-    background-color: #f5f7fb;
+    background-image: repeating-linear-gradient(135deg, rgb(var(--hatch)) 0 2px, transparent 2px 6px);
+    background-color: rgb(var(--hatch-bg));
   }
   .cover-pattern {
     background-image: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.35) 0 2px, transparent 3px),
@@ -37,6 +83,20 @@
   }
 }
 
+/* Teintes pâles des pastilles : version translucide en mode sombre */
+.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.14); }
+.dark .bg-red-50, .dark .bg-rose-50 { background-color: rgb(244 63 94 / 0.14); }
+.dark .bg-orange-50 { background-color: rgb(249 115 22 / 0.14); }
+.dark .bg-amber-50, .dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.14); }
+.dark .bg-violet-50, .dark .bg-violet-50\/60 { background-color: rgb(139 92 246 / 0.16); }
+.dark .bg-sky-50 { background-color: rgb(14 165 233 / 0.14); }
+.dark .bg-violet-200 { background-color: rgb(139 92 246 / 0.35); }
+.dark .text-emerald-700, .dark .text-emerald-600 { color: rgb(52 211 153); }
+.dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-600 { color: rgb(251 191 36); }
+.dark .text-red-600 { color: rgb(248 113 113); }
+.dark .text-violet-600 { color: rgb(167 139 250); }
+.dark .bg-black { background-color: #000; box-shadow: inset 0 0 0 1px rgb(var(--line)); }
+
 @keyframes toast {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: none; }
@@ -53,6 +113,8 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

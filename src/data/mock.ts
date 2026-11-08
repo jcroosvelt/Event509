@@ -22,10 +22,10 @@ export const categories: Category[] = [
 export const cities = ['Port-au-Prince', 'Pétion-Ville', 'Cap-Haïtien', 'Jacmel', 'Les Cayes', 'Gonaïves', 'Miami', 'Montréal'];
 
 export const organizers: Organizer[] = [
-  { id: 'org1', name: 'Lakay Productions', verified: true, avatar: 'LP', followers: 12400, eventsCount: 38, city: 'Pétion-Ville' },
-  { id: 'org2', name: 'Tech Ayiti', verified: true, avatar: 'TA', followers: 5300, eventsCount: 14, city: 'Port-au-Prince' },
-  { id: 'org3', name: 'Jakmèl Arts Collectif', verified: false, avatar: 'JA', followers: 2100, eventsCount: 9, city: 'Jacmel' },
-  { id: 'org4', name: 'Saveurs du Nord', verified: true, avatar: 'SN', followers: 3900, eventsCount: 21, city: 'Cap-Haïtien' },
+  { id: 'org1', slug: 'lakay-productions', bio: 'Concerts, festivals et soirées depuis 2012. Les plus grandes scènes kompa du pays.', website: 'https://lakay.ht', instagram: '@lakayprod', cover: 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)', name: 'Lakay Productions', verified: true, avatar: 'LP', followers: 12400, eventsCount: 38, city: 'Pétion-Ville' },
+  { id: 'org2', slug: 'tech-ayiti', bio: 'La communauté tech haïtienne : conférences, ateliers et formations.', website: 'https://techayiti.org', cover: 'linear-gradient(135deg, #7C5CFF 0%, #1F5EFF 100%)', name: 'Tech Ayiti', verified: true, avatar: 'TA', followers: 5300, eventsCount: 14, city: 'Port-au-Prince' },
+  { id: 'org3', slug: 'jakmel-arts', bio: 'Artisans du papier mâché et organisateurs culturels de Jacmel.', cover: 'linear-gradient(135deg, #FF8A3D 0%, #E5487A 100%)', name: 'Jakmèl Arts Collectif', verified: false, avatar: 'JA', followers: 2100, eventsCount: 9, city: 'Jacmel' },
+  { id: 'org4', slug: 'saveurs-du-nord', bio: 'Dîners de chefs et festivals gastronomiques au Cap-Haïtien.', cover: 'linear-gradient(135deg, #0FA37F 0%, #0B1533 100%)', name: 'Saveurs du Nord', verified: true, avatar: 'SN', followers: 3900, eventsCount: 21, city: 'Cap-Haïtien' },
 ];
 
 const g = (a: string, b: string, c?: string) =>
@@ -69,6 +69,7 @@ export const events: EventItem[] = [
     venue: { name: 'Hôtel Marriott', address: '147 Avenue Jean Paul II', city: 'Port-au-Prince' },
     online: { platform: 'YouTube Live', url: 'https://youtube.com' },
     currency: 'HTG', organizerId: 'org2', status: 'published', seated: true, maxPerPerson: 4,
+    seatMap: { rows: 10, cols: 16, aisleAfter: 8, zones: [{ ticketTypeId: 't2c', fromRow: 0, toRow: 1 }, { ticketTypeId: 't2b', fromRow: 2, toRow: 7 }, { ticketTypeId: 't2a', fromRow: 8, toRow: 9 }], blocked: [] },
     views: 9310, featured: true, tags: ['Hybride', '2 jours'],
     tickets: [
       T('t2a', 'Étudiant', 'paid', 1000, 400, 288, { description: "Carte d'étudiant exigée à l'entrée" }),
@@ -85,6 +86,7 @@ export const events: EventItem[] = [
     start: '2027-02-14T13:00:00', end: '2027-02-14T20:00:00',
     venue: { name: 'Place Toussaint Louverture', address: 'Centre-ville', city: 'Jacmel' },
     currency: 'HTG', organizerId: 'org3', status: 'published', seated: true, maxPerPerson: 6,
+    seatMap: { rows: 8, cols: 14, aisleAfter: 7, zones: [{ ticketTypeId: 't3b', fromRow: 0, toRow: 1 }, { ticketTypeId: 't3a', fromRow: 2, toRow: 7 }], blocked: [] },
     views: 4250, tags: ['Famille'],
     tickets: [
       T('t3a', 'Tribune', 'paid', 1200, 800, 190),
@@ -98,6 +100,7 @@ export const events: EventItem[] = [
     start: '2026-12-05T19:30:00', end: '2026-12-05T23:30:00',
     venue: { name: 'Hôtel Roi Christophe', address: 'Rue 24-B', city: 'Cap-Haïtien' },
     currency: 'USD', organizerId: 'org4', status: 'published', seated: true, maxPerPerson: 4,
+    seatMap: { rows: 6, cols: 10, aisleAfter: 5, zones: [{ ticketTypeId: 't4b', fromRow: 0, toRow: 0 }, { ticketTypeId: 't4a', fromRow: 1, toRow: 5 }], blocked: ['A-5', 'A-6'] },
     views: 2890, tags: ['Places limitées'],
     tickets: [T('t4a', 'Menu dégustation', 'paid', 85, 120, 97), T('t4b', 'Table chef (x4)', 'group', 300, 6, 4, { groupSize: 4, maxPerOrder: 1 })],
   },
@@ -128,6 +131,7 @@ export const events: EventItem[] = [
     start: '2026-12-24T18:00:00', end: '2026-12-24T21:00:00',
     venue: { name: 'Cathédrale Sainte-Trinité', address: 'Avenue Mgr Guilloux', city: 'Port-au-Prince' },
     currency: 'HTG', organizerId: 'org1', status: 'published', seated: true, maxPerPerson: 6,
+    seatMap: { rows: 12, cols: 18, aisleAfter: 9, zones: [{ ticketTypeId: 't7a', fromRow: 0, toRow: 4 }, { ticketTypeId: 't7b', fromRow: 5, toRow: 11 }], blocked: [] },
     views: 3010,
     tickets: [T('t7a', 'Catégorie 1', 'paid', 1500, 300, 210), T('t7b', 'Catégorie 2', 'paid', 800, 500, 260)],
   },
@@ -169,27 +173,53 @@ export const myOrders: Order[] = [
 const firstNames = ['Jean', 'Marie', 'Stéphanie', 'Wilson', 'Nadège', 'Ricardo', 'Fabiola', 'Kervens', 'Darline', 'Junior', 'Mirlande', 'Peterson', 'Rose-Carline', 'Jameson', 'Woodline', 'Carl-Henry', 'Edwine', 'Ralph'];
 const lastNames = ['Pierre', 'Joseph', 'Jean-Baptiste', 'Louis', 'Charles', 'Saint-Fleur', 'Desir', 'Augustin', 'Michel', 'Etienne', 'Celestin', 'Noel', 'Alexis', 'Dorval'];
 
-export const attendees: Attendee[] = Array.from({ length: 64 }, (_, i) => {
-  const fn = firstNames[(i * 7) % firstNames.length];
-  const ln = lastNames[(i * 5) % lastNames.length];
-  const types = ['Standard', 'Standard', 'Standard', 'VIP', 'Early Bird', 'Pack Groupe x5'];
-  const prices: Record<string, number> = { Standard: 2500, VIP: 7500, 'Early Bird': 1500, 'Pack Groupe x5': 10000 };
-  const tt = types[i % types.length];
-  const day = 1 + (i % 28);
-  return {
-    id: `a${i + 1}`,
-    name: `${fn} ${ln}`,
-    email: `${fn.toLowerCase().replace(/[^a-z]/g, '')}.${ln.toLowerCase().replace(/[^a-z]/g, '')}@example.com`,
-    phone: `+509 3${(i * 13) % 10}${(i * 7) % 10} ${String(1000 + i * 37).slice(-4)} ${String(2000 + i * 91).slice(-4)}`,
-    ticketType: tt,
-    orderId: `o${2000 + i}`,
-    checkedIn: i % 3 === 0,
-    checkedInAt: i % 3 === 0 ? '2026-12-19T20:1' + (i % 10) + ':00' : undefined,
-    purchasedAt: `2026-${day > 20 ? '10' : '11'}-${String(day).padStart(2, '0')}T1${i % 10}:2${i % 6}:00`,
-    amount: prices[tt],
-    code: `E509-${(1000 + i * 17).toString(36).toUpperCase()}-${(5000 + i * 131).toString(16).toUpperCase()}`,
-  };
+const attendeePlan: { eventId: string; count: number }[] = [
+  { eventId: 'e1', count: 48 },
+  { eventId: 'e5', count: 16 },
+  { eventId: 'e7', count: 12 },
+  { eventId: 'e8', count: 10 },
+];
+
+let attendeeIndex = 0;
+export const attendees: Attendee[] = attendeePlan.flatMap(({ eventId, count }) => {
+  const ev = events.find((e) => e.id === eventId)!;
+  return Array.from({ length: count }, (_, k) => {
+    const i = attendeeIndex++;
+    const fn = firstNames[(i * 7) % firstNames.length];
+    const ln = lastNames[(i * 5) % lastNames.length];
+    // Répartition : surtout le billet standard, quelques VIP / groupes
+    const tt = ev.tickets[[1, 1, 1, 2, 0, 3][k % 6] % ev.tickets.length];
+    const day = 1 + (i % 28);
+    return {
+      id: `a${i + 1}`,
+      eventId,
+      name: `${fn} ${ln}`,
+      email: `${fn.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}.${ln.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}@example.com`,
+      phone: `+509 3${(i * 13) % 10}${(i * 7) % 10} ${String(1000 + i * 37).slice(-4)} ${String(2000 + i * 91).slice(-4)}`,
+      ticketType: tt.name,
+      orderId: `o${2000 + i}`,
+      checkedIn: i % 3 === 0,
+      checkedInAt: i % 3 === 0 ? `${ev.start.slice(0, 11)}${String(19 + (i % 3)).padStart(2, '0')}:1${i % 10}:00` : undefined,
+      purchasedAt: `2026-10-${String(day).padStart(2, '0')}T1${i % 10}:2${i % 6}:00`,
+      amount: tt.price,
+      code: `E509-${(1000 + i * 17).toString(36).toUpperCase().padStart(4, 'X')}-${(5000 + i * 131).toString(16).toUpperCase()}`,
+    };
+  });
 });
+
+/** Billets mis en revente par d'autres participants (marketplace). */
+export const resaleListings: IssuedTicket[] = [
+  { id: 'rs1', code: 'E509-RS01-AAAA', eventId: 'e1', ticketTypeId: 't1b', holderName: 'Fabiola Desir', holderEmail: 'fabiola@example.com', status: 'resale', resalePrice: 2200, orderId: 'o2101' },
+  { id: 'rs2', code: 'E509-RS02-BBBB', eventId: 'e1', ticketTypeId: 't1c', holderName: 'Ralph Dorval', holderEmail: 'ralph@example.com', status: 'resale', resalePrice: 7000, orderId: 'o2102' },
+  { id: 'rs3', code: 'E509-RS03-CCCC', eventId: 'e8', ticketTypeId: 't8a', holderName: 'Edwine Alexis', holderEmail: 'edwine@example.com', status: 'resale', resalePrice: 25, orderId: 'o2103' },
+  { id: 'rs4', code: 'E509-RS04-DDDD', eventId: 'e2', ticketTypeId: 't2b', holderName: 'Jean Pierre', holderEmail: 'jean@example.com', seat: 'E-7', status: 'resale', resalePrice: 3000, orderId: 'o2104' },
+];
+
+/** Taux de commission négociés par organisateur (administration). */
+export const customCommissions: { organizerId: string; rate: number; reason: string }[] = [
+  { organizerId: 'org2', rate: 3, reason: 'Association / éducation' },
+  { organizerId: 'org1', rate: 4.5, reason: 'Volume > 10 000 billets / an' },
+];
 
 export const promoCodes: PromoCode[] = [
   { id: 'p1', code: 'KOMPA10', type: 'percent', value: 10, used: 182, limit: 500, expiresAt: '2026-12-15T23:59:00', eventId: 'e1', active: true },
@@ -235,7 +265,9 @@ export const ambassadors: Ambassador[] = [
 
 export const users: AppUser[] = [
   { id: 'u1', name: 'Marie Joseph', email: 'marie@example.com', phone: '+509 3712 4455', avatar: 'MJ', role: 'participant', city: 'Port-au-Prince', status: 'active', joinedAt: '2025-03-12' },
-  { id: 'u2', name: 'Ricardo Pierre', email: 'ricardo@lakay.ht', avatar: 'RP', role: 'organizer', city: 'Pétion-Ville', status: 'active', joinedAt: '2024-11-02', verified: true },
+  { id: 'u2', name: 'Ricardo Pierre', email: 'ricardo@lakay.ht', avatar: 'RP', role: 'organizer', teamRole: 'admin', city: 'Pétion-Ville', status: 'active', joinedAt: '2024-11-02', verified: true },
+  { id: 'u8', name: 'Kervens Michel', email: 'kervens@lakay.ht', avatar: 'KM', role: 'organizer', teamRole: 'staff', city: 'Pétion-Ville', status: 'active', joinedAt: '2025-09-01' },
+  { id: 'u9', name: 'Nadège Louis', email: 'nadege@lakay.ht', avatar: 'NL', role: 'organizer', teamRole: 'accountant', city: 'Pétion-Ville', status: 'active', joinedAt: '2025-04-12' },
   { id: 'u3', name: 'Stéphanie Louis', email: 'steph@techayiti.org', avatar: 'SL', role: 'organizer', city: 'Port-au-Prince', status: 'active', joinedAt: '2025-01-20', verified: true },
   { id: 'u4', name: 'Carl-Henry Michel', email: 'carl@jakmel.art', avatar: 'CM', role: 'organizer', city: 'Jacmel', status: 'active', joinedAt: '2025-08-30', verified: false },
   { id: 'u5', name: 'Kervens Etienne', email: 'kervens.e@example.com', avatar: 'KE', role: 'participant', city: 'Cap-Haïtien', status: 'suspended', joinedAt: '2025-06-18' },
@@ -271,3 +303,39 @@ export const platformMonthly = [
   { month: 'Août', gmv: 3.8, fees: 0.19 }, { month: 'Sept', gmv: 5.2, fees: 0.26 },
   { month: 'Oct', gmv: 6.9, fees: 0.35 }, { month: 'Nov', gmv: 8.4, fees: 0.42 },
 ];
+
+// ---------------------------------------------------------------------------
+// Les dates de démo sont écrites par rapport au 8 novembre 2026. On les décale
+// d'autant de jours qu'il s'en est écoulé, pour que la démo reste « à venir ».
+const REFERENCE_DAY = new Date(2026, 10, 8);
+const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+function shiftIso(v: string, days: number) {
+  const m = ISO_RE.exec(v);
+  if (!m) return v;
+  const d = new Date(+m[1], +m[2] - 1, +m[3] + days, +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
+  const p = (n: number) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  if (!m[4]) return date;
+  return `${date}T${p(d.getHours())}:${p(d.getMinutes())}${m[6] !== undefined ? `:${p(d.getSeconds())}` : ''}`;
+}
+
+function shiftDeep(o: unknown, days: number): void {
+  if (Array.isArray(o)) o.forEach((x, i) => (typeof x === 'string' ? (o[i] = shiftIso(x, days)) : shiftDeep(x, days)));
+  else if (o && typeof o === 'object')
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === 'string') (o as Record<string, unknown>)[k] = shiftIso(v, days);
+      else shiftDeep(v, days);
+    }
+}
+
+const today = new Date();
+export const DEMO_OFFSET_DAYS = Math.max(
+  0,
+  Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - REFERENCE_DAY.getTime()) / 86400000),
+);
+if (DEMO_OFFSET_DAYS > 0) {
+  [events, myTickets, myOrders, attendees, resaleListings, promoCodes, team, refunds, payouts, campaigns, users, disputes, notifications].forEach((x) =>
+    shiftDeep(x, DEMO_OFFSET_DAYS),
+  );
+}

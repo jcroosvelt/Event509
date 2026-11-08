@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, SearchX } from 'lucide-react';
+import { Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { categories, cities } from '@/data/mock';
 import { listEvents, type EventFilters } from '@/services/api';
-import { useAsync } from '@/lib/hooks';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
+import { cx } from '@/lib/format';
 import { Button, Chip, EmptyState, Field, Input, Modal, Segmented, Select, Skeleton, Toggle } from '@/components/ui';
 import { EventCard } from '@/components/events';
 import type { CategoryId } from '@/types';
 
+const whenLabels = { '': 'Toutes', today: 'Aujourd’hui', weekend: 'Ce week-end', week: '7 prochains jours', month: 'Ce mois-ci' } as const;
+
 export default function Explore() {
   const { t } = useApp();
+  useTitle(t('Explorer'));
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState(false);
 
@@ -31,101 +35,112 @@ export default function Explore() {
   };
   const { data, loading } = useAsync(() => listEvents(f), [params.toString()]);
   const activeCount = ['city', 'category', 'when', 'price', 'online'].filter((k) => params.get(k)).length;
+  const count = data?.length ?? 0;
 
   const Filters = (
     <div className="space-y-5">
-      <Field label={t('filters.city')}>
+      <Field label={t('Ville')}>
         <Select value={f.city} onChange={(e) => set('city', e.target.value)}>
-          <option value="">Toutes les villes</option>
+          <option value="">{t('Toutes les villes')}</option>
           {cities.map((c) => <option key={c}>{c}</option>)}
         </Select>
       </Field>
-      <Field label={t('filters.category')}>
+      <Field label={t('Catégorie')}>
         <Select value={f.category} onChange={(e) => set('category', e.target.value)}>
-          <option value="">Toutes les catégories</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+          <option value="">{t('Toutes les catégories')}</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {t(c.label)}</option>)}
         </Select>
       </Field>
-      <div>
-        <span className="mb-1.5 block text-sm font-semibold">{t('filters.date')}</span>
+      <fieldset>
+        <legend className="mb-1.5 block text-sm font-semibold">{t('Date')}</legend>
         <div className="flex flex-wrap gap-2">
-          {(['', 'today', 'weekend', 'week', 'month'] as const).map((w) => (
+          {(Object.keys(whenLabels) as (keyof typeof whenLabels)[]).map((w) => (
             <button
               key={w}
+              type="button"
+              aria-pressed={f.when === w}
               onClick={() => set('when', w)}
-              className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${f.when === w ? 'bg-ink text-white' : 'bg-canvas text-ink-soft hover:text-ink'}`}
+              className={cx('rounded-full px-3.5 py-2 text-xs font-semibold transition', f.when === w ? 'bg-contrast text-on-contrast' : 'bg-canvas text-ink-soft hover:text-ink')}
             >
-              {w ? t(`filters.when.${w}`) : t('common.all')}
+              {t(whenLabels[w])}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
       <div>
-        <span className="mb-1.5 block text-sm font-semibold">{t('filters.price')}</span>
+        <span id="price-label" className="mb-1.5 block text-sm font-semibold">{t('Prix')}</span>
         <Segmented
+          label={t('Prix')}
           value={f.price || ''}
           onChange={(v) => set('price', v)}
-          options={[{ value: '', label: t('common.all') }, { value: 'free', label: t('filters.price.free') }, { value: 'paid', label: t('filters.price.paid') }]}
+          options={[{ value: '', label: t('Tous') }, { value: 'free', label: t('Gratuit') }, { value: 'paid', label: t('Payant') }]}
         />
       </div>
-      <Toggle checked={!!f.online} onChange={(v) => set('online', v ? '1' : '')} label="En ligne / streaming" description="Événements avec lien de diffusion" />
+      <Toggle checked={!!f.online} onChange={(v) => set('online', v ? '1' : '')} label={t('En ligne / streaming')} description={t('Événements avec lien de diffusion')} />
       <Button variant="ghost" className="w-full" onClick={() => setParams(f.q ? { q: f.q } : {}, { replace: true })}>
-        {t('common.reset')}
+        {t('Réinitialiser les filtres')}
       </Button>
     </div>
   );
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:pt-10">
-      <h1 className="mb-4 text-3xl font-extrabold tracking-tight">{t('nav.explore')}</h1>
-      <div className="mb-4 flex gap-2">
+      <h1 className="mb-4 text-3xl font-extrabold tracking-tight">{t('Explorer')}</h1>
+      <div className="mb-4 flex gap-2" role="search">
         <div className="flex-1">
-          <Input icon={<Search className="h-4 w-4" />} value={f.q} onChange={(e) => set('q', e.target.value)} placeholder={t('home.search')} className="rounded-full" />
+          <label htmlFor="explore-q" className="sr-only">{t('Rechercher un événement')}</label>
+          <Input id="explore-q" type="search" icon={<Search className="h-4 w-4" />} value={f.q} onChange={(e) => set('q', e.target.value)} placeholder={t('Événement, lieu, artiste…')} className="rounded-full" />
         </div>
-        <Button variant="dark" className="h-12 lg:hidden" onClick={() => setOpen(true)} aria-label={t('common.filters')}>
-          <SlidersHorizontal className="h-4 w-4" /> {activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs">{activeCount}</span>}
+        <Button variant="dark" className="h-12 lg:hidden" onClick={() => setOpen(true)} aria-label={activeCount ? t('Filtres ({n} actifs)', { n: activeCount }) : t('Filtres')}>
+          <SlidersHorizontal className="h-4 w-4" aria-hidden /> {activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs text-white">{activeCount}</span>}
         </Button>
       </div>
-      <div className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-        <Chip active={!f.category} onClick={() => set('category', '')}>{t('common.all')}</Chip>
+      <div className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label={t('Catégories')}>
+        <Chip active={!f.category} onClick={() => set('category', '')}>{t('Tous')}</Chip>
         {categories.map((c) => (
           <Chip key={c.id} active={f.category === c.id} onClick={() => set('category', f.category === c.id ? '' : c.id)}>
-            {c.emoji} {c.label}
+            <span aria-hidden>{c.emoji}</span> {t(c.label)}
           </Chip>
         ))}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[260px_1fr]">
-        <aside className="hidden lg:block">
-          <div className="sticky top-24 rounded-3xl bg-white p-5 shadow-card">{Filters}</div>
+        <aside className="hidden lg:block" aria-label={t('Filtres')}>
+          <div className="sticky top-24 rounded-3xl bg-surface p-5 shadow-card">{Filters}</div>
         </aside>
         <div>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <span className="text-sm text-ink-soft">
-              <b className="text-ink">{data?.length ?? '…'}</b> {t('filters.results')}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-ink-soft" aria-live="polite">
+              {loading ? t('Recherche…') : count > 1 ? t('{n} événements', { n: count }) : t('{n} événement', { n: count })}
             </span>
             <Segmented
               size="sm"
+              label={t('Trier par')}
               value={f.sort ?? 'date'}
               onChange={(v) => set('sort', v)}
               options={[
-                { value: 'date', label: t('filters.sort.date') },
-                { value: 'popular', label: t('filters.sort.popular') },
-                { value: 'price', label: t('filters.sort.price') },
+                { value: 'date', label: t('Date') },
+                { value: 'popular', label: t('Popularité') },
+                { value: 'price', label: t('Prix') },
               ]}
             />
           </div>
           {loading ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-72" />)}</div>
-          ) : data && data.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data.map((e) => <EventCard key={e.id} event={e} />)}</div>
+          ) : count ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data!.map((e) => <EventCard key={e.id} event={e} />)}</div>
           ) : (
-            <EmptyState icon={<SearchX className="h-5 w-5" />} title="Aucun événement trouvé" body="Essayez d’élargir vos filtres ou une autre recherche." action={<Button variant="soft" onClick={() => setParams({}, { replace: true })}>{t('common.reset')}</Button>} />
+            <EmptyState
+              icon={<SearchX className="h-5 w-5" />}
+              title={t('Aucun événement ne correspond')}
+              body={t('Élargissez la date ou la ville, ou essayez un autre mot-clé.')}
+              action={<Button variant="soft" onClick={() => setParams({}, { replace: true })}>{t('Réinitialiser les filtres')}</Button>}
+            />
           )}
         </div>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t('common.filters')} footer={<Button className="flex-1" onClick={() => setOpen(false)}>Voir {data?.length ?? 0} {t('filters.results')}</Button>}>
+      <Modal open={open} onClose={() => setOpen(false)} title={t('Filtres')} footer={<Button className="flex-1" onClick={() => setOpen(false)}>{count > 1 ? t('Voir {n} événements', { n: count }) : t('Voir {n} événement', { n: count })}</Button>}>
         {Filters}
       </Modal>
     </div>

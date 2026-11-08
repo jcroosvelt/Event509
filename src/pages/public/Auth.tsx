@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
 import { useApp } from '@/store/app';
+import { useTitle } from '@/lib/hooks';
+import { isEmail, isPhone, useForm } from '@/lib/form';
+import { hasOrganizerAccess } from '@/lib/permissions';
 import { Button, Card, Field, Input, Segmented, Toggle } from '@/components/ui';
+import type { AppUser } from '@/types';
 
 function GoogleIcon() {
   return (
@@ -15,96 +19,151 @@ function GoogleIcon() {
   );
 }
 
+/** Comptes de démonstration, un par rôle, pour tester les permissions. */
+const demoAccounts = [
+  { id: 'u1', label: 'Participant' },
+  { id: 'u2', label: 'Organisateur (admin)' },
+  { id: 'u8', label: 'Staff d’entrée' },
+  { id: 'u9', label: 'Comptable' },
+  { id: 'u7', label: 'Admin plateforme' },
+];
+
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
-  const { login, toast } = useApp();
+  const { login, updateUser, toast, t } = useApp();
+  const signup = mode === 'signup';
+  useTitle(signup ? t('Créer un compte') : t('Connexion'));
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const next = params.get('next');
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
-  const [organizer, setOrganizer] = useState(false);
+  const [organizer, setOrganizer] = useState(params.get('organisateur') === '1');
   const [loading, setLoading] = useState(false);
-  const signup = mode === 'signup';
 
-  const done = () => {
+  const form = useForm(
+    { name: '', email: '', password: '', phone: '', otp: '' },
+    {
+      name: (v) => (signup && !String(v).trim() ? t('Indiquez votre nom') : undefined),
+      email: (v) => (via === 'email' && !isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined),
+      password: (v) => (via === 'email' && (signup ? String(v).length < 8 : !v) ? (signup ? t('Choisissez au moins 8 caractères') : t('Saisissez votre mot de passe')) : undefined),
+      phone: (v) => (via === 'phone' && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
+      otp: (v) => (via === 'phone' && otpSent && !/^\d{6}$/.test(String(v)) ? t('Saisissez les 6 chiffres reçus par SMS') : undefined),
+    },
+  );
+
+  const finish = (u: AppUser) => {
+    toast(signup ? t('Compte créé, bienvenue !') : t('Bonjour {name} !', { name: u.name.split(' ')[0] }));
+    nav(next ?? (hasOrganizerAccess(u) ? '/organisateur' : u.role === 'admin' ? '/admin' : '/'), { replace: true });
+  };
+
+  const done = (who?: string) => {
     setLoading(true);
     setTimeout(() => {
-      login(organizer ? 'organizer' : 'participant');
-      toast(signup ? 'Compte créé, bienvenue !' : 'Connexion réussie');
-      nav(organizer ? '/organisateur' : '/');
-    }, 600);
+      let u = login(who ?? (organizer ? 'u2' : 'u1'));
+      if (signup && form.values.name) {
+        updateUser({ name: form.values.name, email: form.values.email || u.email });
+        u = { ...u, name: form.values.name };
+      }
+      setLoading(false);
+      finish(u);
+    }, 500);
   };
 
   return (
     <div className="mx-auto grid max-w-5xl gap-8 px-4 pt-8 sm:px-6 lg:grid-cols-2 lg:pt-16">
-      <div className="hidden flex-col justify-between rounded-4xl bg-ink p-10 text-white lg:flex">
-        <img src="/logo-mark.png" alt="" className="h-14 w-auto self-start" />
+      <div className="hidden flex-col justify-between rounded-4xl bg-navy p-10 text-white dark:ring-1 dark:ring-line lg:flex">
+        <img src="/logo-mark.png" alt="" className="h-14 w-auto self-start brightness-[1.8] contrast-75" />
         <div>
-          <h2 className="text-4xl font-extrabold leading-tight tracking-tight">Découvrez des événements.<br />Obtenez votre billet.<br /><span className="text-brand-300">Soyez là.</span></h2>
-          <p className="mt-4 text-white/60">Vos billets QR dans l’app, par email et sur WhatsApp. Paiement MonCash, NatCash, carte ou PayPal.</p>
+          <p className="text-4xl font-extrabold leading-tight tracking-tight">
+            {t('Découvrez des événements.')}<br />{t('Obtenez votre billet.')}<br /><span className="text-brand-300">{t('Soyez là.')}</span>
+          </p>
+          <p className="mt-4 text-white/70">{t('Vos billets QR dans l’app, par email et sur WhatsApp. Paiement MonCash, NatCash, carte ou PayPal.')}</p>
         </div>
       </div>
 
       <Card className="p-6 sm:p-8">
-        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? 'Créer un compte' : 'Bon retour !'}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte') : t('Bon retour !')}</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          {signup ? 'Déjà inscrit ?' : 'Pas encore de compte ?'}{' '}
-          <Link to={signup ? '/connexion' : '/inscription'} className="font-semibold text-brand">{signup ? 'Se connecter' : 'S’inscrire'}</Link>
+          {signup ? t('Déjà inscrit ?') : t('Pas encore de compte ?')}{' '}
+          <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
         </p>
 
-        <Button variant="outline" size="lg" className="mt-6 w-full" onClick={done}>
-          <GoogleIcon /> Continuer avec Google
+        <Button variant="outline" size="lg" className="mt-6 w-full" onClick={() => done()} loading={loading}>
+          <GoogleIcon /> {t('Continuer avec Google')}
         </Button>
 
-        <div className="my-6 flex items-center gap-3 text-xs text-ink-muted">
-          <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />
+        <div className="my-6 flex items-center gap-3 text-xs text-ink-muted" aria-hidden>
+          <span className="h-px flex-1 bg-line" /> {t('ou')} <span className="h-px flex-1 bg-line" />
         </div>
 
         <Segmented
-          className="mb-5 w-full [&>button]:flex-1"
+          label={t('Méthode de connexion')}
+          className="mb-5 flex w-full [&>button]:flex-1"
           value={via}
-          onChange={(v) => { setVia(v); setOtpSent(false); }}
+          onChange={(v) => {
+            setVia(v);
+            setOtpSent(false);
+            form.setErrors({});
+          }}
           options={[
-            { value: 'email', label: <span className="flex items-center justify-center gap-2"><Mail className="h-4 w-4" /> Email</span> },
-            { value: 'phone', label: <span className="flex items-center justify-center gap-2"><Phone className="h-4 w-4" /> Téléphone</span> },
+            { value: 'email', label: <span className="flex items-center justify-center gap-2"><Mail className="h-4 w-4" aria-hidden /> {t('Email')}</span> },
+            { value: 'phone', label: <span className="flex items-center justify-center gap-2"><Phone className="h-4 w-4" aria-hidden /> {t('Téléphone')}</span> },
           ]}
         />
 
         <form
+          noValidate
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!form.validate()) return;
             if (via === 'phone' && !otpSent) {
               setOtpSent(true);
-              toast('Code envoyé par SMS', 'info');
+              toast(t('Code envoyé par SMS au {phone}', { phone: form.values.phone }), 'info');
               return;
             }
             done();
           }}
         >
-          {signup && <Field label="Nom complet"><Input required autoComplete="name" placeholder="Marie Joseph" /></Field>}
+          {signup && <Field label={t('Nom complet')} error={form.errors.name} required><Input autoComplete="name" {...form.bind('name')} /></Field>}
           {via === 'email' ? (
             <>
-              <Field label="Email"><Input type="email" required autoComplete="email" placeholder="vous@exemple.com" /></Field>
-              <Field label="Mot de passe" hint={signup ? '8 caractères minimum' : undefined}>
-                <Input type="password" required minLength={signup ? 8 : 1} autoComplete={signup ? 'new-password' : 'current-password'} />
+              <Field label={t('Email')} error={form.errors.email} required><Input type="email" inputMode="email" autoComplete="email" {...form.bind('email')} /></Field>
+              <Field label={t('Mot de passe')} error={form.errors.password} hint={signup ? t('8 caractères minimum') : undefined} required>
+                <Input type="password" autoComplete={signup ? 'new-password' : 'current-password'} {...form.bind('password')} />
               </Field>
-              {!signup && <button type="button" className="text-sm font-semibold text-brand" onClick={() => toast('Lien de réinitialisation envoyé', 'info')}>Mot de passe oublié ?</button>}
+              {!signup && <Link to="/mot-de-passe-oublie" className="inline-block text-sm font-semibold text-brand">{t('Mot de passe oublié ?')}</Link>}
             </>
           ) : (
             <>
-              <Field label="Numéro de téléphone"><Input type="tel" required placeholder="+509 3x xx xx xx" autoComplete="tel" /></Field>
+              <Field label={t('Numéro de téléphone')} error={form.errors.phone} required><Input type="tel" inputMode="tel" placeholder="+509 3712 3456" autoComplete="tel" {...form.bind('phone')} /></Field>
               {otpSent && (
-                <Field label="Code reçu par SMS" hint="Démo : n’importe quel code à 6 chiffres">
-                  <Input inputMode="numeric" required pattern="\d{6}" maxLength={6} placeholder="••••••" className="text-center text-lg tracking-[0.5em]" />
+                <Field label={t('Code reçu par SMS')} error={form.errors.otp} hint={t('Démo : n’importe quel code à 6 chiffres')} required>
+                  <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="••••••" className="text-center text-lg tracking-[0.5em]" {...form.bind('otp')} onChange={(e) => form.set('otp', e.target.value.replace(/\D/g, '').slice(0, 6))} />
                 </Field>
               )}
             </>
           )}
-          {signup && <Toggle checked={organizer} onChange={setOrganizer} label="Je suis organisateur" description="Accédez à la billetterie et au tableau de bord" />}
+          {signup && <Toggle checked={organizer} onChange={setOrganizer} label={t('Je suis organisateur')} description={t('Accédez à la billetterie et au tableau de bord')} />}
           <Button type="submit" size="lg" className="w-full" loading={loading}>
-            {via === 'phone' && !otpSent ? 'Recevoir un code' : signup ? 'Créer mon compte' : 'Se connecter'}
+            {via === 'phone' && !otpSent ? t('Recevoir un code') : signup ? t('Créer mon compte') : t('Se connecter')}
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-ink-muted">En continuant, vous acceptez les conditions d’utilisation et la politique de confidentialité d’Event509.</p>
+
+        {!signup && (
+          <details className="mt-6 rounded-2xl bg-canvas p-4 text-sm">
+            <summary className="cursor-pointer font-semibold">{t('Comptes de démonstration')}</summary>
+            <p className="mt-2 text-xs text-ink-muted">{t('Connectez-vous avec un rôle pour tester les permissions.')}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {demoAccounts.map((a) => (
+                <Button key={a.id} size="sm" variant="outline" onClick={() => done(a.id)}>{t(a.label)}</Button>
+              ))}
+            </div>
+          </details>
+        )}
+        <p className="mt-6 text-center text-xs text-ink-muted">
+          {t('En continuant, vous acceptez les')} <Link to="/cgu" className="underline">{t('conditions d’utilisation')}</Link> {t('et la')} <Link to="/confidentialite" className="underline">{t('politique de confidentialité')}</Link>.
+        </p>
       </Card>
     </div>
   );
