@@ -154,3 +154,11 @@ test('chaque page événement a un aperçu de partage', async ({ request }) => {
   expect(html).toContain('<meta property="og:title" content="Festival Kompa Live 2026"');
   expect(html).toContain('og:image');
 });
+
+test('la déconnexion survit au rechargement de la page', async ({ page }) => {
+  await fresh(page, '/compte');
+  await page.getByRole('button', { name: 'Déconnexion' }).last().click();
+  await page.reload();
+  await page.goto('/compte');
+  await expect(page).toHaveURL(/\/connexion/);
+});
