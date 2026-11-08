@@ -87,7 +87,7 @@ export default function TicketDetail() {
     await cancelResale(tk.code);
     updateTicket(tk.id, { status: 'valid', resalePrice: undefined });
     toast(t('Billet retiré de la revente'), 'success', {
-      label: t('Annuler'),
+      label: t('Annuler l’action'),
       run: () => {
         listForResale(tk, tk.resalePrice ?? tt.price);
         updateTicket(tk.id, { status: 'resale' });

@@ -21,7 +21,8 @@ export function ticketAvailability(tt: TicketType) {
   if (new Date(tt.salesStart) > now) return { ok: false, label: 'Bientôt en vente', left };
   if (new Date(tt.salesEnd) < now) return { ok: false, label: 'Vente terminée', left };
   if (left <= 0) return { ok: false, label: 'Complet', left: 0 };
-  return { ok: true, label: left < 50 ? 'Plus que {n}' : '', left };
+  if (left < 50) return { ok: true, label: 'Plus que {n}', left };
+  return { ok: true, label: '', left };
 }
 
 export const kindLabel: Record<TicketType['kind'], { label: string; tone: Tone }> = {

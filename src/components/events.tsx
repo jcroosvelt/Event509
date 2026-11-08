@@ -53,7 +53,7 @@ export function FavoriteButton({ eventId, className }: { eventId: string; classN
         e.preventDefault();
         e.stopPropagation();
         toggleFavorite(eventId);
-        toast(on ? t('Retiré des favoris') : t('Ajouté aux favoris'), 'info', { label: t('Annuler'), run: () => toggleFavorite(eventId) });
+        toast(on ? t('Retiré des favoris') : t('Ajouté aux favoris'), 'info', { label: t('Annuler l’action'), run: () => toggleFavorite(eventId) });
       }}
       className={cx('grid h-10 w-10 place-items-center rounded-full bg-surface/90 backdrop-blur transition active:scale-90', className)}
     >
