@@ -44,12 +44,12 @@ function ActionsMenu({ e, onDuplicate, onCancel }: { e: EventItem; onDuplicate: 
         <MoreHorizontal className="h-4 w-4" aria-hidden />
       </button>
       {open && (
-        <div id={id} className="absolute right-0 z-10 mt-1 w-52 rounded-2xl bg-surface p-1.5 shadow-2xl ring-1 ring-line" onClick={() => setOpen(false)}>
-          <Link to={`/organisateur/evenements/${e.id}`} className={item}><Pencil className="h-4 w-4" aria-hidden /> {t('Modifier')}</Link>
-          <Link to={`/organisateur/evenements/${e.id}/stats`} className={item}><BarChart3 className="h-4 w-4" aria-hidden /> {t('Statistiques')}</Link>
-          <Link to={`/e/${e.slug}`} className={item}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
-          <button type="button" onClick={onDuplicate} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>
-          {e.status !== 'cancelled' && <button type="button" onClick={onCancel} className={`${item} text-red-600 hover:bg-red-50`}><XCircle className="h-4 w-4" aria-hidden /> {t('Annuler l’événement')}</button>}
+        <div id={id} className="absolute right-0 z-10 mt-1 w-52 rounded-2xl bg-surface p-1.5 shadow-2xl ring-1 ring-line">
+          <Link to={`/organisateur/evenements/${e.id}`} className={item} onClick={() => setOpen(false)}><Pencil className="h-4 w-4" aria-hidden /> {t('Modifier')}</Link>
+          <Link to={`/organisateur/evenements/${e.id}/stats`} className={item} onClick={() => setOpen(false)}><BarChart3 className="h-4 w-4" aria-hidden /> {t('Statistiques')}</Link>
+          <Link to={`/e/${e.slug}`} className={item} onClick={() => setOpen(false)}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
+          <button type="button" onClick={() => { setOpen(false); onDuplicate(); }} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>
+          {e.status !== 'cancelled' && <button type="button" onClick={() => { setOpen(false); onCancel(); }} className={`${item} text-red-600 hover:bg-red-50`}><XCircle className="h-4 w-4" aria-hidden /> {t('Annuler l’événement')}</button>}
         </div>
       )}
     </div>
@@ -100,7 +100,7 @@ export default function Events() {
                         <Badge tone={st.tone}>{t(st.l)}</Badge>
                         <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} />
                       </div>
-                      <Link to={`/organisateur/evenements/${e.id}/stats`} className="mt-1 line-clamp-1 font-bold hover:text-brand">{e.title}</Link>
+                      <Link to={`/organisateur/evenements/${e.id}/stats`} className="mt-1 line-clamp-1 font-bold hover:text-brand-ink">{e.title}</Link>
                       <div className="text-xs text-ink-muted">{dateShort(e.start, lang)} · {time(e.start, lang)} · {e.venue?.city ?? t('En ligne')}</div>
                       <div className="mt-3 flex items-center gap-3">
                         <ProgressBar value={q ? s / q : 0} className="flex-1" label={t('Billets vendus')} />

@@ -9,7 +9,7 @@ export function Logo({ className, to = '/', compact }: { className?: string; to?
       <img src="/logo-mark.png" alt="" width={27} height={32} className="h-8 w-auto dark:brightness-[1.8] dark:contrast-75" />
       {!compact && (
         <span aria-hidden className="text-[1.35rem] font-extrabold leading-none tracking-tight text-ink">
-          Event<span className="text-brand">509</span>
+          Event<span className="text-brand-ink">509</span>
         </span>
       )}
     </Link>

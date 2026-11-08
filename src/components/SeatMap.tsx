@@ -42,13 +42,13 @@ export function SeatMap({
         {t('Scène')}
       </div>
       <div className="overflow-x-auto pb-2">
-        <div className="mx-auto w-max space-y-1.5" role="grid" aria-label={t('Plan de salle')}>
+        <div className="mx-auto w-max space-y-1.5" role="group" aria-label={t('Plan de salle')}>
           {Array.from({ length: config.rows }, (_, ri) => {
             const r = rowLetter(ri);
             const zi = zoneOfRow(ri);
             const inActive = !activeZone || (ri >= activeZone.fromRow && ri <= activeZone.toRow);
             return (
-              <div key={r} role="row" className={cx('flex items-center gap-1.5 transition', !inActive && !editable && 'opacity-35')}>
+              <div key={r} role="group" aria-label={t('Rang {r}', { r })} className={cx('flex items-center gap-1.5 transition', !inActive && !editable && 'opacity-35')}>
                 <span aria-hidden className="w-5 text-center text-[11px] font-bold text-ink-muted">{r}</span>
                 {Array.from({ length: config.cols }, (_, i) => {
                   const id = `${r}-${i + 1}`;
@@ -61,7 +61,6 @@ export function SeatMap({
                     <button
                       key={id}
                       type="button"
-                      role="gridcell"
                       disabled={disabled}
                       onClick={() => toggle(id, ri)}
                       aria-label={`${t('Rang {r}, place {n}', { r, n: i + 1 })}${zoneName ? ` — ${zoneName}` : ''}${blocked ? ` (${t('neutralisée')})` : isTaken ? ` (${t('occupée')})` : ''}`}

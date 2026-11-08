@@ -50,7 +50,7 @@ export default function TicketDetail() {
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold">{t('Billet introuvable')}</h1>
-        <Link to="/billets" className="mt-4 inline-block font-semibold text-brand">{t('Mes billets')}</Link>
+        <Link to="/billets" className="mt-4 inline-block font-semibold text-brand-ink">{t('Mes billets')}</Link>
       </div>
     );
 
@@ -160,9 +160,9 @@ export default function TicketDetail() {
           {tk.status === 'resale' && tk.resalePrice !== undefined && <p className="mt-2 text-center text-xs text-ink-muted">{t('En vente à {price}', { price: money(tk.resalePrice, ev.currency, lang) })}</p>}
 
           <dl className="mt-6 space-y-3 border-t-2 border-dashed border-line pt-5 text-sm">
-            <div className="flex gap-3"><dt><CalendarDays className="h-5 w-5 text-brand" aria-label={t('Date')} /></dt><dd className="first-letter:uppercase">{tk.sessionLabel ? session(tk.sessionLabel) : `${dateLong(ev.start, lang)} · ${time(ev.start, lang)}`}</dd></div>
-            <div className="flex gap-3"><dt><MapPin className="h-5 w-5 text-brand" aria-label={t('Lieu')} /></dt><dd>{ev.venue ? `${ev.venue.name}, ${ev.venue.city}` : ev.online?.platform}</dd></div>
-            {tk.seat && <div className="flex gap-3"><dt><Armchair className="h-5 w-5 text-brand" aria-label={t('Place')} /></dt><dd className="font-bold">{t('Place {seat}', { seat: tk.seat })}</dd></div>}
+            <div className="flex gap-3"><dt><CalendarDays className="h-5 w-5 text-brand-ink" aria-label={t('Date')} /></dt><dd className="first-letter:uppercase">{tk.sessionLabel ? session(tk.sessionLabel) : `${dateLong(ev.start, lang)} · ${time(ev.start, lang)}`}</dd></div>
+            <div className="flex gap-3"><dt><MapPin className="h-5 w-5 text-brand-ink" aria-label={t('Lieu')} /></dt><dd>{ev.venue ? `${ev.venue.name}, ${ev.venue.city}` : ev.online?.platform}</dd></div>
+            {tk.seat && <div className="flex gap-3"><dt><Armchair className="h-5 w-5 text-brand-ink" aria-label={t('Place')} /></dt><dd className="font-bold">{t('Place {seat}', { seat: tk.seat })}</dd></div>}
             <div className="flex gap-3"><dt><ShieldCheck className="h-5 w-5 text-emerald-600" aria-label={t('Titulaire')} /></dt><dd>{t('Titulaire : {name}', { name: tk.holderName })}</dd></div>
           </dl>
         </div>

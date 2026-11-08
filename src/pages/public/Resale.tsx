@@ -76,7 +76,7 @@ export default function Resale() {
                 <Card className="flex flex-col gap-4 p-3 sm:flex-row sm:items-center">
                   <EventCover event={ev} className="h-20 w-full shrink-0 rounded-2xl sm:w-24 [&>span]:!text-[3rem]" />
                   <div className="min-w-0 flex-1">
-                    <Link to={`/e/${ev.slug}`} className="font-bold hover:text-brand">{ev.title}</Link>
+                    <Link to={`/e/${ev.slug}`} className="font-bold hover:text-brand-ink">{ev.title}</Link>
                     <div className="text-sm text-ink-muted">{dateShort(ev.start, lang)} · {time(ev.start, lang)} · {ev.venue?.city ?? t('En ligne')}</div>
                     <div className="mt-1 flex flex-wrap gap-2">
                       <Badge tone="brand">{tt?.name}</Badge>

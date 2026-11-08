@@ -60,7 +60,7 @@ export default function Overview() {
             <div className="text-xs text-ink-muted">{t('sur 6 mois')}</div>
           </Card>
           <Card>
-            <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">{t('Commission par défaut')}</h2><Wallet className="h-4 w-4 text-brand" aria-hidden /></div>
+            <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">{t('Commission par défaut')}</h2><Wallet className="h-4 w-4 text-brand-ink" aria-hidden /></div>
             <div className="text-2xl font-extrabold">{feePercent} %</div>
             <div className="text-xs text-ink-muted">{t('Modifiable dans Commissions')}</div>
           </Card>

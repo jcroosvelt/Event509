@@ -47,7 +47,7 @@ export default function Verification() {
                   <div className="flex items-center gap-3">
                     <Avatar name={v.name} size={48} />
                     <div className="flex-1">
-                      <h2 className="flex items-center gap-1 font-bold">{v.name} {v.status === 'approved' && <BadgeCheck className="h-4 w-4 text-brand" aria-label={t('Vérifié')} />}</h2>
+                      <h2 className="flex items-center gap-1 font-bold">{v.name} {v.status === 'approved' && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</h2>
                       <p className="text-sm text-ink-muted">{v.owner} · {v.city}</p>
                     </div>
                     <Badge tone={v.status === 'approved' ? 'green' : v.status === 'rejected' ? 'red' : 'amber'}>{v.status === 'approved' ? t('Vérifié') : v.status === 'rejected' ? t('Refusé') : t('À vérifier')}</Badge>

@@ -17,7 +17,7 @@ import type { Currency, PaymentMethod, PromoCode } from '@/types';
 const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string }[] = [
   { id: 'moncash', label: 'MonCash', sub: 'Paiement mobile Digicel', icon: Smartphone, color: 'bg-red-50 text-red-600' },
   { id: 'natcash', label: 'NatCash', sub: 'Paiement mobile Natcom', icon: Smartphone, color: 'bg-orange-50 text-orange-500' },
-  { id: 'card', label: 'Carte bancaire', sub: 'Visa, Mastercard, Amex', icon: CreditCard, color: 'bg-brand-50 text-brand' },
+  { id: 'card', label: 'Carte bancaire', sub: 'Visa, Mastercard, Amex', icon: CreditCard, color: 'bg-brand-50 text-brand-ink' },
   { id: 'paypal', label: 'PayPal', sub: 'Compte PayPal ou carte', icon: Wallet, color: 'bg-sky-50 text-sky-600' },
   { id: 'transfer', label: 'Virement bancaire', sub: 'Validation sous 24–48 h', icon: Building2, color: 'bg-emerald-50 text-emerald-600' },
 ];
@@ -83,7 +83,7 @@ export default function Checkout() {
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold">{t('Aucun billet sélectionné')}</h1>
         <p className="mt-2 text-ink-soft">{t('Choisissez vos billets sur la page de l’événement.')}</p>
-        <Link to={ev ? `/e/${ev.slug}` : '/explorer'} className="mt-4 inline-block font-semibold text-brand">{t('Choisir des billets')}</Link>
+        <Link to={ev ? `/e/${ev.slug}` : '/explorer'} className="mt-4 inline-block font-semibold text-brand-ink">{t('Choisir des billets')}</Link>
       </div>
     );
 
@@ -178,7 +178,7 @@ export default function Checkout() {
           e.preventDefault();
           pay();
         }}
-        className="grid gap-6 lg:grid-cols-[1fr_380px]"
+        className="grid gap-6 lg:grid-cols-[1fr_380px] [&>*]:min-w-0"
       >
         <div className="space-y-6">
           {ev.seated && (
@@ -216,7 +216,7 @@ export default function Checkout() {
             {step(t('Vos informations'))}
             {!app.user && (
               <div className="mb-4 rounded-2xl bg-brand-50 p-4 text-sm">
-                {t('Déjà inscrit ?')} <Link to={`/connexion?next=${encodeURIComponent(location.pathname + location.search)}`} className="font-bold text-brand">{t('Connectez-vous')}</Link> {t('pour retrouver vos billets dans l’app.')}
+                {t('Déjà inscrit ?')} <Link to={`/connexion?next=${encodeURIComponent(location.pathname + location.search)}`} className="font-bold text-brand-ink">{t('Connectez-vous')}</Link> {t('pour retrouver vos billets dans l’app.')}
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -337,7 +337,7 @@ export default function Checkout() {
                   <Field error={promoErr}>
                     <div className="flex gap-2">
                       <label htmlFor="promo" className="sr-only">{t('Code promo')}</label>
-                      <Input id="promo" placeholder={t('Code promo')} value={promoInput} onChange={(e) => { setPromoErr(''); setPromoInput(e.target.value.toUpperCase()); }} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), applyPromo())} className="h-11" />
+                      <Input id="promo" placeholder={t('Code promo')} value={promoInput} onChange={(e) => { setPromoErr(''); setPromoInput(e.target.value.toUpperCase()); }} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), applyPromo())} className="h-11 min-w-0 flex-1" />
                       <Button variant="dark" onClick={applyPromo} loading={checking}>{t('Appliquer')}</Button>
                     </div>
                   </Field>

@@ -37,7 +37,7 @@ export default function ForgotPassword() {
             <h1 className="mt-4 text-xl font-extrabold">{t('Vérifiez votre boîte mail')}</h1>
             <p className="mt-2 text-sm text-ink-soft">{t('Si un compte existe pour {email}, vous recevrez un lien valable 1 heure.', { email: sent })}</p>
             {DEMO && (
-              <Link to="/reinitialiser?token=demo" className="mt-4 inline-block text-sm font-semibold text-brand">{t('Démo : ouvrir le lien reçu')}</Link>
+              <Link to="/reinitialiser?token=demo" className="mt-4 inline-block text-sm font-semibold text-brand-ink">{t('Démo : ouvrir le lien reçu')}</Link>
             )}
             <Button variant="ghost" className="mt-4 w-full" onClick={() => setSent('')}>{t('Utiliser une autre adresse')}</Button>
           </div>

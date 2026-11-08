@@ -47,7 +47,7 @@ export default function Notifications() {
                     <p className="text-sm text-ink-soft">{n.body}</p>
                     <div className="mt-1 flex items-center gap-3 text-xs text-ink-muted">
                       <span>{relative(n.date, lang)}</span>
-                      {!n.read && <button type="button" className="font-semibold text-brand" onClick={() => markRead(n.id)}>{t('Marquer comme lu')}</button>}
+                      {!n.read && <button type="button" className="font-semibold text-brand-ink" onClick={() => markRead(n.id)}>{t('Marquer comme lu')}</button>}
                     </div>
                   </div>
                 </Card>
@@ -57,7 +57,7 @@ export default function Notifications() {
         </ul>
       )}
       <p className="mt-6 text-center text-sm text-ink-muted">
-        <Link to="/compte/parametres#notifications" className="font-semibold text-brand">{t('Choisir les notifications reçues')}</Link>
+        <Link to="/compte/parametres#notifications" className="font-semibold text-brand-ink">{t('Choisir les notifications reçues')}</Link>
       </p>
     </div>
   );

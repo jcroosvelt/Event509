@@ -218,7 +218,7 @@ export default function EventEditor() {
         </ol>
       </nav>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_340px] [&>*]:min-w-0">
         <div className="space-y-4">
           {step === 0 && (
             <>
@@ -259,7 +259,7 @@ export default function EventEditor() {
                   onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}
                   className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line py-10 text-sm text-ink-soft hover:border-brand hover:bg-brand-50/40"
                 >
-                  <ImagePlus className="h-7 w-7 text-brand" aria-hidden />
+                  <ImagePlus className="h-7 w-7 text-brand-ink" aria-hidden />
                   <span className="font-semibold text-ink">{t('Importer une affiche')}</span>
                   <span className="text-xs">{t('JPG ou PNG, 1600×1200 recommandé, 4 Mo maximum')}</span>
                 </button>
@@ -448,8 +448,8 @@ export default function EventEditor() {
               )}
 
               <Card className="flex items-start gap-3 !bg-brand-50/60 p-4 text-sm text-ink-soft">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
-                <span>{t('Les codes promo se créent dans l’onglet')} <Link to="/organisateur/codes-promo" className="font-semibold text-brand">{t('Codes promo')}</Link> {t('et peuvent cibler cet événement.')}</span>
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink" aria-hidden />
+                <span>{t('Les codes promo se créent dans l’onglet')} <Link to="/organisateur/codes-promo" className="font-semibold text-brand-ink">{t('Codes promo')}</Link> {t('et peuvent cibler cet événement.')}</span>
               </Card>
             </>
           )}

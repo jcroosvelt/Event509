@@ -17,7 +17,8 @@ export const API_URL = import.meta.env.VITE_API_URL ?? '';
 /** Mode démo : actif tant qu'aucun backend n'est configuré (affiche les aides de test). */
 export const DEMO = !API_URL;
 
-const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+// Latence simulée de la démo (désactivée dans les tests)
+const wait = (ms = 250) => (import.meta.env.MODE === 'test' ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)));
 const clone = <T,>(v: T): T => structuredClone(v);
 
 /** Événement global émis quand le serveur répond 401 (session expirée). */
