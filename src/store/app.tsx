@@ -14,7 +14,8 @@ export function load<T>(key: string, fallback: T): T {
 }
 export function persist(key: string, value: unknown) {
   try {
-    if (value === null || value === undefined) localStorage.removeItem(key);
+    // null est enregistré tel quel (ex. « déconnecté ») ; seul undefined efface la clé
+    if (value === undefined) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
   } catch {
     /* stockage indisponible : l'état reste en mémoire */
@@ -160,6 +161,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     (who = 'participant') => {
       const u = db.users.find((x) => x.id === who) ?? db.users.find((x) => x.role === who) ?? db.users[0];
+      // Écriture immédiate : la session survit à un rechargement juste après la connexion
+      persist('e509.user', u);
       setUser(u);
       try {
         localStorage.setItem('e509.token', `demo.${u.id}`);
@@ -172,6 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    persist('e509.user', null);
     setUser(null);
     try {
       localStorage.removeItem('e509.token');

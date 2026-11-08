@@ -104,7 +104,7 @@ export default function Dashboard() {
                 <span className="text-lg text-ink-muted">{metric === 'tickets' ? t('billets') : 'HTG'}</span>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-start gap-2 sm:items-end">
               <Segmented label={t('Indicateur')} size="sm" value={metric} onChange={setMetric} options={[{ value: 'tickets', label: t('Billets') }, { value: 'revenue', label: t('Revenus') }]} />
               <span className="text-sm text-ink-muted">{t('Objectif :')} <b className="text-ink">{metric === 'tickets' ? num(weekTarget, lang) : compact(weekTarget, lang)}</b></span>
             </div>

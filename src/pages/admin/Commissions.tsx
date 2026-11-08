@@ -16,6 +16,7 @@ export default function Commissions() {
   const { data, loading, reload } = useAsync(() => listCustomCommissions(), []);
   const [rules, setRules] = useState(() => load(RULES, { fixed: 25, passToBuyer: true, freeNoFee: true }));
   const [editing, setEditing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const main = useForm({ fee: String(feePercent), fixed: String(rules.fixed) }, {
     fee: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
     fixed: (v) => (!(Number(v) >= 0) ? t('Indiquez un montant positif ou 0') : undefined),
@@ -92,13 +93,29 @@ export default function Commissions() {
               <Td>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={() => openCustom(c.organizerId)}>{t('Modifier')}</Button>
-                  <Button size="sm" variant="ghost" aria-label={t('Supprimer')} onClick={async () => { await removeCustomCommission(c.organizerId); toast(t('Taux personnalisé supprimé')); reload(); }}><Trash2 className="h-4 w-4" aria-hidden /></Button>
+                  <Button size="sm" variant="ghost" aria-label={t('Supprimer le taux de {name}', { name: organizers.find((o) => o.id === c.organizerId)?.name ?? '' })} onClick={() => setRemoving(c.organizerId)}><Trash2 className="h-4 w-4" aria-hidden /></Button>
                 </div>
               </Td>
             </tr>
           ))}
         </Table>
       </Card>
+
+      <Modal
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title={t('Supprimer le taux de {name} ?', { name: organizers.find((o) => o.id === removing)?.name ?? '' })}
+        description={t('Cet organisateur repassera au taux par défaut ({n} %) pour ses prochaines commandes.', { n: feePercent })}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setRemoving(null)}>{t('Annuler')}</Button>
+            <Button variant="danger" className="flex-1" onClick={async () => { await removeCustomCommission(removing!); setRemoving(null); toast(t('Taux personnalisé supprimé')); reload(); }}>{t('Supprimer le taux')}</Button>
+          </>
+        }
+      >
+        <span />
+      </Modal>
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={t('Taux personnalisé')} size="sm" footer={<Button className="flex-1" onClick={saveCustom}>{t('Enregistrer')}</Button>}>
         <form noValidate onSubmit={(e) => { e.preventDefault(); saveCustom(); }} className="space-y-4">

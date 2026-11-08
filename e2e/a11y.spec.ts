@@ -38,8 +38,9 @@ for (const theme of ['light', 'dark'] as const) {
 
 /** Aucune page ne doit déborder horizontalement sur mobile (gouttière de 16 px respectée). */
 const allPages = [...publicPages, '/notifications', '/compte', '/compte/achats', '/favoris', '/ambassadeurs', '/cgu'];
-test('aucun débordement horizontal sur petit écran', async ({ page }) => {
+test('aucun débordement horizontal sur petit écran (375 px)', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'vérifié sur le projet mobile');
+  await page.setViewportSize({ width: 375, height: 812 });
   const overflowing: string[] = [];
   const check = async (p: string) => {
     await page.goto(p);

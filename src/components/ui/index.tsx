@@ -321,7 +321,8 @@ export function ProgressBar({ value, className, tone = 'brand', label }: { value
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
     <div className={cx('h-2 overflow-hidden rounded-full bg-canvas', className)} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
-      <div className={cx('h-full rounded-full transition-all duration-700', c)} style={{ width: `${pct}%` }} />
+      {/* Animation par transform uniquement (pas de transition de largeur) */}
+      <div className={cx('h-full w-full origin-left rounded-full transition-transform duration-700', c)} style={{ transform: `scaleX(${pct / 100})` }} />
     </div>
   );
 }
@@ -359,7 +360,10 @@ export function BarChart({
             <span className={cx('text-[11px] font-semibold sm:text-xs', active ? 'text-ink' : 'text-ink-muted')}>{text}</span>
             <div className="relative flex w-full max-w-[44px] items-end justify-center gap-1" style={{ height }}>
               <div className="hatch w-1/2 rounded-full" style={{ height: `${(d.max / top) * 100}%` }} />
-              <div className={cx('w-1/2 rounded-full transition-all duration-700', active ? 'bg-brand' : 'bg-brand-200 group-hover:bg-brand-300')} style={{ height: `${Math.max(4, (d.value / top) * 100)}%` }} />
+              <div
+                className={cx('h-full w-1/2 origin-bottom rounded-full transition-[transform,background-color] duration-700', active ? 'bg-brand' : 'bg-brand-200 group-hover:bg-brand-300')}
+                style={{ transform: `scaleY(${Math.max(0.04, d.value / top)})` }}
+              />
             </div>
             <span className={cx('truncate text-xs', active ? 'font-bold text-ink' : 'text-ink-muted')}>{d.label}</span>
           </button>
