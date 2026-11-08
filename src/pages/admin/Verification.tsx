@@ -1,71 +1,88 @@
 import { useState } from 'react';
-import { BadgeCheck, Check, FileText, X } from 'lucide-react';
-import { organizers } from '@/data/mock';
-import { saveOrganizer } from '@/services/api';
+import { BadgeCheck, Check, Eye, FileText, Image as ImageIcon, X } from 'lucide-react';
+import { decideVerification, listVerificationRequests } from '@/services/api';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
-import { useTitle } from '@/lib/hooks';
-import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Segmented } from '@/components/ui';
+import { dateShort, relative } from '@/lib/format';
+import { useForm } from '@/lib/form';
+import { Avatar, Badge, Button, Card, EmptyState, Field, Loading, Modal, PageHeader, Segmented, Textarea, type Tone } from '@/components/ui';
+import type { VerificationRequest } from '@/types';
 
-type Status = 'pending' | 'approved' | 'rejected';
-const DOCS = ['Pièce d’identité', 'Patente / NIF', 'Justificatif bancaire'];
-
-const initial: { id: string; orgId?: string; name: string; owner: string; city: string; docs: string[]; status: Status }[] = [
-  { id: 'v1', orgId: 'org3', name: 'Jakmèl Arts Collectif', owner: 'Carl-Henry Michel', city: 'Jacmel', docs: DOCS, status: 'pending' },
-  { id: 'v2', name: 'Konbit Events', owner: 'Darline Etienne', city: 'Les Cayes', docs: ['Pièce d’identité'], status: 'pending' },
-  { id: 'v3', orgId: 'org4', name: 'Saveurs du Nord', owner: 'Jameson Noel', city: 'Cap-Haïtien', docs: DOCS, status: 'approved' },
+const DOCS: { type: VerificationRequest['docs'][number]['type']; label: string }[] = [
+  { type: 'id', label: 'Pièce d’identité' },
+  { type: 'license', label: 'Patente / NIF' },
+  { type: 'bank', label: 'Justificatif bancaire' },
 ];
+const statusTone: Record<VerificationRequest['status'], { l: string; tone: Tone }> = {
+  pending: { l: 'À vérifier', tone: 'amber' },
+  docs_requested: { l: 'Documents demandés', tone: 'violet' },
+  approved: { l: 'Vérifié', tone: 'green' },
+  rejected: { l: 'Refusé', tone: 'red' },
+};
 
 export default function Verification() {
-  const { toast, t } = useApp();
+  const { toast, t, lang } = useApp();
   useTitle(t('Vérification des organisateurs'));
-  const [list, setList] = useState(initial);
+  const { data, loading, reload } = useAsync(() => listVerificationRequests(), []);
   const [tab, setTab] = useState<'pending' | 'done'>('pending');
-  const shown = list.filter((v) => (tab === 'pending' ? v.status === 'pending' : v.status !== 'pending'));
+  const [viewing, setViewing] = useState<{ req: VerificationRequest; file: string; label: string } | null>(null);
+  const [asking, setAsking] = useState<VerificationRequest | null>(null);
+  const form = useForm({ note: '' }, { note: (v) => (String(v).trim().length < 5 ? t('Précisez les documents à fournir') : undefined) });
 
-  const set = async (id: string, status: Status) => {
-    const v = list.find((x) => x.id === id)!;
-    if (v.orgId) await saveOrganizer(v.orgId, { verified: status === 'approved' });
-    const o = organizers.find((x) => x.id === v.orgId);
-    if (o) o.verified = status === 'approved';
-    setList((l) => l.map((x) => (x.id === id ? { ...x, status } : x)));
-    toast(status === 'approved' ? t('{name} est vérifié', { name: v.name }) : t('Demande de {name} refusée : l’organisateur est prévenu', { name: v.name }));
+  if (loading) return <Loading />;
+  const all = data ?? [];
+  const shown = all.filter((v) => (tab === 'pending' ? v.status === 'pending' || v.status === 'docs_requested' : v.status === 'approved' || v.status === 'rejected'));
+
+  const decide = async (v: VerificationRequest, status: VerificationRequest['status'], note?: string) => {
+    await decideVerification(v.id, status, note);
+    toast(status === 'approved' ? t('{name} est vérifié', { name: v.name }) : status === 'docs_requested' ? t('Documents demandés à {name}', { name: v.name }) : t('Demande de {name} refusée : l’organisateur est prévenu', { name: v.name }));
+    setAsking(null);
+    reload();
   };
 
   return (
     <div>
       <PageHeader title={t('Vérification des organisateurs')} subtitle={t('Contrôlez les documents avant d’attribuer le badge vérifié.')} />
-      <Segmented label={t('Filtre')} className="mb-5" value={tab} onChange={setTab} options={[{ value: 'pending', label: t('À vérifier') }, { value: 'done', label: t('Traitées') }]} />
+      <Segmented label={t('Filtre')} className="mb-5" value={tab} onChange={setTab} options={[{ value: 'pending', label: t('À vérifier ({n})', { n: all.filter((v) => v.status === 'pending').length }) }, { value: 'done', label: t('Traitées') }]} />
       {!shown.length ? (
         <EmptyState icon={<BadgeCheck className="h-5 w-5" />} title={t('Aucune demande')} />
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2">
           {shown.map((v) => {
-            const complete = DOCS.every((d) => v.docs.includes(d));
+            const complete = DOCS.every((d) => v.docs.some((x) => x.type === d.type));
             return (
               <li key={v.id}>
                 <Card className="h-full">
                   <div className="flex items-center gap-3">
                     <Avatar name={v.name} size={48} />
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <h2 className="flex items-center gap-1 font-bold">{v.name} {v.status === 'approved' && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</h2>
-                      <p className="text-sm text-ink-muted">{v.owner} · {v.city}</p>
+                      <p className="truncate text-sm text-ink-muted">{v.owner} · {v.city} · {v.email}</p>
+                      <p className="text-xs text-ink-muted">{t('Demande envoyée {when}', { when: relative(v.submittedAt, lang) })}</p>
                     </div>
-                    <Badge tone={v.status === 'approved' ? 'green' : v.status === 'rejected' ? 'red' : 'amber'}>{v.status === 'approved' ? t('Vérifié') : v.status === 'rejected' ? t('Refusé') : t('À vérifier')}</Badge>
+                    <Badge tone={statusTone[v.status].tone}>{t(statusTone[v.status].l)}</Badge>
                   </div>
-                  <ul className="mt-4 flex flex-wrap gap-2">
+                  <ul className="mt-4 space-y-2">
                     {DOCS.map((d) => {
-                      const ok = v.docs.includes(d);
+                      const doc = v.docs.find((x) => x.type === d.type);
                       return (
-                        <li key={d} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-muted'}`}>
-                          <FileText className="h-3.5 w-3.5" aria-hidden /> {t(d)} <span className="sr-only">{ok ? t('fourni') : t('manquant')}</span>{!ok && <span aria-hidden> — {t('manquant')}</span>}
+                        <li key={d.type} className="flex items-center gap-3 rounded-2xl bg-canvas p-3 text-sm">
+                          {doc ? <FileText className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden /> : <X className="h-4 w-4 shrink-0 text-red-700" aria-hidden />}
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold">{t(d.label)}</span>
+                            <span className="block truncate text-xs text-ink-muted">{doc ? `${doc.file} · ${dateShort(doc.uploadedAt, lang)}` : t('manquant')}</span>
+                          </span>
+                          {doc && <Button size="sm" variant="ghost" onClick={() => setViewing({ req: v, file: doc.file, label: t(d.label) })} aria-label={t('Voir {doc}', { doc: t(d.label) })}><Eye className="h-4 w-4" aria-hidden /></Button>}
                         </li>
                       );
                     })}
                   </ul>
-                  {v.status === 'pending' && (
-                    <div className="mt-4 flex gap-2">
-                      <Button variant="outline" className="flex-1" onClick={() => set(v.id, 'rejected')}><X className="h-4 w-4" aria-hidden /> {complete ? t('Refuser') : t('Demander les documents')}</Button>
-                      <Button className="flex-1" onClick={() => (complete ? set(v.id, 'approved') : toast(t('Des documents manquent : demandez-les avant de vérifier'), 'info'))}><Check className="h-4 w-4" aria-hidden /> {t('Vérifier')}</Button>
+                  {v.note && <p className="mt-3 rounded-2xl bg-violet-50 p-3 text-xs text-violet-600">{v.note}</p>}
+                  {(v.status === 'pending' || v.status === 'docs_requested') && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button variant="ghost" onClick={() => decide(v, 'rejected')}>{t('Refuser')}</Button>
+                      <Button variant="outline" className="flex-1" onClick={() => { form.reset({ note: complete ? '' : t('Merci d’envoyer : {docs}.', { docs: DOCS.filter((d) => !v.docs.some((x) => x.type === d.type)).map((d) => t(d.label).toLowerCase()).join(', ') }) }); setAsking(v); }}>{t('Demander des documents')}</Button>
+                      <Button className="flex-1" onClick={() => (complete ? decide(v, 'approved') : toast(t('Des documents manquent : demandez-les avant de vérifier'), 'info'))}><Check className="h-4 w-4" aria-hidden /> {t('Vérifier')}</Button>
                     </div>
                   )}
                 </Card>
@@ -74,6 +91,28 @@ export default function Verification() {
           })}
         </ul>
       )}
+
+      <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing ? `${viewing.label} — ${viewing.req.name}` : ''} size="lg">
+        {viewing && (
+          <figure>
+            {/* Aperçu : le backend fournira une URL signée vers le fichier réel */}
+            <div className="grid aspect-[4/3] place-items-center rounded-2xl bg-canvas ring-1 ring-line">
+              <div className="text-center text-ink-muted">
+                {viewing.file.endsWith('.pdf') ? <FileText className="mx-auto h-14 w-14" aria-hidden /> : <ImageIcon className="mx-auto h-14 w-14" aria-hidden />}
+                <p className="mt-3 font-mono text-sm">{viewing.file}</p>
+                <p className="mt-1 text-xs">{t('L’aperçu du fichier s’affichera ici une fois le stockage branché.')}</p>
+              </div>
+            </div>
+            <figcaption className="mt-3 text-sm text-ink-soft">{viewing.req.owner} · {viewing.req.email}</figcaption>
+          </figure>
+        )}
+      </Modal>
+
+      <Modal open={!!asking} onClose={() => setAsking(null)} title={t('Demander des documents à {name}', { name: asking?.name ?? '' })} size="sm" footer={<Button className="flex-1" onClick={() => asking && form.validate() && decide(asking, 'docs_requested', form.values.note)}>{t('Envoyer la demande')}</Button>}>
+        <form noValidate onSubmit={(e) => { e.preventDefault(); if (asking && form.validate()) decide(asking, 'docs_requested', form.values.note); }}>
+          <Field label={t('Message à l’organisateur')} error={form.errors.note} required><Textarea {...form.bind('note')} /></Field>
+        </form>
+      </Modal>
     </div>
   );
 }

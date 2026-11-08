@@ -162,3 +162,52 @@ test('la déconnexion survit au rechargement de la page', async ({ page }) => {
   await page.goto('/compte');
   await expect(page).toHaveURL(/\/connexion/);
 });
+
+test.describe('administration', () => {
+  test('un signalement envoyé par un participant arrive en modération', async ({ page }) => {
+    await fresh(page, '/e/festival-kompa-live-2026');
+    await page.getByRole('button', { name: 'Signaler' }).click();
+    await page.getByLabel(/Détails/).fill('Le prix affiché ne correspond pas à l’affiche.');
+    await page.getByRole('button', { name: 'Envoyer le signalement' }).click();
+    await expect(page.getByText('Merci, votre signalement a été envoyé à l’équipe Event509')).toBeVisible();
+    // Les données de démo vivent en mémoire : on navigue sans recharger la page
+    const go = (path: string) => page.evaluate((p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }, path);
+    await go('/connexion');
+    await page.getByText('Comptes de démonstration').click();
+    await page.getByRole('button', { name: 'Admin plateforme' }).click();
+    await page.waitForURL((u) => !u.pathname.startsWith('/connexion'));
+    await go('/admin/moderation?onglet=signalements');
+    await expect(page.getByText('« Le prix affiché ne correspond pas à l’affiche. »')).toBeVisible();
+  });
+
+  test('valide puis paie un versement demandé', async ({ page }) => {
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin/versements');
+    const row = page.getByRole('row', { name: /Tech Ayiti/ }).filter({ hasText: 'À valider' });
+    await row.getByRole('button', { name: 'Approuver' }).click();
+    await expect(page.getByText('Versement approuvé : virement en préparation')).toBeVisible();
+    await page.getByRole('row', { name: /Tech Ayiti/ }).filter({ hasText: 'En cours' }).getByRole('button', { name: 'Marquer payé' }).click();
+    await expect(page.getByText('Versement marqué comme payé')).toBeVisible();
+  });
+
+  test('résout un litige : la décision exige une explication', async ({ page }) => {
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin/litiges');
+    await page.getByRole('button', { name: 'Traiter' }).first().click();
+    await page.getByRole('button', { name: 'Appliquer la décision' }).click();
+    await expect(page.getByText('Expliquez la décision aux deux parties')).toBeVisible();
+    await page.getByLabel(/Explication de la décision/).fill('Le billet a bien été refusé à tort, remboursement complet.');
+    await page.getByRole('button', { name: 'Appliquer la décision' }).click();
+    await expect(page.getByText('Litige résolu : les deux parties sont prévenues')).toBeVisible();
+  });
+
+  test('le tableau de bord admin affiche des données calculées et crée un objectif', async ({ page }) => {
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: 'Objectifs' })).toBeVisible();
+    await page.getByRole('button', { name: 'Nouvel objectif' }).click();
+    await page.getByLabel(/^Nom/).fill('2 000 billets en décembre');
+    await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByRole('button', { name: /Objectif « 2 000 billets en décembre »/ })).toBeVisible();
+  });
+});

@@ -8,9 +8,10 @@
 import * as db from '@/data/mock';
 import type {
   Ambassador, AppUser, Attendee, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
-  PaymentMethod, Payout, PromoCode, RefundRequest, SeatMapConfig, TeamMember,
+  PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
-import { ticketCode, uid } from '@/lib/format';
+import { ticketCode, uid, USD_TO_HTG } from '@/lib/format';
+import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
 
 export const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -221,6 +222,7 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
     const p = db.promoCodes.find((x) => x.id === input.promo!.id);
     if (p) p.used += 1;
   }
+  db.platformOrders.unshift(clone(order));
   return { order, tickets };
 }
 
@@ -360,26 +362,30 @@ export async function decideRefund(id: string, status: RefundRequest['status']) 
   if (r) r.status = status;
 }
 
-export async function listPayouts() { await wait(); return clone(db.payouts); }
+export async function listPayouts(orgId: string) { await wait(); return clone(db.payouts.filter((p) => p.organizerId === orgId)); }
 
 /** Solde de l'organisateur calculé à partir des ventes, commissions, remboursements et versements. */
-export async function getBalance(orgId: string, feePercent: number) {
+/** Solde de l'organisateur : ventes, commission (taux réel), remboursements et versements. */
+export async function getBalance(orgId: string) {
   await wait();
   const evs = db.events.filter((e) => e.organizerId === orgId);
+  const rate = feeRateFor(orgId);
   const by = (cur: Currency) => {
     const gross = evs.filter((e) => e.currency === cur).reduce((a, e) => a + e.tickets.reduce((x, t) => x + t.sold * t.price, 0), 0);
     const titles = new Set(evs.filter((e) => e.currency === cur).map((e) => e.title));
     const refunded = db.refunds.filter((r) => r.status === 'approved' && r.currency === cur && titles.has(r.eventTitle)).reduce((a, r) => a + r.amount, 0);
-    const paid = db.payouts.filter((p) => p.currency === cur && p.status !== 'scheduled').reduce((a, p) => a + p.amount, 0);
-    const fees = Math.round(gross * (feePercent / 100) * 100) / 100;
-    return { gross, fees, refunded, paid, balance: Math.max(0, gross - fees - refunded - paid) };
+    const paid = db.payouts.filter((p) => p.organizerId === orgId && p.currency === cur && !['scheduled', 'rejected'].includes(p.status)).reduce((a, p) => a + p.amount, 0);
+    // Si l'acheteur paie les frais, l'organisateur reçoit le prix plein
+    const fees = feeSettings.passToBuyer ? 0 : Math.round(gross * (rate / 100) * 100) / 100;
+    return { gross, fees, rate, refunded, paid, balance: Math.max(0, gross - fees - refunded - paid) };
   };
-  return { HTG: by('HTG'), USD: by('USD') };
+  return { HTG: by('HTG'), USD: by('USD'), passToBuyer: feeSettings.passToBuyer };
 }
 
-export async function requestPayout(amount: number, currency: Currency, method: Payout['method']) {
+export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method']) {
   await wait(500);
-  const p: Payout = { id: uid('py'), amount, currency, method, status: 'processing', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
+  // La demande attend la validation de l'administration
+  const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
   db.payouts.unshift(p);
   return clone(p);
 }
@@ -440,29 +446,276 @@ export async function verifyTicket(code: string, eventId?: string) {
   return { ok: true as const, attendee: clone(a) };
 }
 
-// ---------- Administration ----------
+// ---------- Commissions ----------
 
-export async function listUsers() { await wait(); return clone(db.users); }
-export async function setUserStatus(id: string, status: AppUser['status']) {
+const FEES_KEY = 'e509.demo.fees';
+const CUSTOM_KEY = 'e509.demo.customFees';
+function readLocal<T>(k: string): T | null {
+  try {
+    const v = localStorage.getItem(k);
+    return v ? (JSON.parse(v) as T) : null;
+  } catch {
+    return null;
+  }
+}
+function writeLocal(k: string, v: unknown) {
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch {
+    /* ignore */
+  }
+}
+// En démo, les réglages survivent au rechargement (le backend les stockera)
+const feeSettings: FeeSettings = { ...DEFAULT_FEES, ...db.platformSettings.fees, ...(readLocal<FeeSettings>(FEES_KEY) ?? {}) };
+const storedCustom = readLocal<typeof db.customCommissions>(CUSTOM_KEY);
+if (storedCustom) db.customCommissions.splice(0, db.customCommissions.length, ...storedCustom);
+
+/** Réglages de frais en vigueur (lecture synchrone, utilisée au paiement). */
+export function currentFeeSettings(): FeeSettings {
+  return { ...feeSettings };
+}
+/** Taux de commission d'un organisateur : taux négocié, sinon taux par défaut. */
+export function feeRateFor(orgId: string) {
+  return db.customCommissions.find((c) => c.organizerId === orgId)?.rate ?? feeSettings.percent;
+}
+export async function saveFeeSettings(next: FeeSettings) {
   await wait(200);
-  const u = db.users.find((x) => x.id === id);
-  if (u) u.status = status;
+  Object.assign(feeSettings, next);
+  writeLocal(FEES_KEY, feeSettings);
+  audit('Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG`);
 }
-export async function listDisputes() { await wait(); return clone(db.disputes); }
-export async function resolveDispute(id: string, status: Dispute['status']) {
-  await wait(300);
-  const d = db.disputes.find((x) => x.id === id);
-  if (d) d.status = status;
-}
-export async function listAllEvents() { await wait(); return clone(db.events); }
 export async function listCustomCommissions() { await wait(); return clone(db.customCommissions); }
 export async function saveCustomCommission(c: { organizerId: string; rate: number; reason: string }) {
   await wait(200);
   const i = db.customCommissions.findIndex((x) => x.organizerId === c.organizerId);
   if (i >= 0) db.customCommissions[i] = c; else db.customCommissions.push(c);
+  writeLocal(CUSTOM_KEY, db.customCommissions);
+  audit('Taux personnalisé enregistré', `${db.organizers.find((o) => o.id === c.organizerId)?.name} — ${c.rate} %`);
 }
 export async function removeCustomCommission(organizerId: string) {
   await wait(200);
   const i = db.customCommissions.findIndex((x) => x.organizerId === organizerId);
   if (i >= 0) db.customCommissions.splice(i, 1);
+  writeLocal(CUSTOM_KEY, db.customCommissions);
+  audit('Taux personnalisé supprimé', db.organizers.find((o) => o.id === organizerId)?.name ?? organizerId);
+}
+
+// ---------- Administration ----------
+
+/** Auteur des actions d'administration (le backend le déduira du jeton). */
+function actorName() {
+  try {
+    return (JSON.parse(localStorage.getItem('e509.user') ?? 'null') as AppUser | null)?.name ?? 'Admin';
+  } catch {
+    return 'Admin';
+  }
+}
+function audit(action: string, target: string) {
+  db.auditLog.unshift({ id: uid('al'), at: new Date().toISOString(), actor: actorName(), action, target });
+}
+export async function listAudit() { await wait(); return clone(db.auditLog); }
+
+const toHTG = (amount: number, cur: Currency) => (cur === 'USD' ? amount * USD_TO_HTG : amount);
+const orgOfEvent = (eventId: string) => db.events.find((e) => e.id === eventId)?.organizerId ?? '';
+const monthKey = (iso: string) => iso.slice(0, 7);
+
+/** Utilisateur → organisation dont il fait partie (le backend le fournira). */
+export function organizationOfUser(u: AppUser): string | undefined {
+  const map: Record<string, string> = { u2: 'org1', u8: 'org1', u9: 'org1', u3: 'org2', u4: 'org3', u13: 'org4' };
+  return u.role === 'organizer' ? map[u.id] : undefined;
+}
+
+/** Statistiques de la plateforme, calculées à partir des commandes. */
+export async function platformStats() {
+  await wait();
+  const now = new Date();
+  const orders = db.platformOrders;
+  const paid = orders.filter((o) => o.status === 'paid');
+  const refunded = orders.filter((o) => o.status === 'refunded' || o.status === 'partially_refunded');
+  const qty = (o: Order) => o.items.reduce((a, i) => a + i.qty, 0);
+
+  // Six derniers mois, du plus ancien au plus récent
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const monthly = months.map((m) => {
+    const inM = orders.filter((o) => monthKey(o.createdAt) === m);
+    const sales = inM.filter((o) => o.status === 'paid').reduce((a, o) => a + toHTG(o.subtotal - o.discount, o.currency), 0);
+    const refunds = inM.filter((o) => o.status !== 'paid' && o.status !== 'pending').reduce((a, o) => a + toHTG(o.subtotal - o.discount, o.currency), 0);
+    const fees = inM.filter((o) => o.status === 'paid').reduce((a, o) => a + toHTG(o.fees, o.currency), 0);
+    return { month: m, sales: Math.round(sales), refunds: Math.round(refunds), fees: Math.round(fees), tickets: inM.reduce((a, o) => a + qty(o), 0) };
+  });
+
+  const gmv = monthly.reduce((a, m) => a + m.sales, 0);
+  const fees = monthly.reduce((a, m) => a + m.fees, 0);
+  const refundTotal = monthly.reduce((a, m) => a + m.refunds, 0);
+  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const ticketsWeek = paid.filter((o) => o.createdAt >= weekAgo).reduce((a, o) => a + qty(o), 0);
+  const refundRate = orders.length ? refunded.length / orders.length : 0;
+  const openDisputes = db.disputes.filter((d) => d.status !== 'resolved').length;
+
+  const share = <K extends string>(keyOf: (o: Order) => K) => {
+    const m = new Map<K, number>();
+    for (const o of paid) m.set(keyOf(o), (m.get(keyOf(o)) ?? 0) + toHTG(o.subtotal, o.currency));
+    const total = [...m.values()].reduce((a, b) => a + b, 0) || 1;
+    return [...m.entries()].map(([label, v]) => ({ label, share: v / total })).sort((a, b) => b.share - a.share);
+  };
+
+  const verifiedOrganizers = db.organizers.filter((o) => o.verified).length;
+  const metrics = { gmv, tickets: ticketsWeek, organizers: verifiedOrganizers, users: db.users.length };
+
+  // Santé financière : taux de remboursement et litiges ouverts
+  const health = refundRate > 0.08 || openDisputes > 5 ? 'critical' : refundRate > 0.05 || openDisputes > 2 ? 'watch' : 'healthy';
+
+  return clone({
+    gmv, fees, refundTotal, refundRate, ticketsWeek, health,
+    feesThisMonth: monthly[5].fees,
+    users: db.users.length,
+    newUsersMonth: db.users.filter((u) => monthKey(u.joinedAt) === months[5]).length,
+    activeEvents: db.events.filter((e) => e.status === 'published' && new Date(e.end) >= now).length,
+    pendingEvents: db.events.filter((e) => e.status === 'pending').length,
+    openDisputes,
+    openReports: db.reports.filter((r) => r.status === 'open').length,
+    pendingVerifications: db.verificationRequests.filter((v) => v.status === 'pending').length,
+    pendingPayouts: db.payouts.filter((p) => p.status === 'requested').length,
+    monthly,
+    byCity: share((o) => db.events.find((e) => e.id === o.eventId)?.venue?.city ?? 'En ligne'),
+    byMethod: share((o) => o.method),
+    metrics,
+    targets: db.platformTargets.map((tg) => ({ ...tg, current: metrics[tg.metric] })),
+    recent: orders.slice(0, 12),
+  });
+}
+
+export async function saveTarget(tg: PlatformTarget) {
+  await wait(200);
+  const i = db.platformTargets.findIndex((x) => x.id === tg.id);
+  if (i >= 0) db.platformTargets[i] = tg; else db.platformTargets.push(tg);
+  audit(i >= 0 ? 'Objectif modifié' : 'Objectif créé', tg.title);
+}
+export async function removeTarget(id: string) {
+  await wait(200);
+  const i = db.platformTargets.findIndex((x) => x.id === id);
+  if (i >= 0) audit('Objectif supprimé', db.platformTargets.splice(i, 1)[0].title);
+}
+
+/** Toutes les transactions de la plateforme (filtrables). */
+export async function listPlatformOrders(f: { q?: string; status?: Order['status'] | ''; method?: Order['method'] | ''; organizerId?: string } = {}) {
+  await wait();
+  const q = f.q?.toLowerCase().trim();
+  return clone(
+    db.platformOrders.filter(
+      (o) =>
+        (!q || `${o.id} ${o.buyerName} ${o.buyerEmail}`.toLowerCase().includes(q)) &&
+        (!f.status || o.status === f.status) &&
+        (!f.method || o.method === f.method) &&
+        (!f.organizerId || orgOfEvent(o.eventId) === f.organizerId),
+    ),
+  );
+}
+
+export async function listUsers() { await wait(); return clone(db.users); }
+export async function setUserStatus(id: string, status: AppUser['status']) {
+  await wait(200);
+  const u = db.users.find((x) => x.id === id);
+  if (u) {
+    u.status = status;
+    audit(status === 'suspended' ? 'Utilisateur suspendu' : 'Utilisateur réactivé', u.name);
+  }
+}
+export async function setUserRole(id: string, role: AppUser['role']) {
+  await wait(200);
+  const u = db.users.find((x) => x.id === id);
+  if (u) {
+    u.role = role;
+    if (role === 'organizer') u.teamRole = u.teamRole ?? 'admin';
+    audit('Rôle modifié', `${u.name} → ${role}`);
+  }
+}
+/** Fiche détaillée : profil, commandes, événements organisés. */
+export async function getUserDetail(id: string) {
+  await wait();
+  const u = db.users.find((x) => x.id === id);
+  if (!u) return null;
+  const orgId = organizationOfUser(u);
+  const orders = [...(u.id === 'u1' ? db.myOrders : []), ...db.platformOrders.filter((o) => o.buyerName === u.name)];
+  return clone({
+    user: u,
+    organization: orgId ? db.organizers.find((o) => o.id === orgId) ?? null : null,
+    orders,
+    spent: orders.filter((o) => o.status === 'paid').reduce((a, o) => a + toHTG(o.total, o.currency), 0),
+    events: orgId ? db.events.filter((e) => e.organizerId === orgId) : [],
+  });
+}
+
+export async function listAllEvents() { await wait(); return clone(db.events); }
+export async function moderateEvent(id: string, status: EventItem['status'], reason?: string) {
+  await wait(200);
+  const e = db.events.find((x) => x.id === id);
+  if (!e) return;
+  e.status = status;
+  audit(status === 'published' ? 'Événement approuvé' : status === 'rejected' ? 'Événement refusé' : 'Événement modifié', `${e.title}${reason ? ` — ${reason}` : ''}`);
+}
+
+export async function listReports() { await wait(); return clone(db.reports); }
+export async function reportEvent(eventId: string, reason: Report['reason'], details: string, reporter: string) {
+  await wait(400);
+  db.reports.unshift({ id: uid('rp'), eventId, reason, details, reporter, status: 'open', createdAt: new Date().toISOString() });
+}
+export async function setReportStatus(id: string, status: Report['status']) {
+  await wait(200);
+  const r = db.reports.find((x) => x.id === id);
+  if (!r) return;
+  r.status = status;
+  audit(status === 'dismissed' ? 'Signalement classé' : 'Signalement traité', db.events.find((e) => e.id === r.eventId)?.title ?? r.eventId);
+}
+
+export async function listVerificationRequests() { await wait(); return clone(db.verificationRequests); }
+export async function decideVerification(id: string, status: VerificationRequest['status'], note?: string) {
+  await wait(300);
+  const v = db.verificationRequests.find((x) => x.id === id);
+  if (!v) return;
+  v.status = status;
+  v.note = note;
+  const org = db.organizers.find((o) => o.id === v.organizerId);
+  if (org) org.verified = status === 'approved';
+  audit(status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification refusée', v.name);
+}
+
+export async function listDisputes() { await wait(); return clone(db.disputes); }
+/** Décision sur un litige : enregistre la décision, la note et déclenche le remboursement. */
+export async function resolveDispute(id: string, input: { status: Dispute['status']; decision?: Dispute['decision']; note?: string }) {
+  await wait(300);
+  const d = db.disputes.find((x) => x.id === id);
+  if (!d) return;
+  d.status = input.status;
+  if (input.note) d.note = input.note;
+  if (input.status === 'resolved' && input.decision) {
+    d.decision = input.decision;
+    d.refunded = input.decision === 'refund_full' ? d.amount : input.decision === 'refund_half' ? Math.round(d.amount / 2) : 0;
+    if (d.refunded > 0) {
+      db.refunds.unshift({ id: uid('r'), orderId: d.orderId, buyer: d.opener, eventTitle: d.against, amount: d.refunded, currency: d.currency, reason: `Litige ${d.id}`, createdAt: new Date().toISOString(), status: 'approved' });
+      const o = db.platformOrders.find((x) => x.id === d.orderId);
+      if (o) o.status = d.refunded >= d.amount ? 'refunded' : 'partially_refunded';
+    }
+    d.messages.push({ from: 'admin', author: 'Équipe Event509', body: input.note ?? '', at: new Date().toISOString() });
+  }
+  audit(input.status === 'resolved' ? 'Litige résolu' : 'Litige passé en enquête', d.orderId);
+}
+export async function addDisputeMessage(id: string, body: string) {
+  await wait(200);
+  const d = db.disputes.find((x) => x.id === id);
+  if (d) d.messages.push({ from: 'admin', author: 'Équipe Event509', body, at: new Date().toISOString() });
+}
+
+/** Versements de tous les organisateurs (validation par l'administration). */
+export async function listAllPayouts() { await wait(); return clone(db.payouts); }
+export async function setPayoutStatus(id: string, status: Payout['status']) {
+  await wait(300);
+  const p = db.payouts.find((x) => x.id === id);
+  if (!p) return;
+  p.status = status;
+  const org = db.organizers.find((o) => o.id === p.organizerId)?.name ?? p.organizerId;
+  audit(status === 'paid' ? 'Versement payé' : status === 'processing' ? 'Versement approuvé' : 'Versement refusé', `${org} — ${p.amount} ${p.currency}`);
 }

@@ -55,8 +55,8 @@ export function extract() {
       add(m[2], file);
     }
     for (const m of code.matchAll(new RegExp(`\\b(?:label|l|sub|d|h|trigger|name): ${STR}`, 'g'))) add(m[1], file);
-    for (const m of code.matchAll(/const \w+Labels? = \{([\s\S]*?)\};/g))
-      for (const s of m[1].matchAll(new RegExp(`: ${STR}`, 'g'))) add(s[1], file);
+    for (const m of code.matchAll(/const (?:\w+Labels?|reportReason)(?::[^=]+)? = \{([\s\S]*?)\}(?: as const)?;/g))
+      for (const s of m[1].matchAll(new RegExp(`(?<!tone): ${STR}`, 'g'))) add(s[1], file); // les teintes (tone) ne sont pas du texte
     for (const m of code.matchAll(/const (?:reasons|DOCS|decisions|steps) = \[([^\]]*)\]/g))
       for (const s of m[1].matchAll(new RegExp(STR, 'g'))) add(s[1], file);
     for (const m of code.matchAll(new RegExp(`\\[${STR}, (?:true|false)`, 'g'))) add(m[1], file);

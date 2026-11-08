@@ -35,15 +35,15 @@ Codes promo de démo : `KOMPA10`, `NOEL2026`, `ETUDIANT`. Les dates de démo se 
 npm run typecheck    # TypeScript strict
 npm run lint         # ESLint : TypeScript, React Hooks, accessibilité (jsx-a11y)
 npm run i18n:check   # chaque phrase de l'interface a sa traduction anglaise
-npm test             # 30 tests unitaires (Vitest)
-npm run build && npm run test:e2e   # 35 tests Playwright, ordinateur et mobile
+npm test             # 39 tests unitaires (Vitest)
+npm run build && npm run test:e2e   # 43 tests Playwright, ordinateur et mobile
 ```
 
 Les tests de bout en bout couvrent :
 - l'achat avec places numérotées et code promo, et les redirections selon le rôle ;
 - le check-in hors ligne et la création d'événement ;
 - l'interface en anglais, les billets consultables hors ligne (service worker) et les aperçus de partage ;
-- un audit **axe-core WCAG 2.1 AA** sur 17 pages en thème clair et sombre, avec zéro violation sérieuse acceptée ;
+- un audit **axe-core WCAG 2.1 AA** sur 25 pages en thème clair et sombre, avec zéro violation sérieuse acceptée ;
 - l'absence de débordement horizontal à 375 px.
 
 ## Stack
@@ -56,9 +56,11 @@ React 18 · TypeScript · Vite · Tailwind CSS (thème clair/sombre par variable
 | --- | --- |
 | **Participants** | accueil, recherche et filtres, page événement (choix de session ou de date), paiement (plan de salle par zones, code promo, HTG/USD, MonCash/NatCash/carte/PayPal/virement), confirmation, portefeuille QR (code dynamique, image du billet, transfert, revente), revente entre participants, favoris, notifications, commandes (facture, remboursement), paramètres (langue, devise, thème, mot de passe, suppression), page publique d'organisateur, programme ambassadeur, CGU, confidentialité |
 | **Organisateurs** | tableau de bord temps réel, événements (création en 5 étapes, éditeur de plan de salle, multi-sessions, récurrence, pixels), statistiques par événement, participants (export CSV/Excel, message), check-in QR (caméra, saisie, hors ligne avec synchronisation), codes promo, remboursements (politique), versements (solde calculé, demande), campagnes email/SMS/WhatsApp (programmation), emails automatiques, ambassadeurs, équipe et rôles, paramètres (profil public, vérification, pixels) |
-| **Administration** | vue d'ensemble, modération, utilisateurs, vérification des organisateurs, litiges, commissions (taux par défaut et personnalisés) |
+| **Administration** | tableau de bord (commissions encaissées, objectifs avec progression, ventes et remboursements sur 6 mois, santé financière, file « À traiter », transactions récentes), modération et signalements, utilisateurs et fiche détaillée, vérification des organisateurs (documents), transactions (filtres, CSV), validation des versements, litiges (échanges, décision, remboursement), commissions, journal d'activité |
 
 **Langues** : français (par défaut) et anglais. La phrase française sert de clé ; les traductions sont dans `src/locales/en.json`. Pour ajouter une phrase, utilisez `t('Texte français')` dans le code, puis complétez `en.json`. `npm run i18n:check` liste ce qui manque.
+
+**Frais de service** : `src/lib/fees.ts` calcule la commission (taux par défaut ou négocié, frais fixes par billet, frais payés par l'acheteur ou déduits de l'organisateur, gratuité). Le paiement, les soldes des organisateurs et l'administration utilisent ce même calcul.
 
 **Hors ligne** : l'application est installable (PWA). L'interface est mise en cache, et les billets restent consultables sans réseau. Le check-in valide les entrées sur une liste téléchargée, puis les synchronise au retour du réseau.
 

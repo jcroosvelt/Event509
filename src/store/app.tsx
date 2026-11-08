@@ -85,9 +85,6 @@ interface AppState {
   markRead: (id?: string) => void;
   pushNotification: (n: Omit<NotificationItem, 'id' | 'date' | 'read'>) => void;
 
-  feePercent: number;
-  setFeePercent: (n: number) => void;
-
   offlineScans: OfflineScan[];
   setOfflineScans: (fn: (s: OfflineScan[]) => OfflineScan[]) => void;
 
@@ -112,7 +109,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = usePersisted<IssuedTicket[]>('e509.tickets', db.myTickets);
   const [orders, setOrders] = usePersisted<Order[]>('e509.orders', db.myOrders);
   const [notifications, setNotifications] = usePersisted<NotificationItem[]>('e509.notifs', db.notifications);
-  const [feePercent, setFeePercent] = usePersisted<number>('e509.fee', 5);
   const [offlineScans, setOfflineScansRaw] = usePersisted<OfflineScan[]>('e509.offline', []);
   const [referral, setReferral] = usePersisted<Referral | null>('e509.ref', null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -204,14 +200,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notifications,
       markRead: (id) => setNotifications((s) => s.map((n) => (!id || n.id === id ? { ...n, read: true } : n))),
       pushNotification: (n) => setNotifications((s) => [{ ...n, id: `n${Date.now()}`, date: new Date().toISOString(), read: false }, ...s]),
-      feePercent, setFeePercent,
       offlineScans,
       setOfflineScans: (fn) => setOfflineScansRaw((s) => fn(s)),
       referral, setReferral,
       toasts, toast, dismissToast,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lang, t, currency, theme, user, login, logout, favorites, reminders, follows, tickets, orders, notifications, feePercent, offlineScans, referral, toasts, toast, dismissToast],
+    [lang, t, currency, theme, user, login, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

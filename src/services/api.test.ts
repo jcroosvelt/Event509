@@ -120,10 +120,53 @@ describe('revente et versements', () => {
   });
 
   it('calcule un solde cohérent et jamais négatif', async () => {
-    const b = await api.getBalance('org1', 5);
+    const b = await api.getBalance('org1');
     for (const cur of ['HTG', 'USD'] as const) {
       expect(b[cur].balance).toBeGreaterThanOrEqual(0);
-      expect(b[cur].fees).toBeCloseTo(b[cur].gross * 0.05, 0);
+      // Par défaut l'acheteur paie les frais : l'organisateur touche le prix plein
+      expect(b[cur].fees).toBe(0);
     }
+  });
+});
+
+describe('administration', () => {
+  it('calcule les statistiques à partir des commandes', async () => {
+    const s = await api.platformStats();
+    expect(s.monthly).toHaveLength(6);
+    expect(s.gmv).toBe(s.monthly.reduce((a, m) => a + m.sales, 0));
+    expect(s.byMethod.reduce((a, m) => a + m.share, 0)).toBeCloseTo(1, 5);
+    expect(['healthy', 'watch', 'critical']).toContain(s.health);
+  });
+
+  it('suit un signalement jusqu’au traitement et l’inscrit au journal', async () => {
+    await api.reportEvent('e1', 'misleading', 'Prix incorrect sur l’affiche', 'Testeur');
+    const [r] = await api.listReports();
+    expect(r.status).toBe('open');
+    await api.setReportStatus(r.id, 'dismissed');
+    expect((await api.listReports())[0].status).toBe('dismissed');
+    expect((await api.listAudit())[0].action).toBe('Signalement classé');
+  });
+
+  it('résout un litige avec remboursement complet et met la commande à jour', async () => {
+    const d = (await api.listDisputes()).find((x) => x.status === 'open')!;
+    await api.resolveDispute(d.id, { status: 'resolved', decision: 'refund_full', note: 'Billet bien refusé à tort.' });
+    const after = (await api.listDisputes()).find((x) => x.id === d.id)!;
+    expect(after.refunded).toBe(d.amount);
+    expect(after.messages.at(-1)?.from).toBe('admin');
+  });
+
+  it('fait passer une demande de versement de « demandé » à « payé »', async () => {
+    const p = await api.requestPayout('org1', 1000, 'HTG', 'bank');
+    expect(p.status).toBe('requested');
+    await api.setPayoutStatus(p.id, 'processing');
+    await api.setPayoutStatus(p.id, 'paid');
+    expect((await api.listAllPayouts()).find((x) => x.id === p.id)?.status).toBe('paid');
+  });
+
+  it('applique un taux personnalisé au calcul du taux de l’organisateur', async () => {
+    await api.saveCustomCommission({ organizerId: 'org3', rate: 2, reason: 'Test' });
+    expect(api.feeRateFor('org3')).toBe(2);
+    await api.removeCustomCommission('org3');
+    expect(api.feeRateFor('org3')).toBe(api.currentFeeSettings().percent);
   });
 });

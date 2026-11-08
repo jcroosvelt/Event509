@@ -1,6 +1,6 @@
 import type {
-  Ambassador, AppUser, Attendee, Campaign, Category, Dispute, EventItem, IssuedTicket,
-  NotificationItem, Order, Organizer, Payout, PromoCode, RefundRequest, TeamMember,
+  Ambassador, AppUser, AuditEntry, Attendee, Campaign, Category, Dispute, EventItem, IssuedTicket,
+  NotificationItem, Order, Organizer, Payout, PlatformTarget, PromoCode, RefundRequest, Report, TeamMember, VerificationRequest,
 } from '@/types';
 
 // Données de démonstration. Toute cette couche sera remplacée par le backend
@@ -243,10 +243,14 @@ export const refunds: RefundRequest[] = [
 ];
 
 export const payouts: Payout[] = [
-  { id: 'py1', amount: 485000, currency: 'HTG', method: 'bank', status: 'scheduled', date: '2026-11-15', reference: 'VRS-2026-1115' },
-  { id: 'py2', amount: 312400, currency: 'HTG', method: 'moncash', status: 'processing', date: '2026-11-08', reference: 'VRS-2026-1108' },
-  { id: 'py3', amount: 2180, currency: 'USD', method: 'paypal', status: 'paid', date: '2026-11-01', reference: 'VRS-2026-1101' },
-  { id: 'py4', amount: 528900, currency: 'HTG', method: 'bank', status: 'paid', date: '2026-10-25', reference: 'VRS-2026-1025' },
+  { id: 'py1', organizerId: 'org1', amount: 485000, currency: 'HTG', method: 'bank', status: 'scheduled', date: '2026-11-15', reference: 'VRS-2026-1115' },
+  { id: 'py2', organizerId: 'org1', amount: 312400, currency: 'HTG', method: 'moncash', status: 'processing', date: '2026-11-08', reference: 'VRS-2026-1108' },
+  { id: 'py3', organizerId: 'org1', amount: 2180, currency: 'USD', method: 'paypal', status: 'paid', date: '2026-11-01', reference: 'VRS-2026-1101' },
+  { id: 'py4', organizerId: 'org1', amount: 528900, currency: 'HTG', method: 'bank', status: 'paid', date: '2026-10-25', reference: 'VRS-2026-1025' },
+  { id: 'py5', organizerId: 'org2', amount: 186500, currency: 'HTG', method: 'bank', status: 'requested', date: '2026-11-07', reference: 'VRS-2026-1107-TA' },
+  { id: 'py6', organizerId: 'org4', amount: 3120, currency: 'USD', method: 'paypal', status: 'requested', date: '2026-11-06', reference: 'VRS-2026-1106-SN' },
+  { id: 'py7', organizerId: 'org3', amount: 54200, currency: 'HTG', method: 'moncash', status: 'requested', date: '2026-11-08', reference: 'VRS-2026-1108-JA' },
+  { id: 'py8', organizerId: 'org2', amount: 142800, currency: 'HTG', method: 'bank', status: 'paid', date: '2026-10-18', reference: 'VRS-2026-1018-TA' },
 ];
 
 export const campaigns: Campaign[] = [
@@ -272,14 +276,127 @@ export const users: AppUser[] = [
   { id: 'u4', name: 'Carl-Henry Michel', email: 'carl@jakmel.art', avatar: 'CM', role: 'organizer', city: 'Jacmel', status: 'active', joinedAt: '2025-08-30', verified: false },
   { id: 'u5', name: 'Kervens Etienne', email: 'kervens.e@example.com', avatar: 'KE', role: 'participant', city: 'Cap-Haïtien', status: 'suspended', joinedAt: '2025-06-18' },
   { id: 'u6', name: 'Rose-Carline Noel', email: 'rose@example.com', avatar: 'RN', role: 'participant', city: 'Miami', status: 'active', joinedAt: '2026-02-04' },
+  { id: 'u10', name: 'Stéphanie Pierre', email: 'stephanie@example.com', avatar: 'SP', role: 'participant', city: 'Pétion-Ville', status: 'active', joinedAt: '2026-10-28' },
+  { id: 'u11', name: 'Wilson Charles', email: 'wilson.charles@example.com', avatar: 'WC', role: 'participant', city: 'Port-au-Prince', status: 'active', joinedAt: '2026-05-14' },
+  { id: 'u12', name: 'Fabiola Desir', email: 'fabiola@example.com', avatar: 'FD', role: 'participant', city: 'Gonaïves', status: 'active', joinedAt: '2026-11-06' },
+  { id: 'u13', name: 'Jameson Noel', email: 'jameson@saveursdunord.ht', avatar: 'JN', role: 'organizer', teamRole: 'admin', city: 'Cap-Haïtien', status: 'active', joinedAt: '2025-02-10', verified: true },
+  { id: 'u14', name: 'Darline Etienne', email: 'darline@konbit.ht', avatar: 'DE', role: 'organizer', teamRole: 'admin', city: 'Les Cayes', status: 'active', joinedAt: '2026-11-07' },
   { id: 'u7', name: 'Admin Event509', email: 'admin@event509.com', avatar: 'AE', role: 'admin', city: 'Port-au-Prince', status: 'active', joinedAt: '2024-06-01' },
 ];
 
 export const disputes: Dispute[] = [
-  { id: 'd1', orderId: 'o2088', opener: 'Wilson Charles', against: 'Lakay Productions', subject: 'Billet refusé à l’entrée', amount: 2500, currency: 'HTG', status: 'open', createdAt: '2026-11-07T08:00:00' },
-  { id: 'd2', orderId: 'o1720', opener: 'Rose-Carline Noel', against: 'Saveurs du Nord', subject: 'Événement reporté sans remboursement', amount: 170, currency: 'USD', status: 'investigating', createdAt: '2026-11-03T15:00:00' },
-  { id: 'd3', orderId: 'o1544', opener: 'Ralph Dorval', against: 'Jakmèl Arts Collectif', subject: 'Paiement débité deux fois', amount: 1200, currency: 'HTG', status: 'resolved', createdAt: '2026-10-21T10:00:00' },
+  {
+    id: 'd1', orderId: 'o2088', opener: 'Wilson Charles', against: 'Lakay Productions', subject: 'Billet refusé à l’entrée', amount: 2500, currency: 'HTG', status: 'open', createdAt: '2026-11-07T08:00:00',
+    messages: [
+      { from: 'opener', author: 'Wilson Charles', body: 'Mon QR code a été refusé à l’entrée alors que je l’avais acheté la veille. J’ai dû repartir.', at: '2026-11-07T08:00:00' },
+      { from: 'against', author: 'Lakay Productions', body: 'Le scanner indique que ce billet avait déjà été utilisé à 19h12. Nous vérifions avec l’équipe d’entrée.', at: '2026-11-07T14:30:00' },
+    ],
+  },
+  {
+    id: 'd2', orderId: 'o1720', opener: 'Rose-Carline Noel', against: 'Saveurs du Nord', subject: 'Événement reporté sans remboursement', amount: 170, currency: 'USD', status: 'investigating', createdAt: '2026-11-03T15:00:00',
+    messages: [
+      { from: 'opener', author: 'Rose-Carline Noel', body: 'Le dîner a été reporté au mois prochain et je ne peux pas venir. J’ai contacté l’organisateur sans réponse depuis 5 jours.', at: '2026-11-03T15:00:00' },
+      { from: 'admin', author: 'Équipe Event509', body: 'Nous avons relancé l’organisateur et lui laissons 48 h pour répondre.', at: '2026-11-04T10:00:00' },
+    ],
+  },
+  {
+    id: 'd3', orderId: 'o1544', opener: 'Ralph Dorval', against: 'Jakmèl Arts Collectif', subject: 'Paiement débité deux fois', amount: 1200, currency: 'HTG', status: 'resolved', createdAt: '2026-10-21T10:00:00',
+    decision: 'refund_full', refunded: 1200, note: 'Double débit MonCash confirmé par le relevé.',
+    messages: [{ from: 'opener', author: 'Ralph Dorval', body: 'J’ai été débité deux fois pour la même commande.', at: '2026-10-21T10:00:00' }],
+  },
 ];
+
+export const reports: Report[] = [
+  { id: 'rp1', eventId: 'e8', reason: 'misleading', details: 'Le prix affiché ne comprend pas l’entrée obligatoire au bar.', reporter: 'Darline Etienne', status: 'open', createdAt: '2026-11-07T21:10:00' },
+  { id: 'rp2', eventId: 'e3', reason: 'other', details: 'Les horaires de la parade ont changé sur Instagram mais pas ici.', reporter: 'Junior Augustin', status: 'open', createdAt: '2026-11-06T09:40:00' },
+  { id: 'rp3', eventId: 'e5', reason: 'scam', details: 'Quelqu’un revend des billets à 3 fois le prix sur WhatsApp en se faisant passer pour l’organisateur.', reporter: 'Peterson Dorval', status: 'actioned', createdAt: '2026-10-30T18:00:00' },
+];
+
+export const verificationRequests: VerificationRequest[] = [
+  {
+    id: 'v1', organizerId: 'org3', name: 'Jakmèl Arts Collectif', owner: 'Carl-Henry Michel', email: 'carl@jakmel.art', city: 'Jacmel', status: 'pending', submittedAt: '2026-11-05T11:00:00',
+    docs: [
+      { type: 'id', file: 'piece-identite-cmichel.jpg', uploadedAt: '2026-11-05T11:00:00' },
+      { type: 'license', file: 'patente-jakmel-arts.pdf', uploadedAt: '2026-11-05T11:02:00' },
+      { type: 'bank', file: 'releve-bnc-octobre.pdf', uploadedAt: '2026-11-05T11:03:00' },
+    ],
+  },
+  {
+    id: 'v2', name: 'Konbit Events', owner: 'Darline Etienne', email: 'darline@konbit.ht', city: 'Les Cayes', status: 'pending', submittedAt: '2026-11-07T16:20:00',
+    docs: [{ type: 'id', file: 'cin-detienne.jpg', uploadedAt: '2026-11-07T16:20:00' }],
+  },
+  {
+    id: 'v3', organizerId: 'org4', name: 'Saveurs du Nord', owner: 'Jameson Noel', email: 'jameson@saveursdunord.ht', city: 'Cap-Haïtien', status: 'approved', submittedAt: '2026-09-12T09:00:00',
+    docs: [
+      { type: 'id', file: 'passeport-jnoel.jpg', uploadedAt: '2026-09-12T09:00:00' },
+      { type: 'license', file: 'patente-saveurs.pdf', uploadedAt: '2026-09-12T09:01:00' },
+      { type: 'bank', file: 'rib-unibank.pdf', uploadedAt: '2026-09-12T09:02:00' },
+    ],
+  },
+];
+
+export const auditLog: AuditEntry[] = [
+  { id: 'al1', at: '2026-11-07T17:45:00', actor: 'Admin Event509', action: 'Événement approuvé', target: 'Tournoi des Quartiers — Finale' },
+  { id: 'al2', at: '2026-11-07T11:20:00', actor: 'Admin Event509', action: 'Versement payé', target: 'Tech Ayiti — 142 800 HTG' },
+  { id: 'al3', at: '2026-11-06T09:05:00', actor: 'Admin Event509', action: 'Utilisateur suspendu', target: 'Kervens Etienne' },
+  { id: 'al4', at: '2026-11-04T10:00:00', actor: 'Admin Event509', action: 'Litige passé en enquête', target: 'o1720' },
+];
+
+export const platformTargets: PlatformTarget[] = [
+  { id: 'tg1', title: 'Volume de ventes du trimestre', metric: 'gmv', target: 25_000_000, deadline: '2026-12-31', tone: 'brand', description: 'Atteindre 25 M HTG de ventes cumulées sur 6 mois.' },
+  { id: 'tg2', title: '100 organisateurs vérifiés', metric: 'organizers', target: 100, deadline: '2027-03-31', tone: 'navy', description: 'Accélérer la vérification des nouveaux organisateurs.' },
+  { id: 'tg3', title: '500 billets cette semaine', metric: 'tickets', target: 500, deadline: '2026-11-15', tone: 'brand' },
+];
+
+/** Paramètres de commission de la plateforme (voir src/lib/fees.ts). */
+export const platformSettings = { fees: { percent: 5, fixedHTG: 25, passToBuyer: true, freeNoFee: true } };
+
+// --- Commandes de toute la plateforme (6 mois), générées de façon déterministe ---
+function prng(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export const platformOrders: Order[] = (() => {
+  const rnd = prng(509);
+  const pub = events.filter((e) => e.status === 'published');
+  const methods: Order['method'][] = ['moncash', 'moncash', 'moncash', 'moncash', 'moncash', 'card', 'card', 'natcash', 'natcash', 'paypal'];
+  const out: Order[] = [];
+  const ref = new Date(2026, 10, 8, 12);
+  for (let i = 0; i < 420; i++) {
+    // Plus de commandes récentes (croissance de la plateforme)
+    const daysAgo = Math.floor(Math.pow(rnd(), 1.6) * 180);
+    const d = new Date(ref);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(8 + Math.floor(rnd() * 14), Math.floor(rnd() * 60));
+    const ev = pub[Math.floor(rnd() * pub.length)];
+    const paid = ev.tickets.filter((x) => x.price > 0);
+    const tt = (paid.length ? paid : ev.tickets)[Math.floor(rnd() * (paid.length || ev.tickets.length))];
+    const qty = 1 + Math.floor(rnd() * 3);
+    const subtotal = tt.price * qty;
+    const fees = Math.round(subtotal * 0.05 * 100) / 100;
+    const fn = firstNames[Math.floor(rnd() * firstNames.length)];
+    const ln = lastNames[Math.floor(rnd() * lastNames.length)];
+    const p = (n: number) => String(n).padStart(2, '0');
+    out.push({
+      id: `o${10000 + i}`,
+      eventId: ev.id,
+      createdAt: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`,
+      items: [{ ticketTypeId: tt.id, qty, unitPrice: tt.price }],
+      subtotal, discount: 0, fees, total: subtotal + fees,
+      currency: ev.currency,
+      method: rnd() < 0.04 ? 'transfer' : methods[Math.floor(rnd() * methods.length)],
+      status: rnd() < 0.04 ? 'refunded' : 'paid',
+      buyerName: `${fn} ${ln}`,
+      buyerEmail: `${fn.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}@example.com`,
+    });
+  }
+  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+})();
 
 export const notifications: NotificationItem[] = [
   { id: 'n1', title: 'Rappel : Ayiti Tech Summit', body: 'Votre événement commence dans 19 jours. Votre place : B-14.', date: '2026-11-08T08:00:00', read: false, kind: 'reminder' },
@@ -335,7 +452,7 @@ export const DEMO_OFFSET_DAYS = Math.max(
   Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - REFERENCE_DAY.getTime()) / 86400000),
 );
 if (DEMO_OFFSET_DAYS > 0) {
-  [events, myTickets, myOrders, attendees, resaleListings, promoCodes, team, refunds, payouts, campaigns, users, disputes, notifications].forEach((x) =>
+  [events, myTickets, myOrders, attendees, resaleListings, reports, verificationRequests, auditLog, platformTargets, platformOrders, promoCodes, team, refunds, payouts, campaigns, users, disputes, notifications].forEach((x) =>
     shiftDeep(x, DEMO_OFFSET_DAYS),
   );
 }

@@ -16,6 +16,8 @@ const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = {
   paypal: { l: 'PayPal', i: Wallet },
 };
 const status: Record<Payout['status'], { l: string; tone: Tone }> = {
+  requested: { l: 'En attente de validation', tone: 'gray' },
+  rejected: { l: 'Refusé', tone: 'red' },
   paid: { l: 'Versé', tone: 'green' },
   processing: { l: 'En cours', tone: 'amber' },
   scheduled: { l: 'Programmé', tone: 'brand' },
@@ -23,10 +25,10 @@ const status: Record<Payout['status'], { l: string; tone: Tone }> = {
 const ACC = 'e509.payoutAccount';
 
 export default function Payouts() {
-  const { lang, toast, feePercent, t, user } = useApp();
+  const { lang, toast, t, user } = useApp();
   useTitle(t('Versements et factures'));
   const orgId = orgOf(user);
-  const { data, loading, reload } = useAsync(() => Promise.all([listPayouts(), getBalance(orgId, feePercent)]), [orgId, feePercent]);
+  const { data, loading, reload } = useAsync(() => Promise.all([listPayouts(orgId), getBalance(orgId)]), [orgId]);
   const [cur, setCur] = useState<Currency>('HTG');
   const [accOpen, setAccOpen] = useState(false);
   const [reqOpen, setReqOpen] = useState(false);
@@ -55,10 +57,10 @@ export default function Payouts() {
     if (!(amount > 0)) return req.setErrors({ amount: t('Indiquez un montant supérieur à 0') });
     if (amount > b.balance) return req.setErrors({ amount: t('Le montant dépasse votre solde disponible ({max})', { max: moneyRaw(b.balance, cur, lang) }) });
     setBusy(true);
-    await requestPayout(amount, cur, account.method);
+    await requestPayout(orgId, amount, cur, account.method);
     setBusy(false);
     setReqOpen(false);
-    toast(t('Versement demandé : il arrive sous 1 à 2 jours ouvrés'));
+    toast(t('Demande envoyée : Event509 la valide sous 24 h, puis le virement arrive sous 1 à 2 jours ouvrés'));
     reload();
   };
 
@@ -86,7 +88,7 @@ export default function Payouts() {
           <h2 className="mb-3 font-bold">{t('Détail ({cur})', { cur })}</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Ventes brutes')}</dt><dd className="font-semibold">{moneyRaw(b.gross, cur, lang)}</dd></div>
-            <div className="flex justify-between"><dt className="text-ink-soft">{t('Commission Event509 ({n} %)', { n: feePercent })}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.fees, cur, lang)}</dd></div>
+            <div className="flex justify-between"><dt className="text-ink-soft">{balance.passToBuyer ? t('Commission Event509 (payée par les acheteurs)') : t('Commission Event509 ({n} %)', { n: b.rate })}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.fees, cur, lang)}</dd></div>
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Remboursements')}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.refunded, cur, lang)}</dd></div>
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Déjà versé')}</dt><dd className="font-semibold">−{moneyRaw(b.paid, cur, lang)}</dd></div>
             <div className="flex justify-between border-t border-line pt-3"><dt className="font-bold">{t('Solde')}</dt><dd className="font-extrabold">{moneyRaw(b.balance, cur, lang)}</dd></div>

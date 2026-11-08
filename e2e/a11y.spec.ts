@@ -7,7 +7,7 @@ import { loginAs } from './helpers';
  * principales, en thème clair et sombre. Échoue sur toute violation sérieuse ou critique.
  */
 const publicPages = ['/', '/explorer', '/e/festival-kompa-live-2026', '/e/ayiti-tech-summit/achat?t=t2b:1', '/billets', '/billets/it3', '/connexion', '/revente', '/o/lakay-productions', '/compte/parametres'];
-const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs'];
+const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal'];
 
 async function audit(page: import('@playwright/test').Page, path: string) {
   await page.goto(path);
@@ -55,13 +55,16 @@ test('aucun débordement horizontal sur petit écran (375 px)', async ({ page })
           if (r.width === 0 || r.right <= w + 1) return false;
           for (let p = el.parentElement; p; p = p.parentElement) {
             const ox = getComputedStyle(p).overflowX;
-            if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return false;
+            if (ox === 'auto' || ox === 'scroll' || ox === 'hidden' || ox === 'clip') return false;
           }
           return true;
         })
         .slice(0, 3)
         .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).split(' ').slice(0, 3).join('.')}`);
     });
+    // Et la page elle-même ne doit jamais défiler horizontalement
+    const pageOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (pageOverflow > 1) bad.push(`page élargie de ${pageOverflow}px`);
     if (bad.length) overflowing.push(`${p} : ${bad.join(', ')}`);
   };
   for (const p of allPages) await check(p);
