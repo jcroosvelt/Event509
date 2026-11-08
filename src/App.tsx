@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgePercent, BarChart3, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgePercent, BarChart3, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -9,6 +9,7 @@ import { RequireAuth, SessionWatcher } from '@/components/guards';
 import PublicLayout from '@/layouts/PublicLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { useApp } from '@/store/app';
+import * as db from '@/data/mock';
 
 // Participants
 const HomePage = lazy(() => import('@/pages/public/Home'));
@@ -55,11 +56,25 @@ const AdminUsers = lazy(() => import('@/pages/admin/Users'));
 const Disputes = lazy(() => import('@/pages/admin/Disputes'));
 const Commissions = lazy(() => import('@/pages/admin/Commissions'));
 const Verification = lazy(() => import('@/pages/admin/Verification'));
+const UserDetail = lazy(() => import('@/pages/admin/UserDetail'));
+const Transactions = lazy(() => import('@/pages/admin/Transactions'));
+const AdminPayouts = lazy(() => import('@/pages/admin/AdminPayouts'));
+const AuditLog = lazy(() => import('@/pages/admin/AuditLog'));
 
 const O = '/organisateur';
 const A = '/admin';
 
 const auth = (el: ReactNode) => <RequireAuth>{el}</RequireAuth>;
+
+/** Compteurs affichés dans la navigation admin (données de démo). */
+const pending = {
+  get events() {
+    return db.events.filter((e) => e.status === 'pending').length;
+  },
+  get reports() {
+    return db.reports.filter((r) => r.status === 'open').length;
+  },
+};
 
 export default function App() {
   const { t } = useApp();
@@ -158,13 +173,18 @@ export default function App() {
                 sections={[
                   { items: [
                     { to: A, label: t('Vue d’ensemble'), icon: BarChart3, end: true, perm: 'admin' },
-                    { to: `${A}/moderation`, label: t('Modération'), icon: Flag, perm: 'admin' },
+                    { to: `${A}/moderation`, label: t('Modération'), icon: Flag, perm: 'admin', badge: String(pending.events + pending.reports || '') || undefined },
                     { to: `${A}/utilisateurs`, label: t('Utilisateurs'), icon: Users, perm: 'admin' },
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
                   ] },
                   { title: t('Finances'), items: [
+                    { to: `${A}/transactions`, label: t('Transactions'), icon: Receipt, perm: 'admin' },
+                    { to: `${A}/versements`, label: t('Versements'), icon: Wallet, perm: 'admin' },
                     { to: `${A}/litiges`, label: t('Litiges'), icon: Gavel, perm: 'admin' },
                     { to: `${A}/commissions`, label: t('Commissions'), icon: Percent, perm: 'admin' },
+                  ] },
+                  { title: t('Suivi'), items: [
+                    { to: `${A}/journal`, label: t('Journal d’activité'), icon: History, perm: 'admin' },
                   ] },
                 ]}
                 bottom={[
@@ -183,6 +203,10 @@ export default function App() {
             <Route path="verification" element={<Verification />} />
             <Route path="litiges" element={<Disputes />} />
             <Route path="commissions" element={<Commissions />} />
+            <Route path="utilisateurs/:id" element={<UserDetail />} />
+            <Route path="transactions" element={<Transactions />} />
+            <Route path="versements" element={<AdminPayouts />} />
+            <Route path="journal" element={<AuditLog />} />
           </Route>
         </Routes>
       </Suspense>

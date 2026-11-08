@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, BadgeCheck, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users,
+  ArrowLeft, BadgeCheck, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
 } from 'lucide-react';
-import { getEvent, getOrganizer, listEvents, listResale, occurrences } from '@/services/api';
+import { getEvent, getOrganizer, listEvents, listResale, occurrences, reportEvent } from '@/services/api';
+import { useForm } from '@/lib/form';
+import { reportReason } from '@/lib/labels';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, cx, dateLong, dateShort, money, num, time } from '@/lib/format';
 import { downloadICS } from '@/lib/export';
 import { trackPixel } from '@/lib/pixels';
-import { Avatar, Badge, Button, Card, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, type Tone } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Field, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, Select, Textarea, type Tone } from '@/components/ui';
 import { EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
 import { useSessionLabel } from '@/components/TicketCard';
 import NotFound from './NotFound';
-import type { TicketType } from '@/types';
+import type { Report, TicketType } from '@/types';
 
 export function ticketAvailability(tt: TicketType) {
   const now = new Date();
@@ -36,13 +38,16 @@ export const kindLabel: Record<TicketType['kind'], { label: string; tone: Tone }
 export default function EventDetail() {
   const { slug = '' } = useParams();
   const nav = useNavigate();
-  const { lang, currency, reminders, toggleReminder, follows, toggleFollow, toast, t } = useApp();
+  const { lang, currency, reminders, toggleReminder, follows, toggleFollow, toast, t, user } = useApp();
   const { data: ev, loading } = useAsync(() => getEvent(slug), [slug]);
   const { data: others } = useAsync(() => listEvents({ sort: 'popular' }), []);
   const { data: resale } = useAsync(() => (ev ? listResale(ev.id) : Promise.resolve([])), [ev?.id]);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [occ, setOcc] = useState<string>('');
   const [shareOpen, setShareOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const report = useForm({ reason: 'misleading', details: '' }, { details: (v) => (String(v).trim().length < 10 ? t('Décrivez le problème en quelques mots (10 caractères au moins)') : undefined) });
   const sessionLabel = useSessionLabel();
   useTitle(ev?.title);
 
@@ -185,6 +190,9 @@ export default function EventDetail() {
             >
               <CalendarDays className="h-4 w-4" aria-hidden /> {t('Ajouter au calendrier')}
             </Button>
+            <Button variant="ghost" size="sm" className="text-ink-soft" onClick={() => (user ? (report.reset(), setReportOpen(true)) : nav(`/connexion?next=${encodeURIComponent(location.pathname)}`))}>
+              <Flag className="h-4 w-4" aria-hidden /> {t('Signaler')}
+            </Button>
           </div>
 
           <section aria-labelledby="h-about">
@@ -319,6 +327,39 @@ export default function EventDetail() {
           <Button onClick={goCheckout}>{t('Continuer')}</Button>
         </div>
       )}
+
+      <Modal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        title={t('Signaler cet événement')}
+        description={t('L’équipe Event509 examine chaque signalement. L’organisateur ne voit pas votre nom.')}
+        size="sm"
+        footer={
+          <Button
+            className="flex-1"
+            loading={reporting}
+            onClick={async () => {
+              if (!report.validate()) return;
+              setReporting(true);
+              await reportEvent(ev.id, report.values.reason as Report['reason'], report.values.details.trim(), user!.name);
+              setReporting(false);
+              setReportOpen(false);
+              toast(t('Merci, votre signalement a été envoyé à l’équipe Event509'));
+            }}
+          >
+            {t('Envoyer le signalement')}
+          </Button>
+        }
+      >
+        <form noValidate onSubmit={(e) => e.preventDefault()} className="space-y-4">
+          <Field label={t('Motif')}>
+            <Select {...report.bind('reason')}>
+              {(Object.keys(reportReason) as Report['reason'][]).map((r) => <option key={r} value={r}>{t(reportReason[r])}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('Détails')} error={report.errors.details} required><Textarea placeholder={t('Ce qui ne va pas, et comment vous l’avez constaté…')} {...report.bind('details')} /></Field>
+        </form>
+      </Modal>
 
       <Modal open={shareOpen} onClose={() => setShareOpen(false)} title={t('Partager l’événement')} size="sm">
         <div className="space-y-3">

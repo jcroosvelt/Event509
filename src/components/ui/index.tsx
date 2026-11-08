@@ -2,6 +2,7 @@ import {
   createContext, useContext, useEffect, useId, useRef,
   type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Loader2, X } from 'lucide-react';
 import { cx } from '@/lib/format';
@@ -485,7 +486,8 @@ export function Modal({
 
   if (!open) return null;
   const w = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl' }[size];
-  return (
+  // Portail vers <body> : aucun conteneur (contexte d'empilement, overflow) ne peut masquer la fenêtre
+  return createPortal(
     <div role="presentation" className="fixed inset-0 z-50 flex items-end justify-center bg-navy/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
@@ -508,7 +510,8 @@ export function Modal({
         <div className="overflow-y-auto px-6 pb-6 pt-2">{children}</div>
         {footer && <div className="pb-safe flex gap-2 border-t border-line px-6 pt-4 sm:pb-4">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

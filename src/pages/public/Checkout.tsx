@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Building2, CalendarDays, Check, CreditCard, Gift, Lock, Mail, MessageCircle, Smartphone, Tag, Wallet, X } from 'lucide-react';
-import { createOrder, getEvent, seatMapOf, takenSeats, validatePromo, DEMO } from '@/services/api';
+import { createOrder, currentFeeSettings, feeRateFor, getEvent, seatMapOf, takenSeats, validatePromo, DEMO } from '@/services/api';
+import { computeFees } from '@/lib/fees';
 import { ambassadors } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
@@ -101,11 +102,11 @@ export default function Checkout() {
   const subtotal = c(lines.reduce((a, l) => a + l.qty * l.tt.price, 0));
   const discount = promo ? Math.min(subtotal, promo.type === 'percent' ? Math.round(subtotal * promo.value) / 100 : c(promo.value)) : 0;
   const isFree = subtotal === 0;
-  const rawFees = isFree ? 0 : (subtotal - discount) * (app.feePercent / 100);
-  // Les gourdes s'arrondissent à l'unité, les dollars au centime
-  const round = (v: number) => (currency === 'HTG' ? Math.round(v) : Math.round(v * 100) / 100);
-  const fees = round(rawFees);
-  const total = round(subtotal - discount + fees);
+  // Commission : taux de l'organisateur (négocié ou par défaut) + frais fixes par billet payant
+  const paidTickets = lines.filter((l) => l.tt.price > 0).reduce((a, l) => a + l.qty, 0);
+  const fb = computeFees(currentFeeSettings(), subtotal - discount, paidTickets, currency, feeRateFor(ev.organizerId));
+  const fees = fb.buyerFee;
+  const total = fb.total;
   const fmt = (v: number) => moneyRaw(v, currency, lang);
   const referrer = app.referral ? ambassadors.find((a) => a.code === app.referral!.code) : undefined;
 
@@ -141,8 +142,8 @@ export default function Checkout() {
         currency,
         buyer: { name: form.values.name, email: form.values.email, phone: form.values.phone },
         delivery,
-        feePercent: app.feePercent,
-        totals: { subtotal, discount, fees, total },
+        feePercent: fb.rate,
+        totals: { subtotal, discount, fees: fb.fee, total },
         sessionLabel: occ,
         referral: app.referral?.code,
       });
@@ -355,7 +356,7 @@ export default function Checkout() {
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between"><dt className="text-ink-soft">{t('Sous-total')}</dt><dd>{fmt(subtotal)}</dd></div>
               {discount > 0 && <div className="flex justify-between text-emerald-700"><dt>{t('Réduction')}</dt><dd>−{fmt(discount)}</dd></div>}
-              {!isFree && <div className="flex justify-between"><dt className="text-ink-soft">{t('Frais de service ({n} %)', { n: app.feePercent })}</dt><dd>{fmt(fees)}</dd></div>}
+              {!isFree && fees > 0 && <div className="flex justify-between"><dt className="text-ink-soft">{t('Frais de service')}</dt><dd>{fmt(fees)}</dd></div>}
               <div className="flex items-baseline justify-between border-t border-line pt-3">
                 <dt className="font-bold">{t('Total')}</dt>
                 <dd className="text-2xl font-extrabold">{isFree ? t('Gratuit') : fmt(total)}</dd>

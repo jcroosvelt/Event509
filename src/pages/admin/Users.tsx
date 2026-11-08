@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { BadgeCheck, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BadgeCheck, Download, Search } from 'lucide-react';
 import { listUsers, setUserStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric } from '@/lib/format';
+import { exportCSV } from '@/lib/export';
 import { Avatar, Badge, Button, Card, Input, Loading, Modal, PageHeader, Pager, Segmented, Table, Td, type Tone } from '@/components/ui';
 import type { AppUser } from '@/types';
 
-const role: Record<AppUser['role'], { l: string; tone: Tone }> = {
+export const roleLabel: Record<AppUser['role'], { l: string; tone: Tone }> = {
   participant: { l: 'Participant', tone: 'gray' },
   organizer: { l: 'Organisateur', tone: 'brand' },
   admin: { l: 'Admin', tone: 'ink' },
@@ -35,7 +37,15 @@ export default function Users() {
 
   return (
     <div>
-      <PageHeader title={t('Utilisateurs')} subtitle={t('{n} comptes', { n: data?.length ?? 0 })} />
+      <PageHeader
+        title={t('Utilisateurs')}
+        subtitle={t('{n} comptes', { n: data?.length ?? 0 })}
+        actions={
+          <Button variant="outline" onClick={() => exportCSV(list.map((u) => ({ [t('Nom')]: u.name, [t('Email')]: u.email, [t('Rôle')]: t(roleLabel[u.role].l), [t('Ville')]: u.city, [t('Inscrit le')]: u.joinedAt, [t('Statut')]: u.status === 'active' ? t('Actif') : t('Suspendu') })), 'utilisateurs')}>
+            <Download className="h-4 w-4" aria-hidden /> CSV
+          </Button>
+        }
+      />
       <Card>
         <div className="mb-4 flex flex-col gap-3 lg:flex-row" role="search">
           <div className="flex-1">
@@ -47,8 +57,13 @@ export default function Users() {
         <Table caption={t('Utilisateurs')} head={[t('Utilisateur'), t('Rôle'), t('Ville'), t('Inscrit le'), t('Statut'), '']}>
           {list.slice(page * PER, page * PER + PER).map((u) => (
             <tr key={u.id}>
-              <Td><span className="flex items-center gap-3"><Avatar name={u.name} size={36} /><span><b className="flex items-center gap-1">{u.name} {u.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span></span></Td>
-              <Td><Badge tone={role[u.role].tone}>{t(role[u.role].l)}</Badge></Td>
+              <Td>
+                <Link to={`/admin/utilisateurs/${u.id}`} className="group flex items-center gap-3">
+                  <Avatar name={u.name} size={36} />
+                  <span><b className="flex items-center gap-1 group-hover:text-brand-ink">{u.name} {u.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span>
+                </Link>
+              </Td>
+              <Td><Badge tone={roleLabel[u.role].tone}>{t(roleLabel[u.role].l)}</Badge></Td>
               <Td className="text-ink-soft">{u.city}</Td>
               <Td className="text-ink-soft">{dateNumeric(u.joinedAt, lang)}</Td>
               <Td><Badge tone={u.status === 'active' ? 'green' : 'red'}>{u.status === 'active' ? t('Actif') : t('Suspendu')}</Badge></Td>

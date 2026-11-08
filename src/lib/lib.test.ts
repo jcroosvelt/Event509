@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { convert, initials, money, moneyRaw, ticketCode, USD_TO_HTG } from './format';
 import { can, hasOrganizerAccess, permsOf } from './permissions';
 import { translate } from './i18n';
+import { computeFees, DEFAULT_FEES } from './fees';
 import { users } from '@/data/mock';
 import type { AppUser } from '@/types';
 // @ts-expect-error script Node sans types
@@ -83,5 +84,31 @@ describe('i18n', () => {
     const vars = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
     const mismatched = Object.entries(catalog).filter(([k, v]) => vars(k) !== vars(v));
     expect(mismatched).toEqual([]);
+  });
+});
+
+
+describe('frais de service', () => {
+  it('ajoute pourcentage et frais fixes au prix payé par l’acheteur', () => {
+    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 25, passToBuyer: true }, 2500, 1, 'HTG');
+    expect(f.fee).toBe(150); // 125 + 25
+    expect(f.total).toBe(2650);
+    expect(f.organizerNet).toBe(2500);
+  });
+
+  it('déduit les frais du revenu de l’organisateur si l’acheteur ne les paie pas', () => {
+    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 0, passToBuyer: false }, 1000, 2, 'HTG');
+    expect(f.total).toBe(1000);
+    expect(f.organizerNet).toBe(950);
+  });
+
+  it('applique le taux négocié de l’organisateur et convertit les frais fixes en USD', () => {
+    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 132, passToBuyer: true }, 100, 1, 'USD', 3);
+    expect(f.rate).toBe(3);
+    expect(f.fee).toBe(4); // 3 $ + 1 $ de frais fixes
+  });
+
+  it('ne prélève rien sur une commande gratuite', () => {
+    expect(computeFees(DEFAULT_FEES, 0, 0, 'HTG').total).toBe(0);
   });
 });

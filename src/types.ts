@@ -189,10 +189,12 @@ export interface RefundRequest {
 
 export interface Payout {
   id: string;
+  organizerId: string;
   amount: number;
   currency: Currency;
   method: 'moncash' | 'bank' | 'paypal';
-  status: 'paid' | 'processing' | 'scheduled';
+  /** requested : demandé par l'organisateur, en attente de validation par l'administration. */
+  status: 'requested' | 'processing' | 'scheduled' | 'paid' | 'rejected';
   date: string;
   reference: string;
 }
@@ -245,6 +247,55 @@ export interface Dispute {
   currency: Currency;
   status: 'open' | 'investigating' | 'resolved';
   createdAt: string;
+  decision?: 'refund_full' | 'refund_half' | 'reject';
+  note?: string;
+  refunded?: number;
+  messages: { from: 'opener' | 'against' | 'admin'; author: string; body: string; at: string }[];
+}
+
+/** Signalement d'un événement par un participant. */
+export interface Report {
+  id: string;
+  eventId: string;
+  reason: 'misleading' | 'scam' | 'inappropriate' | 'cancelled' | 'other';
+  details: string;
+  reporter: string;
+  status: 'open' | 'dismissed' | 'actioned';
+  createdAt: string;
+}
+
+/** Demande de vérification d'un organisateur et ses pièces justificatives. */
+export interface VerificationRequest {
+  id: string;
+  organizerId?: string;
+  name: string;
+  owner: string;
+  email: string;
+  city: string;
+  docs: { type: 'id' | 'license' | 'bank'; file: string; uploadedAt: string }[];
+  status: 'pending' | 'approved' | 'rejected' | 'docs_requested';
+  submittedAt: string;
+  note?: string;
+}
+
+/** Entrée du journal des actions de l'administration. */
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  target: string;
+}
+
+/** Objectif de la plateforme suivi sur le tableau de bord admin. */
+export interface PlatformTarget {
+  id: string;
+  title: string;
+  metric: 'gmv' | 'tickets' | 'organizers' | 'users';
+  target: number;
+  deadline: string;
+  tone: 'brand' | 'navy';
+  description?: string;
 }
 
 export interface NotificationItem {
