@@ -47,7 +47,7 @@ export default function Users() {
         <Table caption={t('Utilisateurs')} head={[t('Utilisateur'), t('Rôle'), t('Ville'), t('Inscrit le'), t('Statut'), '']}>
           {list.slice(page * PER, page * PER + PER).map((u) => (
             <tr key={u.id}>
-              <Td><span className="flex items-center gap-3"><Avatar name={u.name} size={36} /><span><b className="flex items-center gap-1">{u.name} {u.verified && <BadgeCheck className="h-4 w-4 text-brand" aria-label={t('Vérifié')} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span></span></Td>
+              <Td><span className="flex items-center gap-3"><Avatar name={u.name} size={36} /><span><b className="flex items-center gap-1">{u.name} {u.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span></span></Td>
               <Td><Badge tone={role[u.role].tone}>{t(role[u.role].l)}</Badge></Td>
               <Td className="text-ink-soft">{u.city}</Td>
               <Td className="text-ink-soft">{dateNumeric(u.joinedAt, lang)}</Td>

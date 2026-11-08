@@ -122,8 +122,8 @@ export default function EventDetail() {
               <div className="mt-4 flex items-center gap-3">
                 <Avatar name={org.avatar} size={40} />
                 <div className="min-w-0">
-                  <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm font-bold hover:text-brand">
-                    {org.name} {org.verified && <BadgeCheck className="h-4 w-4 text-brand" aria-label={t('Organisateur vérifié')} />}
+                  <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm font-bold hover:text-brand-ink">
+                    {org.name} {org.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Organisateur vérifié')} />}
                   </Link>
                   <div className="text-xs text-ink-muted">{t('{n} abonnés', { n: num(org.followers + (following ? 1 : 0), lang) })} · {t('{n} événements', { n: org.eventsCount })}</div>
                 </div>
@@ -149,7 +149,7 @@ export default function EventDetail() {
               <div>
                 <div className="text-sm font-bold first-letter:uppercase">{dateLong(ev.start, lang)}</div>
                 <div className="text-sm text-ink-muted">{time(ev.start, lang)} – {time(ev.end, lang)}</div>
-                {ev.recurring && <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand"><Repeat className="h-3 w-3" aria-hidden /> {ev.recurring === 'weekly' ? t('Chaque semaine') : t('Chaque mois')}</div>}
+                {ev.recurring && <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand-ink"><Repeat className="h-3 w-3" aria-hidden /> {ev.recurring === 'weekly' ? t('Chaque semaine') : t('Chaque mois')}</div>}
               </div>
             </Card>
             <Card className="flex items-start gap-3 p-4">
@@ -158,7 +158,7 @@ export default function EventDetail() {
                 <div className="text-sm font-bold">{ev.venue?.name ?? t('En ligne — {platform}', { platform: ev.online?.platform ?? '' })}</div>
                 <div className="text-sm text-ink-muted">{ev.venue ? `${ev.venue.address}, ${ev.venue.city}` : t('Lien envoyé après inscription')}</div>
                 {ev.venue && (
-                  <a className="mt-1 inline-block text-xs font-semibold text-brand" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${ev.venue.name} ${ev.venue.city}`)}`}>
+                  <a className="mt-1 inline-block text-xs font-semibold text-brand-ink" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${ev.venue.name} ${ev.venue.city}`)}`}>
                     {t('Ouvrir dans Maps')}<span className="sr-only"> ({t('nouvel onglet')})</span>
                   </a>
                 )}
@@ -215,7 +215,7 @@ export default function EventDetail() {
                           {ev.sessions?.length ? `${dateShort(s.start, lang)} · ` : ''}{time(s.start, lang)}–{time(s.end, lang)}
                         </span>
                       </span>
-                      {on && <Check className="h-5 w-5 text-brand" aria-hidden />}
+                      {on && <Check className="h-5 w-5 text-brand-ink" aria-hidden />}
                     </button>
                   );
                 })}
@@ -248,7 +248,7 @@ export default function EventDetail() {
                 <div className="font-bold">{resale.length > 1 ? t('{n} billets en revente', { n: resale.length }) : t('{n} billet en revente', { n: resale.length })}</div>
                 <p className="text-sm text-ink-soft">{t('Revente sécurisée entre participants, au prix maximum du billet.')}</p>
               </div>
-              <Link to={`/revente?e=${ev.id}`} className="text-sm font-semibold text-brand">{t('Voir les offres')}</Link>
+              <Link to={`/revente?e=${ev.id}`} className="text-sm font-semibold text-brand-ink">{t('Voir les offres')}</Link>
             </Card>
           )}
         </div>
@@ -267,7 +267,7 @@ export default function EventDetail() {
                 const a = ticketAvailability(tt);
                 const q = qty[tt.id] ?? 0;
                 return (
-                  <li key={tt.id} className={cx('rounded-2xl border p-4 transition', q > 0 ? 'border-brand bg-brand-50/50' : 'border-line', !a.ok && 'opacity-60')}>
+                  <li key={tt.id} className={cx('rounded-2xl border p-4 transition', q > 0 ? 'border-brand bg-brand-50/50' : 'border-line', !a.ok && 'bg-canvas')}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -276,7 +276,7 @@ export default function EventDetail() {
                         </div>
                         {tt.description && <p className="mt-1 text-xs text-ink-muted">{tt.description}</p>}
                         <div className="mt-2 text-lg font-extrabold">{shownPrice(tt.price)}</div>
-                        {a.label && <div className={cx('text-xs font-semibold', a.ok ? 'text-orange-600' : 'text-ink-muted')}>{t(a.label, { n: a.left })}</div>}
+                        {a.label && <div className={cx('text-xs font-semibold', a.ok ? 'text-orange-700' : 'text-ink-soft')}>{t(a.label, { n: a.left })}</div>}
                       </div>
                       {a.ok && (
                         <div className="flex items-center gap-2" role="group" aria-label={t('Quantité {name}', { name: tt.name })}>

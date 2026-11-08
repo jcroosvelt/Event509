@@ -13,17 +13,18 @@
  *   - listes déclarées (reasons, DOCS, decisions, steps, perms)
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+// Racine du projet : dossier parent du script (ou dossier courant quand le module est chargé par Vitest)
+const root = import.meta.url.startsWith('file:') ? join(dirname(fileURLToPath(import.meta.url)), '..') : process.cwd();
 const src = join(root, 'src');
 const catalogPath = join(src, 'locales', 'en.json');
 
 function walk(dir) {
   return readdirSync(dir).flatMap((f) => {
     const p = join(dir, f);
-    return statSync(p).isDirectory() ? walk(p) : /\.(tsx?|mjs)$/.test(f) ? [p] : [];
+    return statSync(p).isDirectory() ? walk(p) : /\.(tsx?|mjs)$/.test(f) && !/\.test\.tsx?$/.test(f) ? [p] : [];
   });
 }
 
@@ -68,7 +69,7 @@ const IGNORE = new Set(['MonCash', 'NatCash', 'PayPal', 'WhatsApp', 'VIP', 'Even
 
 const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (import.meta.url.startsWith('file:') && process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const found = extract();
   const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
   const missing = [...found.keys()].filter((k) => !IGNORE.has(k) && !(k in catalog));

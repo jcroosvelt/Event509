@@ -17,6 +17,7 @@ export default {
         'on-contrast': v('on-contrast'),
         brand: {
           DEFAULT: v('brand'),
+          ink: v('brand-ink'),
           dark: v('brand-dark'),
           50: v('brand-50'),
           100: v('brand-100'),

@@ -18,7 +18,7 @@ const btnVariants: Record<BtnVariant, string> = {
   soft: 'bg-brand-100 text-brand-dark hover:bg-brand-200',
   ghost: 'text-ink hover:bg-ink/5',
   outline: 'border border-line bg-surface text-ink hover:border-ink/20',
-  danger: 'bg-red-50 text-red-600 hover:bg-red-100',
+  danger: 'bg-red-50 text-red-700 hover:bg-red-100',
 };
 const btnSizes = { sm: 'h-9 px-4 text-sm', md: 'h-11 px-5 text-sm', lg: 'h-14 px-7 text-base' };
 
@@ -72,10 +72,10 @@ export function Card({ className, children, as: As = 'div', ...p }: { className?
 
 export type Tone = 'brand' | 'orange' | 'green' | 'red' | 'violet' | 'ink' | 'gray' | 'amber';
 const toneBg: Record<Tone, string> = {
-  brand: 'bg-brand-50 text-brand',
-  orange: 'bg-orange-50 text-orange-500',
-  green: 'bg-emerald-50 text-emerald-600',
-  red: 'bg-rose-50 text-rose-500',
+  brand: 'bg-brand-50 text-brand-ink',
+  orange: 'bg-orange-50 text-orange-700',
+  green: 'bg-emerald-50 text-emerald-700',
+  red: 'bg-rose-50 text-rose-700',
   violet: 'bg-violet-50 text-violet-600',
   amber: 'bg-amber-50 text-amber-700',
   ink: 'bg-contrast text-on-contrast',
@@ -394,7 +394,8 @@ export function SparkLine({ values, className, stroke = 'rgb(var(--brand))' }: {
 
 export function Avatar({ name, src, size = 40, className }: { name: string; src?: string; size?: number; className?: string }) {
   const ini = name.length <= 3 ? name : name.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
-  const hues = ['#1F5EFF', '#0B1533', '#7C5CFF', '#0F8A6B', '#D63E6C', '#B86E00'];
+  // Fonds assez foncés pour des initiales blanches lisibles (≥ 4,5:1)
+  const hues = ['#1A4FD6', '#0B1533', '#6342E0', '#0B7259', '#B8325A', '#94570A'];
   const bg = hues[name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % hues.length];
   return src ? (
     <img src={src} alt="" className={cx('shrink-0 rounded-full object-cover', className)} style={{ width: size, height: size }} />
@@ -406,7 +407,7 @@ export function Avatar({ name, src, size = 40, className }: { name: string; src?
 }
 
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2 aria-hidden className={cx('h-6 w-6 animate-spin text-brand', className)} />;
+  return <Loader2 aria-hidden className={cx('h-6 w-6 animate-spin text-brand-ink', className)} />;
 }
 
 export function Loading({ label }: { label?: string }) {
@@ -481,7 +482,7 @@ export function Modal({
   if (!open) return null;
   const w = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl' }[size];
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-navy/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div role="presentation" className="fixed inset-0 z-50 flex items-end justify-center bg-navy/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
         role="dialog"
@@ -540,7 +541,9 @@ export function Toaster() {
 
 export function Table({ head, children, className, caption }: { head: ReactNode[]; children: ReactNode; className?: string; caption?: string }) {
   return (
-    <div className={cx('-mx-5 overflow-x-auto px-5', className)}>
+    // Zone défilante focalisable au clavier (flèches gauche/droite sur petits écrans)
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div className={cx('-mx-5 overflow-x-auto px-5', className)} tabIndex={0} role="region" aria-label={caption}>
       <table className="w-full min-w-[640px] text-left text-sm">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>

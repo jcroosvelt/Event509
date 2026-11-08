@@ -26,7 +26,7 @@ export default function ResetPassword() {
       <div className="mx-auto max-w-md px-4 py-20 text-center">
         <h1 className="text-xl font-bold">{t('Ce lien n’est plus valable')}</h1>
         <p className="mt-2 text-sm text-ink-soft">{t('Les liens expirent après 1 heure. Demandez-en un nouveau.')}</p>
-        <Link to="/mot-de-passe-oublie" className="mt-4 inline-block font-semibold text-brand">{t('Recevoir un nouveau lien')}</Link>
+        <Link to="/mot-de-passe-oublie" className="mt-4 inline-block font-semibold text-brand-ink">{t('Recevoir un nouveau lien')}</Link>
       </div>
     );
 

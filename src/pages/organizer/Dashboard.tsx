@@ -172,7 +172,7 @@ export default function Dashboard() {
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-bold">{t('Vos événements')}</h2>
-            {can(user, 'events') && <Link to="/organisateur/evenements" className="flex items-center gap-1 text-sm font-semibold text-brand">{t('Tout voir')} <ArrowUpRight className="h-4 w-4" aria-hidden /></Link>}
+            {can(user, 'events') && <Link to="/organisateur/evenements" className="flex items-center gap-1 text-sm font-semibold text-brand-ink">{t('Tout voir')} <ArrowUpRight className="h-4 w-4" aria-hidden /></Link>}
           </div>
           <ul className="space-y-1">
             {(events ?? []).map((e) => {

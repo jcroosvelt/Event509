@@ -84,7 +84,7 @@ export function NotificationsMenu() {
         <div id={id} className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-3xl bg-surface p-2 shadow-2xl ring-1 ring-line">
           <div className="flex items-center justify-between px-3 py-2">
             <span className="font-bold">{t('Notifications')}</span>
-            {unread > 0 && <button type="button" className="text-xs font-semibold text-brand" onClick={() => markRead()}>{t('Tout marquer comme lu')}</button>}
+            {unread > 0 && <button type="button" className="text-xs font-semibold text-brand-ink" onClick={() => markRead()}>{t('Tout marquer comme lu')}</button>}
           </div>
           <ul className="max-h-80 overflow-y-auto">
             {notifications.slice(0, 5).map((n) => (
@@ -95,7 +95,7 @@ export function NotificationsMenu() {
               </li>
             ))}
           </ul>
-          <Link to="/notifications" onClick={() => setOpen(false)} className="mt-1 block rounded-2xl px-3 py-2.5 text-center text-sm font-semibold text-brand hover:bg-canvas">
+          <Link to="/notifications" onClick={() => setOpen(false)} className="mt-1 block rounded-2xl px-3 py-2.5 text-center text-sm font-semibold text-brand-ink hover:bg-canvas">
             {t('Voir toutes les notifications')}
           </Link>
         </div>

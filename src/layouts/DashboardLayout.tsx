@@ -52,7 +52,7 @@ export default function DashboardLayout({
 
   if (!allowed.length)
     return (
-      <div className="min-h-screen px-4 py-10">
+      <main id="contenu" tabIndex={-1} className="min-h-screen px-4 py-10 outline-none">
         <div className="mx-auto max-w-lg"><Logo /></div>
         {base === '/organisateur' && user?.role === 'participant' ? (
           <div className="mx-auto max-w-lg py-10">
@@ -70,7 +70,7 @@ export default function DashboardLayout({
         ) : (
           <AccessDenied />
         )}
-      </div>
+      </main>
     );
   if (denied) return <Navigate to={allowed[0].to} replace />;
 
@@ -141,7 +141,7 @@ export default function DashboardLayout({
       </header>
 
       {open && (
-        <div className="fixed inset-0 z-50 bg-navy/50 lg:hidden" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
+        <div role="presentation" className="fixed inset-0 z-50 bg-navy/50 lg:hidden" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)} onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label={title} className="absolute inset-y-0 right-0 w-[85%] max-w-sm overflow-y-auto bg-surface p-5">
             <div className="mb-6 flex items-center justify-between">
               <Badge tone="brand">{title}</Badge>

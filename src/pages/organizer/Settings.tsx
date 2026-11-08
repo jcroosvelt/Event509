@@ -66,8 +66,8 @@ export default function OrgSettings() {
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <Avatar name={org.avatar} size={64} />
             <div className="min-w-0 flex-1">
-              <h2 className="flex items-center gap-1 text-lg font-bold">{profile.values.name} {org.verified && <BadgeCheck className="h-5 w-5 text-brand" aria-label={t('Organisateur vérifié')} />}</h2>
-              <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm text-brand">event509.com/o/{org.slug} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
+              <h2 className="flex items-center gap-1 text-lg font-bold">{profile.values.name} {org.verified && <BadgeCheck className="h-5 w-5 text-brand-ink" aria-label={t('Organisateur vérifié')} />}</h2>
+              <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm text-brand-ink">event509.com/o/{org.slug} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
             </div>
           </div>
           <form noValidate onSubmit={(e) => { e.preventDefault(); saveProfile(); }}>

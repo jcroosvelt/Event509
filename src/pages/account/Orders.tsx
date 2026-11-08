@@ -72,7 +72,7 @@ export default function Orders() {
                 <div className="flex items-center gap-4">
                   {ev && <EventCover event={ev} className="h-14 w-14 shrink-0 rounded-2xl [&>span]:!-bottom-1 [&>span]:!text-[2.2rem]" />}
                   <div className="min-w-0 flex-1">
-                    <Link to={ev ? `/e/${ev.slug}` : '#'} className="line-clamp-1 font-bold hover:text-brand">{ev?.title ?? o.eventId}</Link>
+                    <Link to={ev ? `/e/${ev.slug}` : '#'} className="line-clamp-1 font-bold hover:text-brand-ink">{ev?.title ?? o.eventId}</Link>
                     <div className="text-xs text-ink-muted">{o.id} · {dateNumeric(o.createdAt, lang)} · {qty > 1 ? t('{n} billets', { n: qty }) : t('{n} billet', { n: qty })} · {t(methodLabel[o.method])}</div>
                   </div>
                   <div className="text-right">

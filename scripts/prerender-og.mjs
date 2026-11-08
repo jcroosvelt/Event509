@@ -46,26 +46,30 @@ function page(template, { title, description, url, image }) {
 
 const { events, organizers } = await loadData();
 const template = readFileSync(join(dist, 'index.html'), 'utf8');
+/** Écrit /e/slug.html et /e/slug/index.html : les hébergeurs résolvent l'un ou l'autre. */
+function write(parts, html) {
+  const dir = join(dist, ...parts.slice(0, -1));
+  mkdirSync(join(dir, parts.at(-1)), { recursive: true });
+  writeFileSync(join(dir, `${parts.at(-1)}.html`), html);
+  writeFileSync(join(dir, parts.at(-1), 'index.html'), html);
+}
 const imageOf = (cover) => (/^https?:/.test(cover) ? cover : `${site}/og-default.png`);
 let n = 0;
 
 for (const e of events.filter((x) => x.status === 'published')) {
   const where = e.venue ? `${e.venue.name}, ${e.venue.city}` : e.online?.platform ?? '';
   const date = new Date(e.start).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const out = join(dist, 'e', e.slug);
-  mkdirSync(out, { recursive: true });
-  writeFileSync(join(out, 'index.html'), page(template, {
+  const html = page(template, {
     title: e.title,
     description: clip(`${date} · ${where}. ${e.description}`, 200),
     url: `${site}/e/${e.slug}`,
     image: imageOf(e.cover),
-  }));
+  });
+  write(['e', e.slug], html);
   n++;
 }
 for (const o of organizers) {
-  const out = join(dist, 'o', o.slug);
-  mkdirSync(out, { recursive: true });
-  writeFileSync(join(out, 'index.html'), page(template, {
+  write(['o', o.slug], page(template, {
     title: o.name,
     description: clip(o.bio ?? `Événements organisés par ${o.name} sur Event509.`, 200),
     url: `${site}/o/${o.slug}`,

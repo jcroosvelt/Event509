@@ -69,7 +69,7 @@ export default function Promos() {
               const statusLabel = p.used >= p.limit ? t('Épuisé') : expired ? t('Expiré') : p.active ? t('Actif') : t('Désactivé');
               return (
                 <tr key={p.id}>
-                  <Td><span className="flex items-center gap-2 font-mono font-bold"><BadgePercent className="h-4 w-4 text-brand" aria-hidden />{p.code}</span></Td>
+                  <Td><span className="flex items-center gap-2 font-mono font-bold"><BadgePercent className="h-4 w-4 text-brand-ink" aria-hidden />{p.code}</span></Td>
                   <Td className="font-semibold">{p.type === 'percent' ? `−${p.value} %` : `−${p.value} HTG`}</Td>
                   <Td className="max-w-[200px] truncate text-ink-soft">{p.eventId === 'all' ? t('Tous les événements') : events.find((e) => e.id === p.eventId)?.title}</Td>
                   <Td><div className="w-32"><div className="mb-1 text-xs text-ink-muted">{p.used}/{p.limit}</div><ProgressBar value={p.used / p.limit} label={t('Utilisation de {code}', { code: p.code })} /></div></Td>

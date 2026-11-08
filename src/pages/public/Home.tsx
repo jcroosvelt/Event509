@@ -62,7 +62,7 @@ export default function Home() {
             <Link to="/billets" className="flex items-center gap-4 rounded-3xl bg-brand-100 p-5 transition hover:bg-brand-200/70 sm:p-7">
               <div className="min-w-0 flex-1">
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium text-ink-soft">
-                  <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-surface/70"><Zap className="h-3.5 w-3.5 text-brand" /></span>
+                  <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-surface/70"><Zap className="h-3.5 w-3.5 text-brand-ink" /></span>
                   {t('Votre prochain événement')}
                 </div>
                 <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">{nextTicket.title}</h2>
@@ -80,7 +80,7 @@ export default function Home() {
           ) : (
             <div className="rounded-3xl bg-brand-100 p-6 sm:p-8">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium text-ink-soft">
-                <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-surface/70"><Zap className="h-3.5 w-3.5 text-brand" /></span>
+                <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-surface/70"><Zap className="h-3.5 w-3.5 text-brand-ink" /></span>
                 {t('Cette semaine')}
               </div>
               <p className="max-w-lg text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl">{t('Découvrez les événements près de chez vous')}</p>
@@ -131,7 +131,7 @@ export default function Home() {
           </section>
 
           <section aria-labelledby="h-feat">
-            <SectionHeader id="h-feat" title={t('À la une')} action={<Link to="/explorer?sort=popular" className="flex items-center gap-1 text-sm font-semibold text-brand">{t('Tout voir')} <ArrowRight className="h-4 w-4" aria-hidden /></Link>} />
+            <SectionHeader id="h-feat" title={t('À la une')} action={<Link to="/explorer?sort=popular" className="flex items-center gap-1 text-sm font-semibold text-brand-ink">{t('Tout voir')} <ArrowRight className="h-4 w-4" aria-hidden /></Link>} />
             <div className="no-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0">
               {loading
                 ? [0, 1].map((i) => <Skeleton key={i} className="h-72 w-72 shrink-0 sm:w-auto" />)
@@ -159,7 +159,7 @@ export default function Home() {
       </div>
 
       <section aria-labelledby="h-reco" className="mt-10">
-        <SectionHeader id="h-reco" title={t('Recommandés pour vous')} action={<Link to="/explorer" className="flex items-center gap-1 text-sm font-semibold text-brand">{t('Tout voir')} <ArrowRight className="h-4 w-4" aria-hidden /></Link>} />
+        <SectionHeader id="h-reco" title={t('Recommandés pour vous')} action={<Link to="/explorer" className="flex items-center gap-1 text-sm font-semibold text-brand-ink">{t('Tout voir')} <ArrowRight className="h-4 w-4" aria-hidden /></Link>} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {loading ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-72" />) : popular.map((e) => <EventCard key={e.id} event={e} />)}
         </div>

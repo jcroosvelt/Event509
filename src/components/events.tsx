@@ -109,7 +109,7 @@ export function EventCard({ event, className }: { event: EventItem; className?: 
           <span className="line-clamp-1">{event.venue ? `${event.venue.name}, ${event.venue.city}` : event.online?.platform}</span>
         </p>
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-sm font-bold text-brand">{price}</span>
+          <span className="text-sm font-bold text-brand-ink">{price}</span>
           <span className="text-xs text-ink-muted"><span className="sr-only">{d.day} {d.month}, </span>{time(event.start, lang)}</span>
         </div>
       </div>

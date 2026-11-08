@@ -13,6 +13,7 @@
   --contrast: 11 21 51;
   --on-contrast: 255 255 255;
   --brand: 31 94 255;
+  --brand-ink: 26 80 219; /* texte bleu : 6:1 sur blanc */
   --brand-dark: 15 68 214;
   --brand-50: 238 243 255;
   --brand-100: 220 231 255;
@@ -33,7 +34,8 @@
   --line: 37 48 85;
   --contrast: 232 236 247;
   --on-contrast: 11 21 51;
-  --brand: 77 125 255;
+  --brand: 47 98 240; /* fond bleu : 5:1 avec texte blanc */
+  --brand-ink: 138 170 255; /* texte bleu : 7:1 sur surface sombre */
   --brand-dark: 110 150 255;
   --brand-50: 23 36 71;
   --brand-100: 28 43 87;
@@ -54,6 +56,11 @@
   }
   ::selection {
     @apply bg-brand-200;
+  }
+  /* Une cellule de grille ne doit jamais s'élargir au-delà de sa colonne (tableaux,
+     plan de salle, longs codes) : le contenu large défile dans son propre conteneur. */
+  .grid > * {
+    min-width: 0;
   }
   :focus-visible {
     outline: 2px solid rgb(var(--brand));
@@ -92,6 +99,10 @@
 .dark .bg-sky-50 { background-color: rgb(14 165 233 / 0.14); }
 .dark .bg-violet-200 { background-color: rgb(139 92 246 / 0.35); }
 .dark .text-emerald-700, .dark .text-emerald-600 { color: rgb(52 211 153); }
+.dark .text-orange-700, .dark .text-orange-600 { color: rgb(251 146 60); }
+.dark .text-rose-700 { color: rgb(251 113 133); }
+.dark .text-red-700 { color: rgb(248 113 113); }
+.dark .hover\:bg-red-100:hover { background-color: rgb(244 63 94 / 0.22); }
 .dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-600 { color: rgb(251 191 36); }
 .dark .text-red-600 { color: rgb(248 113 113); }
 .dark .text-violet-600 { color: rgb(167 139 250); }

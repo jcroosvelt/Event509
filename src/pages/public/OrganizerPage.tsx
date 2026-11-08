@@ -34,7 +34,7 @@ export default function OrganizerPage() {
           <Avatar name={org.avatar} size={88} className="-mt-14 ring-4 ring-surface" />
           <div className="min-w-0 flex-1">
             <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
-              {org.name} {org.verified && <BadgeCheck className="h-6 w-6 text-brand" aria-label={t('Organisateur vérifié')} />}
+              {org.name} {org.verified && <BadgeCheck className="h-6 w-6 text-brand-ink" aria-label={t('Organisateur vérifié')} />}
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
               <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden /> {org.city}</span>
@@ -59,7 +59,7 @@ export default function OrganizerPage() {
         {org.bio && <p className="mt-4 text-ink-soft">{org.bio}</p>}
         {(org.website || org.instagram) && (
           <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
-            {org.website && <a href={org.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-brand"><Globe className="h-4 w-4" aria-hidden /> {org.website.replace(/^https?:\/\//, '')}</a>}
+            {org.website && <a href={org.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-brand-ink"><Globe className="h-4 w-4" aria-hidden /> {org.website.replace(/^https?:\/\//, '')}</a>}
             {org.instagram && <span className="flex items-center gap-1.5 text-ink-soft"><Instagram className="h-4 w-4" aria-hidden /> {org.instagram}</span>}
           </div>
         )}

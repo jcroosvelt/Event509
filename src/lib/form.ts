@@ -7,7 +7,8 @@ export type Rule<V> = (value: V[keyof V], all: V) => string | undefined | false;
  * Formulaire avec validation « au bon moment » :
  * - aucun message tant que le champ n'a pas été quitté une première fois ;
  * - validation à la sortie du champ ;
- * - l'erreur disparaît dès que l'utilisateur revient corriger ;
+ * - l'erreur disparaît à la première frappe corrective (pas au simple focus, pour qu'elle
+ *   reste lisible quand l'envoi place le curseur sur le champ en erreur) ;
  * - à l'envoi, tous les champs sont vérifiés et le premier en erreur reçoit le focus.
  * Le bouton d'envoi n'est jamais désactivé.
  */
@@ -40,7 +41,6 @@ export function useForm<V extends Record<string, unknown>>(initial: V, rules: Pa
       refs.current.set(name, el);
     },
     onChange: (e: { target: { value: string } }) => set(name, e.target.value as V[K]),
-    onFocus: () => setErrors((e) => (e[name] ? { ...e, [name]: undefined } : e)),
     onBlur: () => {
       touched.current.add(name);
       check(name, values);

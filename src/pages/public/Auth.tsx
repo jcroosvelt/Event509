@@ -75,7 +75,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
         <img src="/logo-mark.png" alt="" className="h-14 w-auto self-start brightness-[1.8] contrast-75" />
         <div>
           <p className="text-4xl font-extrabold leading-tight tracking-tight">
-            {t('Découvrez des événements.')}<br />{t('Obtenez votre billet.')}<br /><span className="text-brand-300">{t('Soyez là.')}</span>
+            {t('Découvrez des événements.')}<br />{t('Obtenez votre billet.')}<br /><span className="text-[#93B3FF]">{t('Soyez là.')}</span>
           </p>
           <p className="mt-4 text-white/70">{t('Vos billets QR dans l’app, par email et sur WhatsApp. Paiement MonCash, NatCash, carte ou PayPal.')}</p>
         </div>
@@ -85,7 +85,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
         <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte') : t('Bon retour !')}</h1>
         <p className="mt-1 text-sm text-ink-soft">
           {signup ? t('Déjà inscrit ?') : t('Pas encore de compte ?')}{' '}
-          <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
+          <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand-ink">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
         </p>
 
         <Button variant="outline" size="lg" className="mt-6 w-full" onClick={() => done()} loading={loading}>
@@ -132,7 +132,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
               <Field label={t('Mot de passe')} error={form.errors.password} hint={signup ? t('8 caractères minimum') : undefined} required>
                 <Input type="password" autoComplete={signup ? 'new-password' : 'current-password'} {...form.bind('password')} />
               </Field>
-              {!signup && <Link to="/mot-de-passe-oublie" className="inline-block text-sm font-semibold text-brand">{t('Mot de passe oublié ?')}</Link>}
+              {!signup && <Link to="/mot-de-passe-oublie" className="inline-block text-sm font-semibold text-brand-ink">{t('Mot de passe oublié ?')}</Link>}
             </>
           ) : (
             <>

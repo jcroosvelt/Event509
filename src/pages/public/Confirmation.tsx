@@ -22,14 +22,14 @@ export default function Confirmation() {
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold">{t('Commande introuvable')}</h1>
-        <Link to="/billets" className="mt-4 inline-block font-semibold text-brand">{t('Voir mes billets')}</Link>
+        <Link to="/billets" className="mt-4 inline-block font-semibold text-brand-ink">{t('Voir mes billets')}</Link>
       </div>
     );
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-10 sm:px-6">
       <div className="mb-8 text-center" role="status">
-        <div aria-hidden className={`mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full ${pending ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand'}`}>
+        <div aria-hidden className={`mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full ${pending ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-ink'}`}>
           {pending ? <Clock className="h-10 w-10" /> : <CheckCircle2 className="h-10 w-10" />}
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight">{pending ? t('Commande en attente') : t('C’est confirmé !')}</h1>
@@ -43,7 +43,7 @@ export default function Confirmation() {
       <Card className="mb-6">
         <h2 className="mb-3 text-sm font-bold">{t('Billets envoyés')}</h2>
         <ul className="grid gap-2 sm:grid-cols-3">
-          {delivery.email && <li className="flex min-w-0 items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><Mail className="h-4 w-4 shrink-0 text-brand" aria-hidden /> <span className="truncate">{order.buyerEmail}</span></li>}
+          {delivery.email && <li className="flex min-w-0 items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><Mail className="h-4 w-4 shrink-0 text-brand-ink" aria-hidden /> <span className="truncate">{order.buyerEmail}</span></li>}
           {delivery.whatsapp && <li className="flex items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><MessageCircle className="h-4 w-4 text-emerald-600" aria-hidden /> WhatsApp</li>}
           {delivery.app && <li className="flex items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><Smartphone className="h-4 w-4 text-ink" aria-hidden /> {t('Portefeuille de l’app')}</li>}
         </ul>

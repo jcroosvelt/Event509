@@ -63,7 +63,7 @@ export default function Affiliates() {
               <tr key={a.id}>
                 <Td><span className="flex items-center gap-3"><Avatar name={a.name} size={34} /><b>{a.name}</b></span></Td>
                 <Td>
-                  <button type="button" className="flex items-center gap-2 font-mono text-xs font-bold text-brand" aria-label={t('Copier le lien de {name}', { name: a.name })} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/?ref=${a.code}`).then(() => toast(t('Lien copié')))}>
+                  <button type="button" className="flex items-center gap-2 font-mono text-xs font-bold text-brand-ink" aria-label={t('Copier le lien de {name}', { name: a.name })} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/?ref=${a.code}`).then(() => toast(t('Lien copié')))}>
                     {a.code} <Copy className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 </Td>

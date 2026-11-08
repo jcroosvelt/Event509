@@ -164,6 +164,7 @@ export default function CheckIn() {
 
   const inCount = list.filter((a) => a.checkedIn).length;
   const demo = (kind: 'valid' | 'used' | 'fake') => {
+    if (!list.length) return toast(t('La liste des participants se charge, réessayez dans un instant'), 'info');
     const pick = kind === 'valid' ? list.find((a) => !a.checkedIn) : list.find((a) => a.checkedIn);
     handle(kind === 'fake' ? 'E509-FAKE-0000' : pick?.code ?? 'E509-NONE-0000');
   };
@@ -220,7 +221,6 @@ export default function CheckIn() {
                 <button
                   type="button"
                   onClick={() => setResult(null)}
-                  role="alert"
                   className={cx('absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-white', result.ok ? 'bg-emerald-600/95' : result.reason === 'used' ? 'bg-amber-600/95' : 'bg-red-600/95')}
                 >
                   {result.ok ? <CheckCircle2 className="h-20 w-20" aria-hidden /> : <XCircle className="h-20 w-20" aria-hidden />}
@@ -235,6 +235,9 @@ export default function CheckIn() {
               )}
             </div>
 
+            <p className="sr-only" role="status" aria-live="assertive">
+              {result && (result.ok ? `${t('Entrée validée')} : ${result.attendee.name}` : `${reasonText[result.reason]}${result.attendee ? ` : ${result.attendee.name}` : ''}`)}
+            </p>
             <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (manual.trim()) { handle(manual); setManual(''); } }}>
               <div className="flex-1">
                 <label htmlFor="manual-code" className="sr-only">{t('Code du billet')}</label>
