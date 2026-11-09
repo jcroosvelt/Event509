@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
+import { becomeOrganizer, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
 import { translate, type Vars } from '@/lib/i18n';
 import type { AppUser, Currency, IssuedTicket, Lang, NotificationItem, Order } from '@/types';
 
@@ -64,6 +65,8 @@ interface AppState {
   user: AppUser | null;
   /** Connexion de démo : par identifiant d'utilisateur ou par rôle. */
   login: (who?: string) => AppUser;
+  /** Mode API : ouvre la session renvoyée par le serveur et charge billets et commandes. */
+  startSession: (s: Session_) => Promise<void>;
   logout: () => void;
   updateUser: (patch: Partial<AppUser>) => void;
 
@@ -102,13 +105,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = usePersisted<Lang>('e509.lang', navigator.language?.startsWith('en') ? 'en' : 'fr');
   const [currency, setCurrency] = usePersisted<Currency>('e509.currency', 'HTG');
   const [theme, setTheme] = usePersisted<Theme>('e509.theme', 'system');
-  const [user, setUser] = usePersisted<AppUser | null>('e509.user', db.users[0]);
-  const [favorites, setFavorites] = usePersisted<string[]>('e509.favs', ['e2', 'e4']);
-  const [reminders, setReminders] = usePersisted<string[]>('e509.reminders', ['e2']);
-  const [follows, setFollows] = usePersisted<string[]>('e509.follows', ['org2']);
-  const [tickets, setTickets] = usePersisted<IssuedTicket[]>('e509.tickets', db.myTickets);
-  const [orders, setOrders] = usePersisted<Order[]>('e509.orders', db.myOrders);
-  const [notifications, setNotifications] = usePersisted<NotificationItem[]>('e509.notifs', db.notifications);
+  const [user, setUser] = usePersisted<AppUser | null>('e509.user', DEMO ? db.users[0] : null);
+  const [favorites, setFavorites] = usePersisted<string[]>('e509.favs', DEMO ? ['e2', 'e4'] : []);
+  const [reminders, setReminders] = usePersisted<string[]>('e509.reminders', DEMO ? ['e2'] : []);
+  const [follows, setFollows] = usePersisted<string[]>('e509.follows', DEMO ? ['org2'] : []);
+  const [tickets, setTickets] = usePersisted<IssuedTicket[]>('e509.tickets', DEMO ? db.myTickets : []);
+  const [orders, setOrders] = usePersisted<Order[]>('e509.orders', DEMO ? db.myOrders : []);
+  const [notifications, setNotifications] = usePersisted<NotificationItem[]>('e509.notifs', DEMO ? db.notifications : []);
   const [offlineScans, setOfflineScansRaw] = usePersisted<OfflineScan[]>('e509.offline', []);
   const [referral, setReferral] = usePersisted<Referral | null>('e509.ref', null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -170,15 +173,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [setUser],
   );
 
+  /** Mode API : profil, billets et commandes à jour depuis le serveur. */
+  const sync = useCallback(async () => {
+    if (DEMO) return;
+    try {
+      const [me, tk, od] = await Promise.all([fetchMe(), fetchMyTickets(), fetchMyOrders()]);
+      persist('e509.user', me);
+      setUser(me);
+      setTickets(tk);
+      setOrders(od);
+    } catch {
+      /* hors ligne : on garde la copie locale ; une session expirée déclenche la déconnexion */
+    }
+  }, [setUser, setTickets, setOrders]);
+
+  const startSession = useCallback(
+    async (s: Session_) => {
+      try {
+        localStorage.setItem('e509.token', s.token);
+      } catch {
+        /* ignore */
+      }
+      persist('e509.user', s.user);
+      setUser(s.user);
+      await Promise.all([sync(), refreshCatalog()]);
+    },
+    [setUser, sync],
+  );
+
+  useEffect(() => {
+    if (!DEMO && user) void sync();
+    // Une seule fois au démarrage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const logout = useCallback(() => {
     persist('e509.user', null);
     setUser(null);
+    if (!DEMO) {
+      // Les billets et commandes appartiennent au compte : on ne les laisse pas sur l'appareil
+      setTickets([]);
+      setOrders([]);
+      void refreshCatalog();
+    }
     try {
       localStorage.removeItem('e509.token');
     } catch {
       /* ignore */
     }
-  }, [setUser]);
+  }, [setUser, setTickets, setOrders]);
 
   const toggle = (set: (fn: (s: string[]) => string[]) => void) => (id: string) =>
     set((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
@@ -186,8 +229,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       lang, setLang, t, currency, setCurrency, theme, setTheme,
-      user, login, logout,
-      updateUser: (patch) => setUser((u) => (u ? { ...u, ...patch } : u)),
+      user, login, startSession, logout,
+      updateUser: (patch) => {
+        setUser((u) => (u ? { ...u, ...patch } : u));
+        if (DEMO) return;
+        const save = patch.role === 'organizer' ? becomeOrganizer() : updateProfile({ name: patch.name, phone: patch.phone, city: patch.city });
+        save
+          .then((u) => {
+            setUser(u);
+            persist('e509.user', u);
+            return refreshCatalog();
+          })
+          .catch(() => toast(translate(lang, 'L’enregistrement a échoué. Réessayez.'), 'error'));
+      },
       favorites, toggleFavorite: toggle(setFavorites),
       reminders, toggleReminder: toggle(setReminders),
       follows, toggleFollow: toggle(setFollows),
@@ -206,7 +260,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toasts, toast, dismissToast,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lang, t, currency, theme, user, login, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
+    [lang, t, currency, theme, user, login, startSession, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

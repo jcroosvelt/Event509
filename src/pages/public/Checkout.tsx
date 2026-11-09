@@ -197,7 +197,7 @@ export default function Checkout() {
               <SeatMap
                 config={map}
                 tickets={ev.tickets}
-                taken={takenSeats(ev)}
+                taken={takenSeats(ev, occ ?? '')}
                 selected={seats[currentLine] ?? []}
                 activeTicketId={currentLine}
                 max={needed(currentLine)}

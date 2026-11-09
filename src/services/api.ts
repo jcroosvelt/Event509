@@ -7,7 +7,7 @@
  */
 import * as db from '@/data/mock';
 import type {
-  Ambassador, AppUser, Attendee, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
+  Ambassador, AppUser, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
   PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
 import { ticketCode, uid, USD_TO_HTG } from '@/lib/format';
@@ -52,6 +52,108 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
   return res.status === 204 ? (undefined as T) : (res.json() as Promise<T>);
 }
 
+// ---------- Mode API : cache local et session ----------
+
+/** Paramètre ?org= : seul un administrateur peut agir sur une autre organisation (vérifié côté serveur). */
+const orgQ = (orgId?: string) => (orgId ? `?org=${encodeURIComponent(orgId)}` : '');
+
+/** Remplace le contenu d'un tableau du cache sans changer sa référence (les écrans le lisent directement). */
+function replaceAll<T>(target: T[], items: T[]) {
+  target.splice(0, target.length, ...items);
+}
+function cacheEvent(e: EventItem) {
+  const i = db.events.findIndex((x) => x.id === e.id);
+  if (i >= 0) db.events[i] = e;
+  else db.events.unshift(e);
+  return clone(e);
+}
+function cacheEvents(list: EventItem[]) {
+  for (const e of list) cacheEvent(e);
+  return clone(list);
+}
+function patchCachedEvent(id: string, patch: Partial<EventItem>) {
+  const e = db.events.find((x) => x.id === id);
+  if (e) Object.assign(e, patch);
+}
+function cacheOrganizer(o: Organizer) {
+  const i = db.organizers.findIndex((x) => x.id === o.id);
+  if (i >= 0) db.organizers[i] = o;
+  else db.organizers.push(o);
+  return clone(o);
+}
+function replaceCommission(c: { organizerId: string; rate?: number; reason?: string }) {
+  const rest = db.customCommissions.filter((x) => x.organizerId !== c.organizerId);
+  replaceAll(db.customCommissions, c.rate == null ? rest : [...rest, { organizerId: c.organizerId, rate: c.rate, reason: c.reason ?? '' }]);
+}
+
+interface Bootstrap {
+  events: EventItem[];
+  organizers: Organizer[];
+  ambassadors: Pick<Ambassador, 'id' | 'name' | 'code' | 'commission'>[];
+  fees: FeeSettings;
+  customCommissions: { organizerId: string; rate: number; reason: string }[];
+}
+const BOOT_KEY = 'e509.cache.bootstrap';
+
+function applyBootstrap(b: Bootstrap) {
+  replaceAll(db.events, b.events);
+  replaceAll(db.organizers, b.organizers);
+  replaceAll(db.ambassadors, b.ambassadors.map((a) => ({ clicks: 0, sales: 0, revenue: 0, ...a })));
+  replaceAll(db.customCommissions, b.customCommissions);
+  Object.assign(feeSettings, b.fees);
+  // Données propres à la démo : vides tant que le serveur ne les a pas fournies
+  for (const list of [db.myTickets, db.myOrders, db.notifications, db.attendees, db.resaleListings, db.promoCodes, db.team, db.refunds, db.payouts, db.campaigns, db.users, db.disputes, db.reports, db.verificationRequests, db.auditLog, db.platformTargets, db.platformOrders] as unknown[][])
+    list.length = 0;
+}
+
+/**
+ * Charge le catalogue (événements, organisateurs, réglages de frais) avant le premier affichage.
+ * Hors ligne, la dernière copie enregistrée est utilisée.
+ */
+export async function hydrate() {
+  if (DEMO) return;
+  try {
+    const b = await http<Bootstrap>('/bootstrap');
+    applyBootstrap(b);
+    writeLocal(BOOT_KEY, b);
+  } catch (e) {
+    const cached = readLocal<Bootstrap>(BOOT_KEY);
+    if (!cached) throw e;
+    applyBootstrap(cached);
+  }
+}
+
+/** Recharge le catalogue (par exemple après connexion, pour voir les brouillons de son organisation). */
+export async function refreshCatalog() {
+  if (!DEMO) await hydrate().catch(() => {});
+}
+
+export interface Session_ {
+  token: string;
+  user: AppUser;
+}
+export function signIn(email: string, password: string) {
+  return http<Session_>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+export function signUp(input: { name: string; email: string; password: string; organizer: boolean }) {
+  return http<Session_>('/auth/signup', { method: 'POST', body: JSON.stringify(input) });
+}
+export function fetchMe() {
+  return http<AppUser>('/auth/me');
+}
+export function updateProfile(patch: Partial<Pick<AppUser, 'name' | 'phone' | 'city'>>) {
+  return http<AppUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(patch) });
+}
+export function becomeOrganizer() {
+  return http<AppUser>('/auth/organizer', { method: 'POST' });
+}
+export function fetchMyTickets() {
+  return http<IssuedTicket[]>('/me/tickets');
+}
+export function fetchMyOrders() {
+  return http<Order[]>('/me/orders');
+}
+
 // ---------- Événements ----------
 
 export interface EventFilters {
@@ -70,7 +172,8 @@ export function minPrice(e: EventItem) {
 }
 
 export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
-  await wait();
+  // En mode API, le catalogue public est chargé au démarrage (hydrate) puis filtré ici
+  if (DEMO) await wait();
   const now = new Date();
   let list = db.events.filter((e) => e.status === 'published');
   if (f.q) {
@@ -101,6 +204,7 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
 }
 
 export async function getEvent(idOrSlug: string) {
+  if (!DEMO) return http<EventItem>(`/events/${encodeURIComponent(idOrSlug)}`).catch((e) => (e instanceof ApiError && e.status === 404 ? null : Promise.reject(e)));
   await wait(150);
   const e = db.events.find((x) => x.id === idOrSlug || x.slug === idOrSlug);
   return e ? clone(e) : null;
@@ -119,6 +223,7 @@ export async function getOrganizerPage(slug: string) {
 }
 
 export async function saveOrganizer(id: string, patch: Partial<Organizer>) {
+  if (!DEMO) return cacheOrganizer(await http<Organizer>('/org/profile', { method: 'PUT', body: JSON.stringify(patch) }));
   await wait(300);
   const o = db.organizers.find((x) => x.id === id);
   if (o) Object.assign(o, patch);
@@ -143,11 +248,13 @@ export function occurrences(e: EventItem): { id: string; label: string; start: s
 }
 
 export async function listOrganizerEvents(orgId = 'org1') {
+  if (!DEMO) return http<EventItem[]>(`/org/events${orgQ(orgId)}`);
   await wait();
   return clone(db.events.filter((e) => e.organizerId === orgId));
 }
 
 export async function saveEvent(e: EventItem) {
+  if (!DEMO) return cacheEvent(await http<EventItem>('/org/events', { method: 'PUT', body: JSON.stringify(e) }));
   await wait(500);
   const i = db.events.findIndex((x) => x.id === e.id);
   if (i >= 0) db.events[i] = clone(e);
@@ -156,6 +263,10 @@ export async function saveEvent(e: EventItem) {
 }
 
 export async function setEventStatus(id: string, status: EventItem['status']) {
+  if (!DEMO) {
+    await http(`/org/events/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+    return patchCachedEvent(id, { status });
+  }
   await wait(200);
   const e = db.events.find((x) => x.id === id);
   if (e) e.status = status;
@@ -178,6 +289,11 @@ export interface CheckoutInput {
 }
 
 export async function createOrder(input: CheckoutInput): Promise<{ order: Order; tickets: IssuedTicket[] }> {
+  if (!DEMO)
+    return http('/orders', {
+      method: 'POST',
+      body: JSON.stringify({ eventId: input.eventId, items: input.items, promoCode: input.promo?.code, method: input.method, currency: input.currency, buyer: input.buyer, sessionLabel: input.sessionLabel, referral: input.referral }),
+    });
   await wait(1200); // simulation passerelle de paiement
   const ev = db.events.find((e) => e.id === input.eventId)!;
   const order: Order = {
@@ -227,6 +343,7 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
 }
 
 export async function validatePromo(code: string, eventId: string): Promise<PromoCode | null> {
+  if (!DEMO) return http<PromoCode | null>('/promo/validate', { method: 'POST', body: JSON.stringify({ code, eventId }) });
   await wait(300);
   const p = db.promoCodes.find((x) => x.code.toUpperCase() === code.trim().toUpperCase());
   if (!p || !p.active || p.used >= p.limit || new Date(p.expiresAt) < new Date()) return null;
@@ -243,9 +360,14 @@ export function seatMapOf(e: EventItem): SeatMapConfig {
 }
 
 /** Places déjà vendues (déterministe pour la démo ; le backend renverra l'état réel). */
-export function takenSeats(e: EventItem): Set<string> {
+export function takenSeats(e: EventItem & { taken?: Record<string, string[]> }, session = ''): Set<string> {
   const map = seatMapOf(e);
   const s = new Set<string>(map.blocked);
+  // Mode API : places réellement vendues, renvoyées par le serveur avec l'événement
+  if (e.taken) {
+    for (const seat of e.taken[session] ?? []) s.add(seat);
+    return s;
+  }
   const seed = e.id.charCodeAt(1);
   for (let ri = 0; ri < map.rows; ri++)
     for (let c = 1; c <= map.cols; c++) if ((ri * 17 + c * seed) % 5 === 0 || (ri < 2 && c % 4 === 0)) s.add(`${rowLetter(ri)}-${c}`);
@@ -255,6 +377,7 @@ export function takenSeats(e: EventItem): Set<string> {
 // ---------- Participants : billets, revente, remboursements ----------
 
 export async function requestRefund(order: Order, reason: string) {
+  if (!DEMO) return http<NonNullable<Order['refundRequest']>>(`/orders/${order.id}/refund`, { method: 'POST', body: JSON.stringify({ reason }) });
   await wait(400);
   const ev = db.events.find((e) => e.id === order.eventId);
   db.refunds.unshift({
@@ -265,28 +388,33 @@ export async function requestRefund(order: Order, reason: string) {
 }
 
 export async function transferTicket(ticketId: string, to: string) {
+  if (!DEMO) return http<{ ticketId: string; to: string; newCode: string }>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: JSON.stringify({ to }) });
   await wait(500);
   if (!to.trim()) throw new ApiError(422, 'Destinataire manquant');
   return { ticketId, to, newCode: ticketCode() };
 }
 
 export async function listForResale(ticket: IssuedTicket, price: number) {
+  if (!DEMO) return void (await http(`/tickets/${ticket.id}/resale`, { method: 'POST', body: JSON.stringify({ price }) }));
   await wait(300);
   db.resaleListings.unshift({ ...clone(ticket), status: 'resale', resalePrice: price });
 }
 
 export async function cancelResale(ticketCode_: string) {
+  if (!DEMO) return void (await http(`/resale/code/${encodeURIComponent(ticketCode_)}`, { method: 'DELETE' }));
   await wait(200);
   const i = db.resaleListings.findIndex((x) => x.code === ticketCode_);
   if (i >= 0) db.resaleListings.splice(i, 1);
 }
 
 export async function listResale(eventId?: string) {
+  if (!DEMO) return http<IssuedTicket[]>(`/resale${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`);
   await wait();
   return clone(db.resaleListings.filter((x) => !eventId || x.eventId === eventId));
 }
 
 export async function buyResale(listingId: string, buyer: { name: string; email: string }) {
+  if (!DEMO) return http<IssuedTicket>(`/resale/${listingId}/buy`, { method: 'POST', body: JSON.stringify(buyer) });
   await wait(1000);
   const i = db.resaleListings.findIndex((x) => x.id === listingId);
   if (i < 0) throw new ApiError(410, 'Ce billet vient d’être vendu');
@@ -301,21 +429,25 @@ export async function buyResale(listingId: string, buyer: { name: string; email:
 // ---------- Compte ----------
 
 export async function changePassword(current: string, next: string) {
+  if (!DEMO) return void (await http('/auth/password', { method: 'POST', body: JSON.stringify({ current, next }) }));
   await wait(500);
   if (current.length < 1) throw new ApiError(422, 'Mot de passe actuel requis');
   if (next.length < 8) throw new ApiError(422, 'Mot de passe trop court');
 }
 
 export async function deleteAccount() {
+  if (!DEMO) return void (await http('/auth/me', { method: 'DELETE' }));
   await wait(600);
 }
 
 export async function requestPasswordReset(email: string) {
+  if (!DEMO) throw new ApiError(501, 'La réinitialisation par email n’est pas encore disponible. Écrivez au support.');
   await wait(500);
   return { sentTo: email };
 }
 
 export async function resetPassword(token: string, password: string) {
+  if (!DEMO) throw new ApiError(501, 'La réinitialisation par email n’est pas encore disponible. Écrivez au support.');
   await wait(500);
   if (!token) throw new ApiError(400, 'Lien invalide ou expiré');
   if (password.length < 8) throw new ApiError(422, 'Mot de passe trop court');
@@ -324,20 +456,29 @@ export async function resetPassword(token: string, password: string) {
 // ---------- Organisateur ----------
 
 export async function listAttendees(eventId?: string): Promise<Attendee[]> {
+  if (!DEMO) return http<Attendee[]>(`/org/attendees${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`);
   await wait();
   return clone(db.attendees.filter((a) => !eventId || a.eventId === eventId));
 }
 
-export async function listPromoCodes() { await wait(); return clone(db.promoCodes); }
+export async function listPromoCodes() {
+  if (!DEMO) return http<PromoCode[]>('/org/promos');
+  await wait(); return clone(db.promoCodes);
+}
 export async function savePromo(p: PromoCode) {
+  if (!DEMO) return void (await http('/org/promos', { method: 'PUT', body: JSON.stringify(p) }));
   await wait(200);
   if (db.promoCodes.some((x) => x.code === p.code && x.id !== p.id)) throw new ApiError(409, 'Ce code existe déjà');
   const i = db.promoCodes.findIndex((x) => x.id === p.id);
   if (i >= 0) db.promoCodes[i] = p; else db.promoCodes.unshift(p);
 }
 
-export async function listTeam() { await wait(); return clone(db.team); }
+export async function listTeam() {
+  if (!DEMO) return http<TeamMember[]>('/org/team');
+  await wait(); return clone(db.team);
+}
 export async function inviteMember(m: Omit<TeamMember, 'id' | 'status'>) {
+  if (!DEMO) return http<TeamMember>('/org/team', { method: 'POST', body: JSON.stringify(m) });
   await wait(300);
   if (db.team.some((x) => x.email.toLowerCase() === m.email.toLowerCase())) throw new ApiError(409, 'Déjà membre');
   const n: TeamMember = { ...m, id: uid('m'), status: 'invited' };
@@ -345,28 +486,38 @@ export async function inviteMember(m: Omit<TeamMember, 'id' | 'status'>) {
   return n;
 }
 export async function updateMember(id: string, patch: Partial<TeamMember>) {
+  if (!DEMO) return void (await http(`/org/team/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }));
   await wait(200);
   const m = db.team.find((x) => x.id === id);
   if (m) Object.assign(m, patch);
 }
 export async function removeMember(id: string) {
+  if (!DEMO) return void (await http(`/org/team/${id}`, { method: 'DELETE' }));
   await wait(200);
   const i = db.team.findIndex((x) => x.id === id);
   if (i >= 0) db.team.splice(i, 1);
 }
 
-export async function listRefunds() { await wait(); return clone(db.refunds); }
+export async function listRefunds() {
+  if (!DEMO) return http<RefundRequest[]>('/org/refunds');
+  await wait(); return clone(db.refunds);
+}
 export async function decideRefund(id: string, status: RefundRequest['status']) {
+  if (!DEMO) return void (await http(`/org/refunds/${id}`, { method: 'POST', body: JSON.stringify({ status }) }));
   await wait(300);
   const r = db.refunds.find((x) => x.id === id);
   if (r) r.status = status;
 }
 
-export async function listPayouts(orgId: string) { await wait(); return clone(db.payouts.filter((p) => p.organizerId === orgId)); }
+export async function listPayouts(orgId: string) {
+  if (!DEMO) return http<Payout[]>(`/org/payouts${orgQ(orgId)}`);
+  await wait(); return clone(db.payouts.filter((p) => p.organizerId === orgId));
+}
 
 /** Solde de l'organisateur calculé à partir des ventes, commissions, remboursements et versements. */
 /** Solde de l'organisateur : ventes, commission (taux réel), remboursements et versements. */
 export async function getBalance(orgId: string) {
+  if (!DEMO) return http<never>(`/org/balance${orgQ(orgId)}`);
   await wait();
   const evs = db.events.filter((e) => e.organizerId === orgId);
   const rate = feeRateFor(orgId);
@@ -383,6 +534,7 @@ export async function getBalance(orgId: string) {
 }
 
 export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method']) {
+  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method }) });
   await wait(500);
   // La demande attend la validation de l'administration
   const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
@@ -390,16 +542,33 @@ export async function requestPayout(orgId: string, amount: number, currency: Cur
   return clone(p);
 }
 
-export async function listCampaigns() { await wait(); return clone(db.campaigns); }
+export interface OrgSales {
+  week: { date: string; tickets: number; revenue: number }[];
+  recent: { id: string; who: string; type: string; qty: number; amount: number }[];
+}
+/** Mode serveur : ventes réelles des 7 derniers jours et dernières commandes. */
+export function orgSales(orgId: string) {
+  return http<OrgSales>(`/org/sales${orgQ(orgId)}`);
+}
+
+export async function listCampaigns() {
+  if (!DEMO) return http<Campaign[]>('/org/campaigns');
+  await wait(); return clone(db.campaigns);
+}
 export async function saveCampaign(c: Campaign) {
+  if (!DEMO) return http<Campaign>('/org/campaigns', { method: 'PUT', body: JSON.stringify(c) });
   await wait(400);
   const i = db.campaigns.findIndex((x) => x.id === c.id);
   if (i >= 0) db.campaigns[i] = c; else db.campaigns.unshift(c);
   return clone(c);
 }
 
-export async function listAmbassadors() { await wait(); return clone(db.ambassadors); }
+export async function listAmbassadors() {
+  if (!DEMO) return http<Ambassador[]>('/org/ambassadors');
+  await wait(); return clone(db.ambassadors);
+}
 export async function saveAmbassador(a: Ambassador) {
+  if (!DEMO) return void (await http('/org/ambassadors', { method: 'PUT', body: JSON.stringify(a) }));
   await wait(300);
   if (db.ambassadors.some((x) => x.code === a.code && x.id !== a.id)) throw new ApiError(409, 'Code déjà utilisé');
   const i = db.ambassadors.findIndex((x) => x.id === a.id);
@@ -408,6 +577,7 @@ export async function saveAmbassador(a: Ambassador) {
 
 /** Statistiques détaillées d'un événement. */
 export async function eventStats(eventId: string) {
+  if (!DEMO) return http<never>(`/org/events/${eventId}/stats${orgQ(db.events.find((e) => e.id === eventId)?.organizerId)}`).catch(() => null);
   await wait();
   const e = db.events.find((x) => x.id === eventId);
   if (!e) return null;
@@ -436,6 +606,7 @@ export async function eventStats(eventId: string) {
 
 /** Validation d'un billet au check-in. Le backend vérifiera la signature et l'usage unique. */
 export async function verifyTicket(code: string, eventId?: string) {
+  if (!DEMO) return http<never>('/org/checkin', { method: 'POST', body: JSON.stringify({ code, eventId }) });
   await wait(150);
   const a = db.attendees.find((x) => x.code === code);
   if (!a) return { ok: false as const, reason: 'unknown' as const };
@@ -466,8 +637,8 @@ function writeLocal(k: string, v: unknown) {
   }
 }
 // En démo, les réglages survivent au rechargement (le backend les stockera)
-const feeSettings: FeeSettings = { ...DEFAULT_FEES, ...db.platformSettings.fees, ...(readLocal<FeeSettings>(FEES_KEY) ?? {}) };
-const storedCustom = readLocal<typeof db.customCommissions>(CUSTOM_KEY);
+const feeSettings: FeeSettings = { ...DEFAULT_FEES, ...db.platformSettings.fees, ...((DEMO && readLocal<FeeSettings>(FEES_KEY)) || {}) };
+const storedCustom = DEMO ? readLocal<typeof db.customCommissions>(CUSTOM_KEY) : null;
 if (storedCustom) db.customCommissions.splice(0, db.customCommissions.length, ...storedCustom);
 
 /** Réglages de frais en vigueur (lecture synchrone, utilisée au paiement). */
@@ -479,13 +650,21 @@ export function feeRateFor(orgId: string) {
   return db.customCommissions.find((c) => c.organizerId === orgId)?.rate ?? feeSettings.percent;
 }
 export async function saveFeeSettings(next: FeeSettings) {
+  if (!DEMO) return void Object.assign(feeSettings, await http<FeeSettings>('/admin/fees', { method: 'PUT', body: JSON.stringify(next) }));
   await wait(200);
   Object.assign(feeSettings, next);
   writeLocal(FEES_KEY, feeSettings);
   audit('Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG`);
 }
-export async function listCustomCommissions() { await wait(); return clone(db.customCommissions); }
+export async function listCustomCommissions() {
+  if (!DEMO) return http<typeof db.customCommissions>('/admin/commissions');
+  await wait(); return clone(db.customCommissions);
+}
 export async function saveCustomCommission(c: { organizerId: string; rate: number; reason: string }) {
+  if (!DEMO) {
+    await http('/admin/commissions', { method: 'PUT', body: JSON.stringify(c) });
+    return void replaceCommission(c);
+  }
   await wait(200);
   const i = db.customCommissions.findIndex((x) => x.organizerId === c.organizerId);
   if (i >= 0) db.customCommissions[i] = c; else db.customCommissions.push(c);
@@ -493,6 +672,10 @@ export async function saveCustomCommission(c: { organizerId: string; rate: numbe
   audit('Taux personnalisé enregistré', `${db.organizers.find((o) => o.id === c.organizerId)?.name} — ${c.rate} %`);
 }
 export async function removeCustomCommission(organizerId: string) {
+  if (!DEMO) {
+    await http(`/admin/commissions/${organizerId}`, { method: 'DELETE' });
+    return void replaceCommission({ organizerId });
+  }
   await wait(200);
   const i = db.customCommissions.findIndex((x) => x.organizerId === organizerId);
   if (i >= 0) db.customCommissions.splice(i, 1);
@@ -513,7 +696,10 @@ function actorName() {
 function audit(action: string, target: string) {
   db.auditLog.unshift({ id: uid('al'), at: new Date().toISOString(), actor: actorName(), action, target });
 }
-export async function listAudit() { await wait(); return clone(db.auditLog); }
+export async function listAudit() {
+  if (!DEMO) return http<AuditEntry[]>('/admin/audit');
+  await wait(); return clone(db.auditLog);
+}
 
 const toHTG = (amount: number, cur: Currency) => (cur === 'USD' ? amount * USD_TO_HTG : amount);
 const orgOfEvent = (eventId: string) => db.events.find((e) => e.id === eventId)?.organizerId ?? '';
@@ -521,12 +707,14 @@ const monthKey = (iso: string) => iso.slice(0, 7);
 
 /** Utilisateur → organisation dont il fait partie (le backend le fournira). */
 export function organizationOfUser(u: AppUser): string | undefined {
+  if (!DEMO) return u.organizerId;
   const map: Record<string, string> = { u2: 'org1', u8: 'org1', u9: 'org1', u3: 'org2', u4: 'org3', u13: 'org4' };
   return u.role === 'organizer' ? map[u.id] : undefined;
 }
 
 /** Statistiques de la plateforme, calculées à partir des commandes. */
 export async function platformStats() {
+  if (!DEMO) return http<never>('/admin/stats');
   await wait();
   const now = new Date();
   const orders = db.platformOrders;
@@ -589,12 +777,14 @@ export async function platformStats() {
 }
 
 export async function saveTarget(tg: PlatformTarget) {
+  if (!DEMO) return void (await http('/admin/targets', { method: 'PUT', body: JSON.stringify(tg) }));
   await wait(200);
   const i = db.platformTargets.findIndex((x) => x.id === tg.id);
   if (i >= 0) db.platformTargets[i] = tg; else db.platformTargets.push(tg);
   audit(i >= 0 ? 'Objectif modifié' : 'Objectif créé', tg.title);
 }
 export async function removeTarget(id: string) {
+  if (!DEMO) return void (await http(`/admin/targets/${id}`, { method: 'DELETE' }));
   await wait(200);
   const i = db.platformTargets.findIndex((x) => x.id === id);
   if (i >= 0) audit('Objectif supprimé', db.platformTargets.splice(i, 1)[0].title);
@@ -602,6 +792,7 @@ export async function removeTarget(id: string) {
 
 /** Toutes les transactions de la plateforme (filtrables). */
 export async function listPlatformOrders(f: { q?: string; status?: Order['status'] | ''; method?: Order['method'] | ''; organizerId?: string } = {}) {
+  if (!DEMO) return http<Order[]>(`/admin/orders?${new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][])}`);
   await wait();
   const q = f.q?.toLowerCase().trim();
   return clone(
@@ -615,8 +806,12 @@ export async function listPlatformOrders(f: { q?: string; status?: Order['status
   );
 }
 
-export async function listUsers() { await wait(); return clone(db.users); }
+export async function listUsers() {
+  if (!DEMO) return http<AppUser[]>('/admin/users');
+  await wait(); return clone(db.users);
+}
 export async function setUserStatus(id: string, status: AppUser['status']) {
+  if (!DEMO) return void (await http(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }));
   await wait(200);
   const u = db.users.find((x) => x.id === id);
   if (u) {
@@ -625,6 +820,7 @@ export async function setUserStatus(id: string, status: AppUser['status']) {
   }
 }
 export async function setUserRole(id: string, role: AppUser['role']) {
+  if (!DEMO) return void (await http(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }));
   await wait(200);
   const u = db.users.find((x) => x.id === id);
   if (u) {
@@ -635,6 +831,7 @@ export async function setUserRole(id: string, role: AppUser['role']) {
 }
 /** Fiche détaillée : profil, commandes, événements organisés. */
 export async function getUserDetail(id: string) {
+  if (!DEMO) return http<never>(`/admin/users/${id}`);
   await wait();
   const u = db.users.find((x) => x.id === id);
   if (!u) return null;
@@ -649,8 +846,15 @@ export async function getUserDetail(id: string) {
   });
 }
 
-export async function listAllEvents() { await wait(); return clone(db.events); }
+export async function listAllEvents() {
+  if (!DEMO) return cacheEvents(await http<EventItem[]>('/admin/events'));
+  await wait(); return clone(db.events);
+}
 export async function moderateEvent(id: string, status: EventItem['status'], reason?: string) {
+  if (!DEMO) {
+    await http(`/admin/events/${id}/moderate`, { method: 'POST', body: JSON.stringify({ status, reason }) });
+    return void patchCachedEvent(id, { status });
+  }
   await wait(200);
   const e = db.events.find((x) => x.id === id);
   if (!e) return;
@@ -658,12 +862,17 @@ export async function moderateEvent(id: string, status: EventItem['status'], rea
   audit(status === 'published' ? 'Événement approuvé' : status === 'rejected' ? 'Événement refusé' : 'Événement modifié', `${e.title}${reason ? ` — ${reason}` : ''}`);
 }
 
-export async function listReports() { await wait(); return clone(db.reports); }
+export async function listReports() {
+  if (!DEMO) return http<Report[]>('/admin/reports');
+  await wait(); return clone(db.reports);
+}
 export async function reportEvent(eventId: string, reason: Report['reason'], details: string, reporter: string) {
+  if (!DEMO) return void (await http('/reports', { method: 'POST', body: JSON.stringify({ eventId, reason, details, reporter }) }));
   await wait(400);
   db.reports.unshift({ id: uid('rp'), eventId, reason, details, reporter, status: 'open', createdAt: new Date().toISOString() });
 }
 export async function setReportStatus(id: string, status: Report['status']) {
+  if (!DEMO) return void (await http(`/admin/reports/${id}`, { method: 'POST', body: JSON.stringify({ status }) }));
   await wait(200);
   const r = db.reports.find((x) => x.id === id);
   if (!r) return;
@@ -671,8 +880,18 @@ export async function setReportStatus(id: string, status: Report['status']) {
   audit(status === 'dismissed' ? 'Signalement classé' : 'Signalement traité', db.events.find((e) => e.id === r.eventId)?.title ?? r.eventId);
 }
 
-export async function listVerificationRequests() { await wait(); return clone(db.verificationRequests); }
+export async function listVerificationRequests() {
+  if (!DEMO) return http<VerificationRequest[]>('/admin/verifications');
+  await wait(); return clone(db.verificationRequests);
+}
 export async function decideVerification(id: string, status: VerificationRequest['status'], note?: string) {
+  if (!DEMO) {
+    await http(`/admin/verifications/${id}`, { method: 'POST', body: JSON.stringify({ status, note }) });
+    const v = await http<VerificationRequest[]>('/admin/verifications').then((l) => l.find((x) => x.id === id));
+    const o = db.organizers.find((x) => x.id === v?.organizerId);
+    if (o) o.verified = status === 'approved';
+    return;
+  }
   await wait(300);
   const v = db.verificationRequests.find((x) => x.id === id);
   if (!v) return;
@@ -683,9 +902,13 @@ export async function decideVerification(id: string, status: VerificationRequest
   audit(status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification refusée', v.name);
 }
 
-export async function listDisputes() { await wait(); return clone(db.disputes); }
+export async function listDisputes() {
+  if (!DEMO) return http<Dispute[]>('/admin/disputes');
+  await wait(); return clone(db.disputes);
+}
 /** Décision sur un litige : enregistre la décision, la note et déclenche le remboursement. */
 export async function resolveDispute(id: string, input: { status: Dispute['status']; decision?: Dispute['decision']; note?: string }) {
+  if (!DEMO) return void (await http(`/admin/disputes/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }));
   await wait(300);
   const d = db.disputes.find((x) => x.id === id);
   if (!d) return;
@@ -704,14 +927,19 @@ export async function resolveDispute(id: string, input: { status: Dispute['statu
   audit(input.status === 'resolved' ? 'Litige résolu' : 'Litige passé en enquête', d.orderId);
 }
 export async function addDisputeMessage(id: string, body: string) {
+  if (!DEMO) return void (await http(`/admin/disputes/${id}/messages`, { method: 'POST', body: JSON.stringify({ body }) }));
   await wait(200);
   const d = db.disputes.find((x) => x.id === id);
   if (d) d.messages.push({ from: 'admin', author: 'Équipe Event509', body, at: new Date().toISOString() });
 }
 
 /** Versements de tous les organisateurs (validation par l'administration). */
-export async function listAllPayouts() { await wait(); return clone(db.payouts); }
+export async function listAllPayouts() {
+  if (!DEMO) return http<Payout[]>('/admin/payouts');
+  await wait(); return clone(db.payouts);
+}
 export async function setPayoutStatus(id: string, status: Payout['status']) {
+  if (!DEMO) return void (await http(`/admin/payouts/${id}`, { method: 'POST', body: JSON.stringify({ status }) }));
   await wait(300);
   const p = db.payouts.find((x) => x.id === id);
   if (!p) return;

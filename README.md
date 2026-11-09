@@ -2,7 +2,7 @@
 
 > Discover events. Get your pass. Show up.
 
-Plateforme web de billetterie et de gestion d'événements. Ce dépôt contient le **frontend complet**. Il tourne sur des données de démonstration tant qu'aucun backend n'est configuré.
+Plateforme web de billetterie et de gestion d'événements : interface React et serveur (fonction Vercel + Postgres Neon). Sans base configurée, le site tourne sur des données de démonstration.
 
 ## Démarrer
 
@@ -32,10 +32,10 @@ Codes promo de démo : `KOMPA10`, `NOEL2026`, `ETUDIANT`. Les dates de démo se 
 ## Qualité
 
 ```bash
-npm run typecheck    # TypeScript strict
+npm run typecheck    # TypeScript strict (interface et serveur)
 npm run lint         # ESLint : TypeScript, React Hooks, accessibilité (jsx-a11y)
 npm run i18n:check   # chaque phrase de l'interface a sa traduction anglaise
-npm test             # 39 tests unitaires (Vitest)
+npm test             # 40 tests unitaires (Vitest)
 npm run build && npm run test:e2e   # 43 tests Playwright, ordinateur et mobile
 ```
 
@@ -64,23 +64,36 @@ React 18 · TypeScript · Vite · Tailwind CSS (thème clair/sombre par variable
 
 **Hors ligne** : l'application est installable (PWA). L'interface est mise en cache, et les billets restent consultables sans réseau. Le check-in valide les entrées sur une liste téléchargée, puis les synchronise au retour du réseau.
 
-## Brancher le backend
+## Backend (Neon + Vercel)
 
-Toute la donnée passe par **`src/services/api.ts`**. Chaque fonction lit `src/data/mock.ts` ; ses signatures forment le contrat attendu par l'interface, et `src/types.ts` décrit les modèles.
+Le serveur est dans **`api/`** : une seule fonction Vercel (`api/index.ts`) qui sert toutes les routes `/api/*`, avec une base **Postgres Neon**.
 
-1. Définissez `VITE_API_URL` (voir `.env.example`). Le mode démo (`DEMO`) se désactive alors : les aides de test et les boutons de simulation disparaissent.
-2. Remplacez le corps des fonctions par des appels au client `http()` fourni. Il ajoute le jeton `Bearer`, lève des `ApiError` (statut, référence support) et déconnecte l'utilisateur sur une réponse 401.
-3. La session : `login()` dans `src/store/app.tsx` et le rôle d'équipe (`teamRole`) renvoyé avec l'utilisateur. Les permissions sont définies dans `src/lib/permissions.ts`, et l'organisation de l'utilisateur dans `orgOf()`.
+| Fichier | Rôle |
+| --- | --- |
+| `db/schema.sql` | tables (idempotent) |
+| `api/_lib/routes.ts` | les routes : catalogue, comptes, commandes, billets, revente, espace organisateur, administration |
+| `api/_lib/auth.ts` | mots de passe (scrypt) et jetons de session signés (HS256, 30 jours) |
+| `api/_lib/db.ts` | connexion Postgres |
+| `scripts/db-setup.mjs` | crée le schéma et charge le contenu de départ |
 
-Ce que le serveur doit fournir :
-- **Paiements** : MonCash, NatCash, carte, PayPal, virement, avec leurs webhooks.
-- **Billets** : codes signés et usage unique garanti de façon atomique. Le jeton du QR tourne toutes les 30 s (`code.jeton`).
-- **Cartes Wallet** : Apple et Google Wallet doivent être signées côté serveur. En attendant, l'app propose l'image du billet.
-- **Temps réel** : ventes en direct par WebSocket ou SSE (`useLiveSales`).
-- **Envois** : emails, SMS et WhatsApp (campagnes et automatisations).
+**Mise en ligne sur Vercel** : définissez `DATABASE_URL`, `JWT_SECRET` et `VITE_API_URL=/api` (voir `.env.example`), puis redéployez. Au build, le schéma est mis à jour, et la base est remplie avec le contenu de départ si elle ne contient aucun événement. Sans ces variables, le site reste en mode démo.
+
+**Ce que le serveur garantit** : les prix, réductions et frais sont recalculés côté serveur ; les quotas sont respectés même avec des achats simultanés ; une place numérotée ne peut être vendue qu'une fois ; un billet n'est validé qu'une fois au check-in, même avec deux scanners ; chaque route vérifie le rôle (participant, équipe organisateur par rôle, administration) et l'organisation.
+
+**En local** :
+
+```bash
+DATABASE_URL=… JWT_SECRET=… npm run db:setup -- --seed   # base de test
+DATABASE_URL=… JWT_SECRET=… npm run api:dev              # API sur :8787
+VITE_API_URL=/api npm run dev                             # interface, /api redirigé vers :8787
+```
+
+Encore à brancher :
+- **Paiements** : MonCash, NatCash, carte, PayPal et leurs webhooks. Pour l'instant, une commande est confirmée sans débit réel (sauf le virement, qui reste « en attente »).
+- **Envois** : emails (billets, mot de passe oublié), SMS et WhatsApp. La connexion par téléphone et Google n'apparaît qu'en démo.
 - **Fichiers** : stockage des images et des documents de vérification.
-- **Change** : taux HTG/USD du jour (`USD_TO_HTG`).
-- **Aperçus de partage** : `scripts/prerender-og.mjs` lit pour l'instant la démo. Il faut le brancher sur l’API, ou faire ce rendu côté serveur. Sur Vercel, l’adresse du site est détectée seule ; avec un domaine personnalisé, définissez `SITE_URL`.
+- **Cartes Wallet** Apple et Google, **taux de change** du jour, **temps réel** (le tableau de bord se rafraîchit toutes les 20 s).
+- **Aperçus de partage** : `scripts/prerender-og.mjs` lit encore la démo.
 
 ## Structure
 
@@ -89,12 +102,14 @@ src/
   components/   kit d'interface accessible (ui/), cartes, billet, plan de salle, garde d'accès, ErrorBoundary
   layouts/      PublicLayout, DashboardLayout (navigation filtrée par permissions)
   pages/        public/ · account/ · organizer/ · admin/
-  services/     api.ts — couche d'accès aux données
+  services/     api.ts — couche d'accès aux données (démo ou appels /api)
   store/        app.tsx — session, langue, devise, thème, billets, file hors ligne, toasts
   lib/          formatage, i18n, formulaires, permissions, exports, image du billet, pixels
   locales/      en.json
-  data/         mock.ts — données de démonstration
-scripts/        i18n.mjs, prerender-og.mjs
+  data/         mock.ts — données de démonstration (et cache du catalogue en mode serveur)
+api/            fonction Vercel : routes, authentification, accès à la base
+db/             schema.sql
+scripts/        i18n.mjs, prerender-og.mjs, db-setup.mjs, api-dev.mjs
 e2e/            tests Playwright + audit d'accessibilité
 ```
 

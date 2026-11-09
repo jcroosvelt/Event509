@@ -1209,5 +1209,9 @@
   "Vous suivez {name}. Vous serez prévenu de ses nouveaux événements.": "You’re following {name}. We’ll let you know about new events.",
   "Vue d’ensemble": "Overview",
   "Zone {n}": "Zone {n}",
-  "Zones tarifaires": "Price zones"
+  "Zones tarifaires": "Price zones",
+  "Email ou mot de passe incorrect": "Incorrect email or password",
+  "Un compte existe déjà avec cet email. Connectez-vous.": "An account already exists with this email. Log in instead.",
+  "Ce compte est suspendu. Contactez le support.": "This account is suspended. Contact support.",
+  "La connexion a échoué. Vérifiez votre réseau et réessayez.": "Login failed. Check your connection and try again."
 }
