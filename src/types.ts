@@ -235,6 +235,8 @@ export interface AppUser {
   verified?: boolean;
   /** Rôle dans l'équipe d'un organisateur (organisateurs uniquement). */
   teamRole?: TeamRole;
+  /** Organisation dont l'utilisateur fait partie (fournie par le serveur). */
+  organizerId?: string;
 }
 
 export interface Dispute {

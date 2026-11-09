@@ -112,3 +112,15 @@ describe('frais de service', () => {
     expect(computeFees(DEFAULT_FEES, 0, 0, 'HTG').total).toBe(0);
   });
 });
+
+import { computeFees as serverFees } from '../../api/_lib/fees';
+describe('frais : serveur et navigateur', () => {
+  it('le serveur calcule exactement les mêmes frais que l’interface', () => {
+    const cases: [number, number, 'HTG' | 'USD', number | undefined][] = [[2500, 1, 'HTG', undefined], [15000, 2, 'HTG', 4.5], [50, 2, 'USD', 3], [0, 0, 'HTG', undefined]];
+    for (const passToBuyer of [true, false])
+      for (const [amount, n, cur, rate] of cases) {
+        const s = { ...DEFAULT_FEES, passToBuyer };
+        expect(serverFees(s, amount, n, cur, rate)).toEqual(computeFees(s, amount, n, cur, rate));
+      }
+  });
+});

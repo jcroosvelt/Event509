@@ -40,7 +40,8 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Futures réponses de l'API : réseau d'abord, cache en secours hors ligne
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            // Seulement le catalogue public : les données de compte ne sont jamais gardées dans le cache
+            urlPattern: ({ url }) => url.pathname === '/api/bootstrap' || url.pathname.startsWith('/api/events/'),
             handler: 'NetworkFirst',
             options: { cacheName: 'api', networkTimeoutSeconds: 4, expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 3600 } },
           },
@@ -53,5 +54,8 @@ export default defineConfig({
       },
     }),
   ],
+  // En local, /api est servi par scripts/api-dev.mjs
+  server: { proxy: { '/api': 'http://localhost:8787' } },
+  preview: { proxy: { '/api': 'http://localhost:8787' } },
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
 });

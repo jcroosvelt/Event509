@@ -7,6 +7,8 @@ import { isEmail, isPhone, useForm } from '@/lib/form';
 import { hasOrganizerAccess } from '@/lib/permissions';
 import { Button, Card, Field, Input, Segmented, Toggle } from '@/components/ui';
 import type { AppUser } from '@/types';
+import { DEMO, signIn, signUp } from '@/services/api';
+import { ApiError } from '@/lib/errors';
 
 function GoogleIcon() {
   return (
@@ -29,7 +31,7 @@ const demoAccounts = [
 ];
 
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
-  const { login, updateUser, toast, t } = useApp();
+  const { login, startSession, updateUser, toast, t } = useApp();
   const signup = mode === 'signup';
   useTitle(signup ? t('Créer un compte') : t('Connexion'));
   const nav = useNavigate();
@@ -54,6 +56,26 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const finish = (u: AppUser) => {
     toast(signup ? t('Compte créé, bienvenue !') : t('Bonjour {name} !', { name: u.name.split(' ')[0] }));
     nav(next ?? (hasOrganizerAccess(u) ? '/organisateur' : u.role === 'admin' ? '/admin' : '/'), { replace: true });
+  };
+
+  /** Mode serveur : vraie connexion ou inscription par email et mot de passe. */
+  const submitReal = async () => {
+    setLoading(true);
+    try {
+      const s = signup
+        ? await signUp({ name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password, organizer })
+        : await signIn(form.values.email.trim(), form.values.password);
+      await startSession(s);
+      finish(s.user);
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0;
+      if (status === 401) form.setErrors({ password: t('Email ou mot de passe incorrect') });
+      else if (status === 409) form.setErrors({ email: t('Un compte existe déjà avec cet email. Connectez-vous.') });
+      else if (status === 403) toast(t('Ce compte est suspendu. Contactez le support.'), 'error');
+      else toast(t('La connexion a échoué. Vérifiez votre réseau et réessayez.'), 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const done = (who?: string) => {
@@ -88,15 +110,21 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
           <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand-ink">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
         </p>
 
-        <Button variant="outline" size="lg" className="mt-6 w-full" onClick={() => done()} loading={loading}>
-          <GoogleIcon /> {t('Continuer avec Google')}
-        </Button>
+        {DEMO ? (
+          <>
+            <Button variant="outline" size="lg" className="mt-6 w-full" onClick={() => done()} loading={loading}>
+              <GoogleIcon /> {t('Continuer avec Google')}
+            </Button>
 
-        <div className="my-6 flex items-center gap-3 text-xs text-ink-muted" aria-hidden>
-          <span className="h-px flex-1 bg-line" /> {t('ou')} <span className="h-px flex-1 bg-line" />
-        </div>
+            <div className="my-6 flex items-center gap-3 text-xs text-ink-muted" aria-hidden>
+              <span className="h-px flex-1 bg-line" /> {t('ou')} <span className="h-px flex-1 bg-line" />
+            </div>
+          </>
+        ) : (
+          <div className="mt-6" />
+        )}
 
-        <Segmented
+        {DEMO && <Segmented
           label={t('Méthode de connexion')}
           className="mb-5 flex w-full [&>button]:flex-1"
           value={via}
@@ -109,7 +137,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
             { value: 'email', label: <span className="flex items-center justify-center gap-2"><Mail className="h-4 w-4" aria-hidden /> {t('Email')}</span> },
             { value: 'phone', label: <span className="flex items-center justify-center gap-2"><Phone className="h-4 w-4" aria-hidden /> {t('Téléphone')}</span> },
           ]}
-        />
+        />}
 
         <form
           noValidate
@@ -122,7 +150,8 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
               toast(t('Code envoyé par SMS au {phone}', { phone: form.values.phone }), 'info');
               return;
             }
-            done();
+            if (DEMO) done();
+            else void submitReal();
           }}
         >
           {signup && <Field label={t('Nom complet')} error={form.errors.name} required><Input autoComplete="name" {...form.bind('name')} /></Field>}
@@ -150,7 +179,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
           </Button>
         </form>
 
-        {!signup && (
+        {!signup && DEMO && (
           <details className="mt-6 rounded-2xl bg-canvas p-4 text-sm">
             <summary className="cursor-pointer font-semibold">{t('Comptes de démonstration')}</summary>
             <p className="mt-2 text-xs text-ink-muted">{t('Connectez-vous avec un rôle pour tester les permissions.')}</p>

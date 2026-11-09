@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, BarChart3, Eye, Megaphone, Plus, ScanLine, Ticket, TrendingUp, Users, Wallet } from 'lucide-react';
 import { organizers, weeklySales } from '@/data/mock';
-import { listOrganizerEvents } from '@/services/api';
+import { DEMO, listOrganizerEvents, orgSales, type OrgSales } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, dateShort, moneyRaw, num } from '@/lib/format';
@@ -16,7 +16,7 @@ const buyers = ['Wilson C.', 'Nadège L.', 'Kervens M.', 'Fabiola D.', 'Junior A
 const types = ['Standard', 'VIP', 'Standard', 'Pack Groupe x5', 'Standard'];
 const prices: Record<string, number> = { Standard: 2500, VIP: 7500, 'Pack Groupe x5': 10000 };
 
-interface LiveSale { id: number; who: string; type: string; qty: number; amount: number }
+interface LiveSale { id: number | string; who: string; type: string; qty: number; amount: number }
 
 /** Flux de ventes en temps réel (simulé ; à brancher sur WebSocket / SSE). */
 function useLiveSales() {
@@ -50,7 +50,24 @@ export default function Dashboard() {
   const [eventId, setEventId] = useState('all');
   const [metric, setMetric] = useState<'tickets' | 'revenue'>('tickets');
   const [active, setActive] = useState(2);
-  const live = useLiveSales();
+  const demoLive = useLiveSales();
+  // Mode serveur : vraies ventes, rafraîchies toutes les 20 secondes
+  const [real, setReal] = useState<OrgSales | null>(null);
+  useEffect(() => {
+    if (DEMO || !orgId) return;
+    let stop = false;
+    const load = () => orgSales(orgId).then((r) => !stop && setReal(r)).catch(() => {});
+    void load();
+    const timer = setInterval(() => !document.hidden && void load(), 20000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [orgId]);
+  const live = DEMO ? demoLive : real?.recent ?? [];
+  const daily = DEMO
+    ? weeklySales
+    : (real?.week ?? []).map((d) => ({ ...d, target: Math.max(1, ...(real?.week ?? []).map((x) => x.tickets)) }));
 
   const scope = useMemo(() => (events ?? []).filter((e) => eventId === 'all' || e.id === eventId), [events, eventId]);
   const sold = scope.reduce((a, e) => a + e.tickets.reduce((x, tt) => x + tt.sold, 0), 0);
@@ -64,13 +81,13 @@ export default function Dashboard() {
     const monday = new Date(2024, 0, 1);
     return Array.from({ length: 7 }, (_, i) => new Date(monday.getFullYear(), 0, 1 + i).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', ''));
   }, [lang]);
-  const week = weeklySales.map((d, i) => ({
-    label: dayNames[i],
+  const week = daily.map((d, i) => ({
+    label: !DEMO ? new Date(`${(d as { date: string }).date}T12:00:00`).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', '') : dayNames[i],
     value: metric === 'tickets' ? d.tickets : d.revenue,
     max: metric === 'tickets' ? d.target : d.target * 2500,
   }));
-  const weekTotal = weeklySales.reduce((a, d) => a + (metric === 'tickets' ? d.tickets : d.revenue), 0);
-  const weekTarget = weeklySales.reduce((a, d) => a + (metric === 'tickets' ? d.target : d.target * 2500), 0);
+  const weekTotal = daily.reduce((a, d) => a + (metric === 'tickets' ? d.tickets : d.revenue), 0);
+  const weekTarget = daily.reduce((a, d) => a + (metric === 'tickets' ? d.target : d.target * 2500), 0);
 
   if (loading) return <Loading />;
 

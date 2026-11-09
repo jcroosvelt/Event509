@@ -35,5 +35,7 @@ export function hasOrganizerAccess(user: AppUser | null) {
 
 /** Organisation de l'utilisateur connecté (le backend la renverra avec la session). */
 export function orgOf(user: AppUser | null) {
+  if (user?.organizerId) return user.organizerId;
+  // Démo : toutes les équipes travaillent pour Lakay Productions
   return user?.role === 'organizer' || user?.role === 'admin' ? 'org1' : '';
 }
