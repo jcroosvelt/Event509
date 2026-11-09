@@ -8,7 +8,8 @@
  * Source des données : la démo (src/data/mock.ts). Une fois le backend branché,
  * remplacer `loadData()` par un appel à l'API (ou faire ce rendu côté serveur).
  *
- * Variable : SITE_URL (ex. https://event509.com) pour des URL absolues.
+ * Adresse du site : SITE_URL si défini (ex. https://event509.com), sinon l'adresse de
+ * production fournie par Vercel (VERCEL_PROJECT_PRODUCTION_URL), sinon event509.com.
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +18,8 @@ import { transformSync } from 'esbuild';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const dist = join(root, 'dist');
-const site = (process.env.SITE_URL ?? 'https://event509.com').replace(/\/$/, '');
+const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined;
+const site = (process.env.SITE_URL || vercelUrl || 'https://event509.com').replace(/\/$/, '');
 
 async function loadData() {
   const ts = readFileSync(join(root, 'src/data/mock.ts'), 'utf8');

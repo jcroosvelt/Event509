@@ -80,7 +80,7 @@ Ce que le serveur doit fournir :
 - **Envois** : emails, SMS et WhatsApp (campagnes et automatisations).
 - **Fichiers** : stockage des images et des documents de vérification.
 - **Change** : taux HTG/USD du jour (`USD_TO_HTG`).
-- **Aperçus de partage** : `scripts/prerender-og.mjs` lit pour l'instant la démo. Il faut le brancher sur l'API, ou faire ce rendu côté serveur. Définissez aussi `SITE_URL`.
+- **Aperçus de partage** : `scripts/prerender-og.mjs` lit pour l'instant la démo. Il faut le brancher sur l’API, ou faire ce rendu côté serveur. Sur Vercel, l’adresse du site est détectée seule ; avec un domaine personnalisé, définissez `SITE_URL`.
 
 ## Structure
 
