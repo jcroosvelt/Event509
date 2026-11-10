@@ -125,7 +125,7 @@ export default function EventDetail() {
             <h1 className="text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{ev.title}</h1>
             {org && (
               <div className="mt-4 flex items-center gap-3">
-                <Avatar name={org.avatar} size={40} />
+                <Avatar name={org.avatar} src={org.logo} size={40} />
                 <div className="min-w-0">
                   <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm font-bold hover:text-brand-ink">
                     {org.name} {org.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Organisateur vérifié')} />}

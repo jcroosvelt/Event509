@@ -159,3 +159,20 @@ create table if not exists settings (
   key text primary key,
   value jsonb not null
 );
+
+-- Fichiers envoyés (affiches, logos : publics ; documents de vérification : privés).
+-- Le contenu est gardé dans la base, après réduction des images côté navigateur.
+create table if not exists files (
+  id text primary key,
+  organizer_id text not null,
+  user_id text,
+  kind text not null check (kind in ('event_cover', 'org_logo', 'verification')),
+  doc_type text,
+  visibility text not null check (visibility in ('public', 'private')),
+  mime text not null,
+  name text not null,
+  size integer not null,
+  data bytea not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists files_org on files(organizer_id, kind);

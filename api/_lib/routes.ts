@@ -4,6 +4,7 @@ import type {
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newId, newTicketCode, signToken, verifyPassword } from './auth.js';
+import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
 export class HttpError extends Error {
@@ -11,6 +12,11 @@ export class HttpError extends Error {
     super(message);
   }
 }
+/** Réponse binaire (fichier) : le routeur ne la convertit pas en JSON. */
+export class Binary {
+  constructor(public mime: string, public data: Buffer, public cache: string, public name: string) {}
+}
+
 const fail = (status: number, message: string): never => {
   throw new HttpError(status, message);
 };
@@ -504,6 +510,7 @@ const saveEvent: Handler = async (c) => {
     id: existing ? e.id : newId('e'),
     slug: clash || !e.slug ? `${slugify(e.title)}-${Math.random().toString(36).slice(2, 6)}` : slugify(e.slug),
     organizerId: existing?.organizer_id ?? orgId,
+    cover: validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
     // Les ventes et les vues sont tenues par le serveur, pas par le formulaire
     views: existing?.data.views ?? 0,
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
@@ -534,7 +541,13 @@ const saveOrganizer: Handler = async (c) => {
   const cur = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId]))[0];
   if (!cur) fail(404, 'Organisation introuvable');
   const p = c.body as Partial<Organizer>;
-  const next: Organizer = { ...cur!, name: str(p.name, 80) || cur!.name, bio: str(p.bio, 1000), website: str(p.website, 200), instagram: str(p.instagram, 60), city: str(p.city, 60) || cur!.city, cover: p.cover ?? cur!.cover };
+  // Un champ absent de la demande est conservé tel quel (ex. envoi du logo seul)
+  const keep = (v: unknown, max: number, old?: string) => (v === undefined ? old : str(v, max));
+  const next: Organizer = {
+    ...cur!, name: str(p.name, 80) || cur!.name, bio: keep(p.bio, 1000, cur!.bio), website: keep(p.website, 200, cur!.website),
+    instagram: keep(p.instagram, 60, cur!.instagram), city: keep(p.city, 60, cur!.city) || cur!.city, cover: p.cover ?? cur!.cover,
+    logo: p.logo === '' ? undefined : validCover(p.logo) ? p.logo : cur!.logo,
+  };
   await upsert('organizers', { id: next.id, slug: next.slug, data: next });
   return next;
 };
@@ -629,6 +642,87 @@ const orgSales: Handler = async (c) => {
     amount: Math.round(o.currency === 'USD' ? o.total * USD_TO_HTG : o.total),
   }));
   return { week, recent };
+};
+
+// ---------- Fichiers et vérification de l'organisateur ----------
+
+const MAX_FILES_PER_ORG = 300;
+
+/** Met à jour la demande de vérification de l'organisation à partir des documents reçus. */
+async function syncVerification(orgId: string, owner: UserRow, q: Q) {
+  const files = await all<{ id: string; doc_type: string; name: string; created_at: Date }>(
+    `select id, doc_type, name, created_at from files where organizer_id = $1 and kind = 'verification' order by created_at`, [orgId], q);
+  const complete = DOC_TYPES.every((t) => files.some((f) => f.doc_type === t));
+  const existing = await one<{ id: string; status: VerificationRequest['status']; data: VerificationRequest }>(
+    `select id, status, data from verification_requests where organizer_id = $1 order by id limit 1`, [orgId], q);
+  // La demande n'apparaît chez l'administration que lorsque les trois documents sont là
+  if (!complete && !existing) return;
+  const o = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId], q))[0];
+  const status: VerificationRequest['status'] = !existing ? 'pending' : existing.status === 'approved' ? 'approved' : complete ? 'pending' : existing.status;
+  const reqDoc: VerificationRequest = {
+    id: existing?.id ?? newId('vr'), organizerId: orgId, name: o?.name ?? orgId, owner: (owner.data.name as string) ?? owner.email,
+    email: owner.email, city: o?.city ?? '', status, note: status === 'pending' ? undefined : existing?.data.note,
+    submittedAt: existing && status === existing.status ? existing.data.submittedAt : new Date().toISOString(),
+    docs: files.map((f) => ({ type: f.doc_type as VerificationRequest['docs'][number]['type'], file: f.name, fileId: f.id, uploadedAt: new Date(f.created_at).toISOString() })),
+  };
+  await upsert('verification_requests', { id: reqDoc.id, organizer_id: orgId, status, data: reqDoc }, q);
+}
+
+const uploadFile: Handler = async (c) => {
+  const kind = str(c.body.kind, 20) as FileKind;
+  if (!['event_cover', 'org_logo', 'verification'].includes(kind)) fail(422, 'Type de fichier invalide');
+  const orgId = org(c, kind === 'event_cover' ? 'events' : 'settings');
+  const docType = str(c.body.docType, 10);
+  if (kind === 'verification' && !(DOC_TYPES as readonly string[]).includes(docType)) fail(422, 'Type de document invalide');
+  const b64 = typeof c.body.data === 'string' ? c.body.data : '';
+  if (!b64 || b64.length > 4.4 * 1024 * 1024) fail(413, 'Fichier trop lourd');
+  const data = Buffer.from(b64, 'base64');
+  const checked = checkFile(kind, data);
+  if ('error' in checked) fail(422, checked.error);
+  const mime = (checked as { mime: string }).mime;
+  if (kind !== 'verification') {
+    const n = Number((await one<{ n: string }>(`select count(*) as n from files where organizer_id = $1 and kind <> 'verification'`, [orgId]))?.n ?? 0);
+    if (n >= MAX_FILES_PER_ORG) fail(429, 'Limite de fichiers atteinte pour cette organisation');
+  }
+  const id = newId('f');
+  const u = c.user!;
+  await tx(async (q) => {
+    await q.query(
+      `insert into files (id, organizer_id, user_id, kind, doc_type, visibility, mime, name, size, data) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [id, orgId, u.id, kind, kind === 'verification' ? docType : null, kind === 'verification' ? 'private' : 'public', mime, safeName(c.body.name), data.length, data]);
+    if (kind === 'verification') {
+      // Un seul document par type : le nouveau remplace l'ancien
+      await q.query(`delete from files where organizer_id = $1 and kind = 'verification' and doc_type = $2 and id <> $3`, [orgId, docType, id]);
+      await syncVerification(orgId, u, q);
+    }
+  });
+  return { id, url: `/api/files/${id}`, mime, size: data.length };
+};
+
+const readFile: Handler = async (c) => {
+  const f = await one<{ organizer_id: string; visibility: string; mime: string; name: string; data: Buffer }>(
+    `select organizer_id, visibility, mime, name, data from files where id = $1`, [c.params.id]);
+  if (!f) fail(404, 'Fichier introuvable');
+  if (f!.visibility === 'public') return new Binary(f!.mime, f!.data, 'public, max-age=31536000, immutable', f!.name);
+  // Document privé : l'administration, ou l'équipe de l'organisation qui l'a envoyé. Même réponse si le fichier n'existe pas.
+  const u = auth(c);
+  const allowed = u.role === 'admin' || (u.organizer_id === f!.organizer_id && teamPerms[u.team_role ?? 'admin'].includes('settings'));
+  if (!allowed) fail(404, 'Fichier introuvable');
+  return new Binary(f!.mime, f!.data, 'private, no-store', f!.name);
+};
+
+const orgVerification: Handler = async (c) => {
+  const orgId = org(c, 'settings');
+  const o = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId]))[0];
+  const files = await all<{ doc_type: string; name: string; created_at: Date }>(
+    `select doc_type, name, created_at from files where organizer_id = $1 and kind = 'verification'`, [orgId]);
+  const r = await one<{ status: VerificationRequest['status']; data: VerificationRequest }>(`select status, data from verification_requests where organizer_id = $1 limit 1`, [orgId]);
+  return {
+    verified: !!o?.verified,
+    status: r?.status ?? 'none',
+    note: r?.data.note ?? null,
+    docs: files.map((f) => ({ type: f.doc_type, name: f.name, uploadedAt: new Date(f.created_at).toISOString() })),
+  };
 };
 
 // Promos, équipe, campagnes, ambassadeurs : listes simples rattachées à l'organisation
@@ -1040,6 +1134,9 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/events/:id', getEvent],
   ['POST', '/promo/validate', validatePromo],
   ['POST', '/reports', reportEvent],
+  ['POST', '/files', uploadFile],
+  ['GET', '/files/:id', readFile],
+  ['GET', '/org/verification', orgVerification],
   ['POST', '/orders', createOrder],
   ['GET', '/me/tickets', myTickets],
   ['GET', '/me/orders', myOrders],

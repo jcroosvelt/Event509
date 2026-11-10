@@ -1,6 +1,6 @@
 import { readToken } from './auth.js';
 import { one } from './db.js';
-import { HttpError, routes, type Ctx, type UserRow } from './routes.js';
+import { Binary, HttpError, routes, type Ctx, type UserRow } from './routes.js';
 
 export interface ApiRequest {
   method: string;
@@ -37,6 +37,7 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       const ctx: Ctx = { user, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
       if (out === null || out === undefined) return { status: 204, body: null };
+      if (out instanceof Binary) return { status: 200, body: out };
       // Un diagnostic « ok: false » (voir /health) est renvoyé avec le code 503
       const down = typeof out === 'object' && (out as { ok?: unknown }).ok === false;
       return { status: down ? 503 : 200, body: out };

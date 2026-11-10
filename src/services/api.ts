@@ -13,6 +13,7 @@ import type {
 import { ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
+import { blobToBase64, blobToDataUrl } from '@/lib/image';
 
 export const API_URL = import.meta.env.VITE_API_URL ?? '';
 /** Mode démo : actif tant qu'aucun backend n'est configuré (affiche les aides de test). */
@@ -540,6 +541,37 @@ export async function requestPayout(orgId: string, amount: number, currency: Cur
   const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
   db.payouts.unshift(p);
   return clone(p);
+}
+
+// ---------- Fichiers ----------
+
+export type UploadKind = 'event_cover' | 'org_logo' | 'verification';
+
+/**
+ * Envoie un fichier. Mode serveur : renvoie l'adresse du fichier stocké (/api/files/…).
+ * Démo : le fichier reste dans la page sous forme d'adresse « data: ».
+ */
+export async function uploadFile(kind: UploadKind, blob: Blob, name: string, docType?: string): Promise<{ id: string; url: string }> {
+  if (DEMO) return { id: uid('f'), url: await blobToDataUrl(blob) };
+  return http<{ id: string; url: string }>('/files', { method: 'POST', body: JSON.stringify({ kind, name, docType, data: await blobToBase64(blob) }) });
+}
+
+/** Document privé (vérification) : lu avec la session, jamais par une adresse publique. */
+export async function fetchPrivateFile(id: string): Promise<Blob> {
+  const token = localStorage.getItem('e509.token');
+  const res = await fetch(`${API_URL}/files/${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, 'Fichier introuvable');
+  return res.blob();
+}
+
+export interface OrgVerification {
+  verified: boolean;
+  status: 'none' | VerificationRequest['status'];
+  note: string | null;
+  docs: { type: 'id' | 'license' | 'bank'; name: string; uploadedAt: string }[];
+}
+export function orgVerification() {
+  return http<OrgVerification>('/org/verification');
 }
 
 export interface OrgSales {

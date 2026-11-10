@@ -31,7 +31,7 @@ export default function OrganizerPage() {
       <div className="-mx-4 h-40 sm:mx-0 sm:h-56 sm:rounded-4xl" style={{ background: org.cover }} aria-hidden />
       <Card className="relative -mt-12 mx-auto max-w-4xl sm:-mt-16">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <Avatar name={org.avatar} size={88} className="-mt-14 ring-4 ring-surface" />
+          <Avatar name={org.avatar} src={org.logo} size={88} className="-mt-14 ring-4 ring-surface" />
           <div className="min-w-0 flex-1">
             <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
               {org.name} {org.verified && <BadgeCheck className="h-6 w-6 text-brand-ink" aria-label={t('Organisateur vérifié')} />}

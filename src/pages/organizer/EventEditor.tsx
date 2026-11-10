@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, MonitorPlay, Plus, Radio, Trash2 } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
-import { getEvent, rowLetter, saveEvent, seatMapOf } from '@/services/api';
+import { getEvent, rowLetter, saveEvent, seatMapOf, uploadFile } from '@/services/api';
+import { shrinkImage } from '@/lib/image';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { cx, uid } from '@/lib/format';
@@ -58,6 +59,7 @@ export default function EventEditor() {
   const [missing, setMissing] = useState(false);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<'venue' | 'online' | 'hybrid'>('venue');
   const [multi, setMulti] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -167,13 +169,22 @@ export default function EventEditor() {
     }
   };
 
-  const onFile = (f?: File) => {
+  const onFile = async (f?: File) => {
     if (!f) return;
-    if (!f.type.startsWith('image/')) return toast(t('Choisissez une image JPG ou PNG'), 'error');
-    if (f.size > 4 * 1024 * 1024) return toast(t('Image trop lourde : 4 Mo maximum'), 'error');
-    const r = new FileReader();
-    r.onload = () => up({ cover: String(r.result) });
-    r.readAsDataURL(f);
+    if (!f.type.startsWith('image/')) return toast(t('Choisissez une image JPG, PNG ou WebP'), 'error');
+    if (f.size > 15 * 1024 * 1024) return toast(t('Image trop lourde : 15 Mo maximum'), 'error');
+    setUploading(true);
+    try {
+      // L'image est réduite avant l'envoi : page plus rapide, envoi léger même sur mobile
+      const blob = await shrinkImage(f, { maxSide: 1600, type: 'image/jpeg', quality: 0.82 });
+      const { url } = await uploadFile('event_cover', blob, f.name);
+      up({ cover: url });
+      toast(t('Affiche ajoutée'));
+    } catch {
+      toast(t('L’image n’a pas pu être envoyée. Vérifiez votre connexion et réessayez.'), 'error');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const preview: EventItem = {
@@ -255,15 +266,17 @@ export default function EventEditor() {
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  aria-busy={uploading}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}
-                  className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line py-10 text-sm text-ink-soft hover:border-brand hover:bg-brand-50/40"
+                  onDrop={(e) => { e.preventDefault(); void onFile(e.dataTransfer.files[0]); }}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line py-10 text-sm text-ink-soft hover:border-brand hover:bg-brand-50/40 disabled:opacity-60"
                 >
                   <ImagePlus className="h-7 w-7 text-brand-ink" aria-hidden />
-                  <span className="font-semibold text-ink">{t('Importer une affiche')}</span>
-                  <span className="text-xs">{t('JPG ou PNG, 1600×1200 recommandé, 4 Mo maximum')}</span>
+                  <span className="font-semibold text-ink">{uploading ? t('Envoi de l’image…') : t('Importer une affiche')}</span>
+                  <span className="text-xs">{t('JPG, PNG ou WebP, 1600×1200 recommandé, 15 Mo maximum')}</span>
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => onFile(e.target.files?.[0])} />
+                <input ref={fileRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
                 <div className="mt-4 text-xs font-semibold text-ink-muted">{t('Ou choisissez un fond')}</div>
                 <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={t('Fond')}>
                   {covers.map((c, i) => (

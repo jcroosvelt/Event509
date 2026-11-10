@@ -37,6 +37,12 @@ createServer(async (req, res) => {
     body,
     authorization: req.headers.authorization,
   });
+  if (r.body && r.body.data instanceof Buffer) {
+    // Fichier : mêmes en-têtes que la fonction Vercel
+    res.writeHead(200, { 'Content-Type': r.body.mime, 'Cache-Control': r.body.cache, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+    res.end(r.body.data);
+    return;
+  }
   res.writeHead(r.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(r.status === 204 ? '' : JSON.stringify(r.body));
 }).listen(port, () => console.log(`API locale : http://localhost:${port}/api`));

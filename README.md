@@ -35,7 +35,7 @@ Codes promo de démo : `KOMPA10`, `NOEL2026`, `ETUDIANT`. Les dates de démo se 
 npm run typecheck    # TypeScript strict (interface et serveur)
 npm run lint         # ESLint : TypeScript, React Hooks, accessibilité (jsx-a11y)
 npm run i18n:check   # chaque phrase de l'interface a sa traduction anglaise
-npm test             # 40 tests unitaires (Vitest)
+npm test             # 44 tests unitaires (Vitest)
 npm run build && npm run test:e2e   # 43 tests Playwright, ordinateur et mobile
 ```
 
@@ -73,6 +73,7 @@ Le serveur est dans **`api/`** : une seule fonction Vercel (`api/index.ts`) qui 
 | `db/schema.sql` | tables (idempotent) |
 | `api/_lib/routes.ts` | les routes : catalogue, comptes, commandes, billets, revente, espace organisateur, administration |
 | `api/_lib/auth.ts` | mots de passe (scrypt) et jetons de session signés (HS256, 30 jours) |
+| `api/_lib/files.ts` | contrôle des fichiers envoyés (type réel, taille) |
 | `api/_lib/db.ts` | connexion Postgres |
 | `scripts/db-setup.mjs` | crée le schéma et charge le contenu de départ |
 
@@ -88,10 +89,11 @@ DATABASE_URL=… JWT_SECRET=… npm run api:dev              # API sur :8787
 VITE_API_URL=/api npm run dev                             # interface, /api redirigé vers :8787
 ```
 
+**Fichiers** : les affiches, logos et documents de vérification sont stockés dans la base (table `files`). Les images sont réduites dans le navigateur avant l'envoi (affiches 1600 px, logos 512 px). Le serveur lit le type réel du fichier (JPG, PNG, WebP, et PDF pour la vérification seulement), limite les tailles (2 Mo pour une image, 3 Mo pour un PDF) et sert les fichiers avec `nosniff`. Les affiches et logos sont publics et mis en cache ; les documents de vérification sont privés : seuls l'administration et l'équipe de l'organisation concernée peuvent les lire. Si le volume devient important, le contenu pourra passer sur un stockage d'objets (Vercel Blob, S3) en ne changeant que `api/_lib/routes.ts` et `uploadFile` dans `src/services/api.ts`.
+
 Encore à brancher :
 - **Paiements** : MonCash, NatCash, carte, PayPal et leurs webhooks. Pour l'instant, une commande est confirmée sans débit réel (sauf le virement, qui reste « en attente »).
 - **Envois** : emails (billets, mot de passe oublié), SMS et WhatsApp. La connexion par téléphone et Google n'apparaît qu'en démo.
-- **Fichiers** : stockage des images et des documents de vérification.
 - **Cartes Wallet** Apple et Google, **taux de change** du jour, **temps réel** (le tableau de bord se rafraîchit toutes les 20 s).
 - **Aperçus de partage** : `scripts/prerender-og.mjs` lit encore la démo.
 
