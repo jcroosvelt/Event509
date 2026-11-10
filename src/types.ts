@@ -90,6 +90,8 @@ export interface Organizer {
   cover?: string;
   verified: boolean;
   avatar: string;
+  /** Logo envoyé par l'organisateur (adresse /api/files/…) ; sinon les initiales sont affichées. */
+  logo?: string;
   followers: number;
   eventsCount: number;
   city: string;
@@ -274,7 +276,7 @@ export interface VerificationRequest {
   owner: string;
   email: string;
   city: string;
-  docs: { type: 'id' | 'license' | 'bank'; file: string; uploadedAt: string }[];
+  docs: { type: 'id' | 'license' | 'bank'; file: string; uploadedAt: string; /** Fichier envoyé (mode serveur). */ fileId?: string }[];
   status: 'pending' | 'approved' | 'rejected' | 'docs_requested';
   submittedAt: string;
   note?: string;

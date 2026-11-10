@@ -1,15 +1,18 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, Globe } from 'lucide-react';
+import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, Globe, ImagePlus } from 'lucide-react';
 import { organizers } from '@/data/mock';
-import { saveOrganizer } from '@/services/api';
+import { DEMO, orgVerification, saveOrganizer, uploadFile } from '@/services/api';
+import { shrinkImage } from '@/lib/image';
 import { load, persist, useApp } from '@/store/app';
-import { useTitle } from '@/lib/hooks';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { orgOf } from '@/lib/permissions';
 import { useForm } from '@/lib/form';
-import { Avatar, Badge, Button, Card, Field, IconBadge, Input, PageHeader, Textarea, Toggle } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Field, IconBadge, Input, PageHeader, Spinner, Textarea, Toggle } from '@/components/ui';
 
 const DOCS = ['Pièce d’identité', 'Patente / NIF', 'Justificatif bancaire'];
+/** Type de chaque document, dans le même ordre que DOCS (voir l'administration). */
+const DOC_TYPES = ['id', 'license', 'bank'] as const;
 
 export default function OrgSettings() {
   const { toast, t, user } = useApp();
@@ -17,7 +20,16 @@ export default function OrgSettings() {
   const org = organizers.find((o) => o.id === orgOf(user))!;
   const [busy, setBusy] = useState(false);
   const [display, setDisplayState] = useState(() => load('e509.orgDisplay', { showFollowers: true, showRemaining: true }));
-  const [docs, setDocs] = useState<string[]>(() => load('e509.orgDocs', org.verified ? DOCS : []));
+  const [localDocs, setLocalDocs] = useState<string[]>(() => load('e509.orgDocs', org.verified ? DOCS : []));
+  // Mode serveur : l'état de la vérification et les documents reçus viennent du serveur
+  const ver = useAsync(() => (DEMO ? Promise.resolve(null) : orgVerification()), []);
+  const docs = DEMO ? localDocs : DOCS.filter((_, i) => ver.data?.docs.some((d) => d.type === DOC_TYPES[i]));
+  const verified = DEMO ? org.verified : !!ver.data?.verified;
+  const reviewStatus = DEMO ? (docs.length === DOCS.length ? 'pending' : 'none') : ver.data?.status ?? 'none';
+  const [uploadingDoc, setUploadingDoc] = useState('');
+  const [logo, setLogo] = useState(org.logo);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoRef = useRef<HTMLInputElement>(null);
   const uploadFor = useRef<string>('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -28,7 +40,7 @@ export default function OrgSettings() {
       website: (v) => (v && !/^https?:\/\/\S+\.\S+/.test(String(v)) ? t('Saisissez une adresse comme https://monsite.ht') : undefined),
     },
   );
-  const pixels = useForm(load('e509.orgPixels', { fb: '1234567890', ga: 'G-7Q2XKD91' }), {
+  const pixels = useForm(load('e509.orgPixels', DEMO ? { fb: '1234567890', ga: 'G-7Q2XKD91' } : { fb: '', ga: '' }), {
     fb: (v) => (v && !/^\d{10,20}$/.test(String(v)) ? t('Un identifiant Facebook Pixel contient 10 à 20 chiffres') : undefined),
     ga: (v) => (v && !/^G-[A-Z0-9]{6,12}$/.test(String(v)) ? t('Format attendu : G-XXXXXXXXXX') : undefined),
   });
@@ -49,13 +61,49 @@ export default function OrgSettings() {
     persist('e509.orgPixels', pixels.values);
     toast(t('Pixels enregistrés'));
   };
-  const onDoc = (f?: File) => {
+  const onDoc = async (f?: File) => {
     if (!f) return;
-    if (f.size > 8 * 1024 * 1024) return toast(t('Fichier trop lourd : 8 Mo maximum'), 'error');
-    const next = [...new Set([...docs, uploadFor.current])];
-    setDocs(next);
-    persist('e509.orgDocs', next);
-    toast(t('Document reçu : « {doc} »', { doc: t(uploadFor.current) }));
+    const doc = uploadFor.current;
+    if (DEMO) {
+      if (f.size > 8 * 1024 * 1024) return toast(t('Fichier trop lourd : 8 Mo maximum'), 'error');
+      const next = [...new Set([...localDocs, doc])];
+      setLocalDocs(next);
+      persist('e509.orgDocs', next);
+      toast(t('Document reçu : « {doc} »', { doc: t(doc) }));
+      return;
+    }
+    const isPdf = f.type === 'application/pdf';
+    if (!isPdf && !f.type.startsWith('image/')) return toast(t('Envoyez une image ou un PDF'), 'error');
+    if (isPdf && f.size > 3 * 1024 * 1024) return toast(t('PDF trop lourd : 3 Mo maximum'), 'error');
+    setUploadingDoc(doc);
+    try {
+      // Les photos sont réduites (lisibles, mais légères) ; les PDF sont envoyés tels quels
+      const blob = isPdf ? f : await shrinkImage(f, { maxSide: 2400, type: 'image/jpeg', quality: 0.88 });
+      await uploadFile('verification', blob, f.name, DOC_TYPES[DOCS.indexOf(doc)]);
+      ver.reload();
+      toast(t('Document reçu : « {doc} »', { doc: t(doc) }));
+    } catch {
+      toast(t('Le document n’a pas pu être envoyé. Vérifiez votre connexion et réessayez.'), 'error');
+    } finally {
+      setUploadingDoc('');
+    }
+  };
+
+  const onLogo = async (f?: File) => {
+    if (!f) return;
+    if (!f.type.startsWith('image/')) return toast(t('Choisissez une image JPG, PNG ou WebP'), 'error');
+    if (f.size > 15 * 1024 * 1024) return toast(t('Image trop lourde : 15 Mo maximum'), 'error');
+    setUploadingLogo(true);
+    try {
+      const { url } = await uploadFile('org_logo', await shrinkImage(f, { maxSide: 512, type: 'image/png' }), f.name);
+      await saveOrganizer(org.id, { logo: url });
+      setLogo(url);
+      toast(t('Logo enregistré'));
+    } catch {
+      toast(t('L’image n’a pas pu être envoyée. Vérifiez votre connexion et réessayez.'), 'error');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   return (
@@ -64,11 +112,15 @@ export default function OrgSettings() {
       <div className="space-y-4">
         <Card>
           <div className="mb-4 flex flex-wrap items-center gap-4">
-            <Avatar name={org.avatar} size={64} />
+            <Avatar name={org.avatar} src={logo} size={64} />
             <div className="min-w-0 flex-1">
-              <h2 className="flex items-center gap-1 text-lg font-bold">{profile.values.name} {org.verified && <BadgeCheck className="h-5 w-5 text-brand-ink" aria-label={t('Organisateur vérifié')} />}</h2>
-              <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm text-brand-ink">event509.com/o/{org.slug} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
+              <h2 className="flex items-center gap-1 text-lg font-bold">{profile.values.name} {verified && <BadgeCheck className="h-5 w-5 text-brand-ink" aria-label={t('Organisateur vérifié')} />}</h2>
+              <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm text-brand-ink">{window.location.host}/o/{org.slug} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
             </div>
+            <input ref={logoRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onLogo(e.target.files?.[0]); e.target.value = ''; }} />
+            <Button type="button" variant="outline" size="sm" loading={uploadingLogo} onClick={() => logoRef.current?.click()}>
+              <ImagePlus className="h-4 w-4" aria-hidden /> {logo ? t('Changer le logo') : t('Ajouter un logo')}
+            </Button>
           </div>
           <form noValidate onSubmit={(e) => { e.preventDefault(); saveProfile(); }}>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -90,9 +142,14 @@ export default function OrgSettings() {
           <div className="mb-3 flex items-center gap-3">
             <IconBadge tone="green"><BadgeCheck className="h-[18px] w-[18px]" /></IconBadge>
             <div className="flex-1"><h2 className="font-bold">{t('Vérification de l’organisateur')}</h2><p className="text-sm text-ink-muted">{t('Badge vérifié, publication instantanée, versements plus rapides')}</p></div>
-            <Badge tone={docs.length === DOCS.length ? 'green' : 'amber'}>{org.verified ? t('Vérifié') : docs.length === DOCS.length ? t('En cours d’examen') : t('À compléter')}</Badge>
+            <Badge tone={verified ? 'green' : reviewStatus === 'rejected' ? 'red' : reviewStatus === 'pending' ? 'green' : 'amber'}>
+              {verified ? t('Vérifié') : reviewStatus === 'rejected' ? t('Refusé') : reviewStatus === 'docs_requested' ? t('Documents demandés') : reviewStatus === 'pending' ? t('En cours d’examen') : t('À compléter')}
+            </Badge>
           </div>
-          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => onDoc(e.target.files?.[0])} />
+          {!verified && ver.data?.note && (reviewStatus === 'docs_requested' || reviewStatus === 'rejected') && (
+            <p role="status" className="mb-3 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">{t('Message de l’équipe Event509 :')} {ver.data.note}</p>
+          )}
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onDoc(e.target.files?.[0]); e.target.value = ''; }} />
           <ul className="grid gap-2 sm:grid-cols-3">
             {DOCS.map((d) => {
               const ok = docs.includes(d);
@@ -101,9 +158,11 @@ export default function OrgSettings() {
                   <button
                     type="button"
                     onClick={() => { uploadFor.current = d; fileRef.current?.click(); }}
-                    className={`flex w-full items-center gap-2 rounded-2xl p-3 text-left text-sm font-semibold ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-soft hover:bg-brand-50'}`}
+                    disabled={!!uploadingDoc}
+                    aria-busy={uploadingDoc === d}
+                    className={`flex w-full items-center gap-2 rounded-2xl p-3 text-left text-sm font-semibold disabled:opacity-60 ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-soft hover:bg-brand-50'}`}
                   >
-                    {ok ? <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> : <FileUp className="h-4 w-4 shrink-0" aria-hidden />}
+                    {uploadingDoc === d ? <Spinner className="h-4 w-4" /> : ok ? <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> : <FileUp className="h-4 w-4 shrink-0" aria-hidden />}
                     <span className="flex-1">{t(d)}</span>
                     <span className="sr-only">{ok ? t('envoyé, remplacer') : t('envoyer')}</span>
                   </button>

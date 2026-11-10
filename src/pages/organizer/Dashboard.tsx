@@ -95,7 +95,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-3">
-          <Avatar name={org?.avatar ?? 'E5'} size={48} />
+          <Avatar name={org?.avatar ?? 'E5'} src={org?.logo} size={48} />
           <div>
             <div className="text-sm text-ink-muted">{t('Bonjour')} {user?.name.split(' ')[0]} !</div>
             <h1 className="text-lg font-bold">{org?.name}</h1>

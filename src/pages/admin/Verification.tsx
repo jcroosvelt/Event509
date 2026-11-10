@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BadgeCheck, Check, Eye, FileText, Image as ImageIcon, X } from 'lucide-react';
-import { decideVerification, listVerificationRequests } from '@/services/api';
+import { decideVerification, DEMO, fetchPrivateFile, listVerificationRequests } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort, relative } from '@/lib/format';
 import { useForm } from '@/lib/form';
-import { Avatar, Badge, Button, Card, EmptyState, Field, Loading, Modal, PageHeader, Segmented, Textarea, type Tone } from '@/components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Field, Loading, Modal, PageHeader, Segmented, Spinner, Textarea, type Tone } from '@/components/ui';
 import type { VerificationRequest } from '@/types';
 
 const DOCS: { type: VerificationRequest['docs'][number]['type']; label: string }[] = [
@@ -20,12 +20,40 @@ const statusTone: Record<VerificationRequest['status'], { l: string; tone: Tone 
   rejected: { l: 'Refusé', tone: 'red' },
 };
 
+/** Aperçu d'un document privé : lu avec la session de l'administrateur, jamais par une adresse publique. */
+function DocPreview({ fileId, name }: { fileId: string; name: string }) {
+  const { t } = useApp();
+  const [state, setState] = useState<{ url: string; mime: string } | 'error' | null>(null);
+  useEffect(() => {
+    let url = '';
+    let alive = true;
+    setState(null);
+    fetchPrivateFile(fileId)
+      .then((b) => {
+        url = URL.createObjectURL(b);
+        if (alive) setState({ url, mime: b.type });
+      })
+      .catch(() => alive && setState('error'));
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [fileId]);
+  if (state === null) return <div className="grid aspect-[4/3] place-items-center rounded-2xl bg-canvas ring-1 ring-line"><Spinner /></div>;
+  if (state === 'error') return <div role="alert" className="grid aspect-[4/3] place-items-center rounded-2xl bg-canvas p-6 text-center text-sm text-ink-soft ring-1 ring-line">{t('Le document n’a pas pu être chargé. Réessayez.')}</div>;
+  return state.mime === 'application/pdf' ? (
+    <iframe title={name} src={state.url} className="aspect-[4/3] w-full rounded-2xl bg-canvas ring-1 ring-line" />
+  ) : (
+    <img src={state.url} alt={name} className="max-h-[70vh] w-full rounded-2xl bg-canvas object-contain ring-1 ring-line" />
+  );
+}
+
 export default function Verification() {
   const { toast, t, lang } = useApp();
   useTitle(t('Vérification des organisateurs'));
   const { data, loading, reload } = useAsync(() => listVerificationRequests(), []);
   const [tab, setTab] = useState<'pending' | 'done'>('pending');
-  const [viewing, setViewing] = useState<{ req: VerificationRequest; file: string; label: string } | null>(null);
+  const [viewing, setViewing] = useState<{ req: VerificationRequest; file: string; fileId?: string; label: string } | null>(null);
   const [asking, setAsking] = useState<VerificationRequest | null>(null);
   const form = useForm({ note: '' }, { note: (v) => (String(v).trim().length < 5 ? t('Précisez les documents à fournir') : undefined) });
 
@@ -72,7 +100,7 @@ export default function Verification() {
                             <span className="block font-semibold">{t(d.label)}</span>
                             <span className="block truncate text-xs text-ink-muted">{doc ? `${doc.file} · ${dateShort(doc.uploadedAt, lang)}` : t('manquant')}</span>
                           </span>
-                          {doc && <Button size="sm" variant="ghost" onClick={() => setViewing({ req: v, file: doc.file, label: t(d.label) })} aria-label={t('Voir {doc}', { doc: t(d.label) })}><Eye className="h-4 w-4" aria-hidden /></Button>}
+                          {doc && <Button size="sm" variant="ghost" onClick={() => setViewing({ req: v, file: doc.file, fileId: doc.fileId, label: t(d.label) })} aria-label={t('Voir {doc}', { doc: t(d.label) })}><Eye className="h-4 w-4" aria-hidden /></Button>}
                         </li>
                       );
                     })}
@@ -95,14 +123,17 @@ export default function Verification() {
       <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing ? `${viewing.label} — ${viewing.req.name}` : ''} size="lg">
         {viewing && (
           <figure>
-            {/* Aperçu : le backend fournira une URL signée vers le fichier réel */}
-            <div className="grid aspect-[4/3] place-items-center rounded-2xl bg-canvas ring-1 ring-line">
-              <div className="text-center text-ink-muted">
-                {viewing.file.endsWith('.pdf') ? <FileText className="mx-auto h-14 w-14" aria-hidden /> : <ImageIcon className="mx-auto h-14 w-14" aria-hidden />}
-                <p className="mt-3 font-mono text-sm">{viewing.file}</p>
-                <p className="mt-1 text-xs">{t('L’aperçu du fichier s’affichera ici une fois le stockage branché.')}</p>
+            {viewing.fileId && !DEMO ? (
+              <DocPreview fileId={viewing.fileId} name={viewing.file} />
+            ) : (
+              <div className="grid aspect-[4/3] place-items-center rounded-2xl bg-canvas ring-1 ring-line">
+                <div className="text-center text-ink-muted">
+                  {viewing.file.endsWith('.pdf') ? <FileText className="mx-auto h-14 w-14" aria-hidden /> : <ImageIcon className="mx-auto h-14 w-14" aria-hidden />}
+                  <p className="mt-3 font-mono text-sm">{viewing.file}</p>
+                  <p className="mt-1 text-xs">{t('Aperçu indisponible en démonstration.')}</p>
+                </div>
               </div>
-            </div>
+            )}
             <figcaption className="mt-3 text-sm text-ink-soft">{viewing.req.owner} · {viewing.req.email}</figcaption>
           </figure>
         )}

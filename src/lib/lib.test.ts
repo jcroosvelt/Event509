@@ -124,3 +124,34 @@ describe('frais : serveur et navigateur', () => {
       }
   });
 });
+
+import { checkFile, safeName, sniff, validCover } from '../../api/_lib/files';
+describe('fichiers envoyés', () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20)]);
+  const pdf = Buffer.from('%PDF-1.4\n' + 'x'.repeat(30));
+  it('reconnaît le vrai type par les premiers octets, pas par le nom', () => {
+    expect(sniff(png)).toBe('image/png');
+    expect(sniff(jpg)).toBe('image/jpeg');
+    expect(sniff(pdf)).toBe('application/pdf');
+    expect(sniff(Buffer.from('<html><script>alert(1)</script></html>'))).toBeNull();
+    expect(sniff(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'))).toBeNull();
+  });
+  it('n’accepte un PDF que pour la vérification, et limite les tailles', () => {
+    expect('mime' in checkFile('verification', pdf)).toBe(true);
+    expect('error' in checkFile('event_cover', pdf)).toBe(true);
+    expect('error' in checkFile('org_logo', Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]))).toBe(true);
+    expect('error' in checkFile('verification', Buffer.concat([pdf, Buffer.alloc(3 * 1024 * 1024)]))).toBe(true);
+  });
+  it('ne garde que des affiches sûres', () => {
+    expect(validCover('linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)')).toBe(true);
+    expect(validCover('/api/files/f_abc123XY')).toBe(true);
+    expect(validCover('https://exemple.com/a.jpg')).toBe(true);
+    for (const bad of ['javascript:alert(1)', 'data:text/html;base64,AAAA', 'http://exemple.com/a.jpg', '/api/files/../../x', 'url(javascript:1)', 'linear-gradient(red);}</style>']) expect(validCover(bad)).toBe(false);
+  });
+  it('nettoie le nom des fichiers', () => {
+    expect(safeName('../../etc/passwd')).not.toContain('/');
+    expect(safeName('a\u0000b')).toBe('a_b');
+    expect(safeName(undefined)).toBe('fichier');
+  });
+});
