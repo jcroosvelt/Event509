@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/prerender-og.mjs && node scripts/db-setup.mjs --if-configured --seed-if-empty",
+    "build": "tsc -b && vite build && node scripts/prerender-og.mjs && node scripts/db-setup.mjs --if-configured",
     "preview": "vite preview",
     "typecheck": "tsc -b && tsc -p tsconfig.api.json",
     "lint": "eslint .",
@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test --trace off",
     "db:setup": "node scripts/db-setup.mjs",
-    "api:dev": "node scripts/api-dev.mjs"
+    "api:dev": "node scripts/api-dev.mjs",
+    "db:seed": "node scripts/db-setup.mjs --seed"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.1.1",

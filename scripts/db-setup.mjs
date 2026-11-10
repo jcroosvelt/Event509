@@ -6,7 +6,8 @@
  *   DATABASE_URL=… node scripts/db-setup.mjs --seed     # schéma + contenu de départ
  *   DATABASE_URL=… node scripts/db-setup.mjs --seed-if-empty   # idem, seulement si la base n'a aucun événement
  *
- * Sur Vercel, `npm run build` lance --seed-if-empty quand DATABASE_URL est défini.
+ * Sur Vercel, `npm run build` met seulement le schéma à jour (jamais de contenu fictif).
+ * Le contenu de départ ne se charge qu'à la demande, sur une base de test : `npm run db:seed`.
  *
  * Variables pour --seed :
  *   ADMIN_EMAIL     compte administrateur de la plateforme à créer

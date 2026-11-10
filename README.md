@@ -76,7 +76,7 @@ Le serveur est dans **`api/`** : une seule fonction Vercel (`api/index.ts`) qui 
 | `api/_lib/db.ts` | connexion Postgres |
 | `scripts/db-setup.mjs` | crée le schéma et charge le contenu de départ |
 
-**Mise en ligne sur Vercel** : définissez `DATABASE_URL`, `JWT_SECRET` et `VITE_API_URL=/api` (voir `.env.example`), puis redéployez. Au build, le schéma est mis à jour, et la base est remplie avec le contenu de départ si elle ne contient aucun événement. Sans ces variables, le site reste en mode démo.
+**Mise en ligne sur Vercel** : définissez `DATABASE_URL`, `JWT_SECRET` et `VITE_API_URL=/api` (voir `.env.example`), puis redéployez. Au build, le schéma est mis à jour (sans jamais toucher aux données). Le contenu de démonstration ne se charge qu'à la demande, sur une base de test : `npm run db:seed`. Sans ces variables, le site reste en mode démo.
 
 **Ce que le serveur garantit** : les prix, réductions et frais sont recalculés côté serveur ; les quotas sont respectés même avec des achats simultanés ; une place numérotée ne peut être vendue qu'une fois ; un billet n'est validé qu'une fois au check-in, même avec deux scanners ; chaque route vérifie le rôle (participant, équipe organisateur par rôle, administration) et l'organisation.
 
