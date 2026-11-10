@@ -1020,7 +1020,15 @@ const setPayoutStatus: Handler = async (c) => {
 // ---------- Table de routage ----------
 
 export const routes: [method: string, pattern: string, handler: Handler][] = [
-  ['GET', '/health', async () => ({ ok: true, db: !!(await one(`select 1 as ok`)) })],
+  ['GET', '/health', async () => {
+    // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
+    const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };
+    try {
+      return { ok: true, db: !!(await one(`select 1 as ok`)), env };
+    } catch {
+      return { ok: false, db: false, env };
+    }
+  }],
   ['GET', '/bootstrap', bootstrap],
   ['POST', '/auth/signup', signup],
   ['POST', '/auth/login', login],

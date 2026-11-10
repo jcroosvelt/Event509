@@ -36,7 +36,10 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       if (req.authorization && !user && !req.path.startsWith('/auth/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
       const ctx: Ctx = { user, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
-      return { status: out === null || out === undefined ? 204 : 200, body: out ?? null };
+      if (out === null || out === undefined) return { status: 204, body: null };
+      // Un diagnostic « ok: false » (voir /health) est renvoyé avec le code 503
+      const down = typeof out === 'object' && (out as { ok?: unknown }).ok === false;
+      return { status: down ? 503 : 200, body: out };
     }
     return pathMatched ? { status: 405, body: { message: 'Méthode non autorisée' } } : { status: 404, body: { message: 'Route inconnue' } };
   } catch (e) {
