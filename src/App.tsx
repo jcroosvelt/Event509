@@ -5,6 +5,7 @@ import {
   ScanLine, Settings, Share2, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
+import { InstallPrompt } from '@/components/InstallPrompt';
 import { RequireAuth, SessionWatcher } from '@/components/guards';
 import PublicLayout from '@/layouts/PublicLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
@@ -83,6 +84,7 @@ export default function App() {
     <>
       <SessionWatcher />
       <Toaster />
+      <InstallPrompt />
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route element={<PublicLayout />}>
