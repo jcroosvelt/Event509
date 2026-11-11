@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, XCircle } from 'lucide-react';
-import { listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
+import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, Trash2, XCircle } from 'lucide-react';
+import { deleteEvent, listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, dateShort, num, time } from '@/lib/format';
@@ -19,7 +19,7 @@ export const eventStatus: Record<EventItem['status'], { l: string; tone: Tone }>
   ended: { l: 'Terminé', tone: 'brand' },
 };
 
-function ActionsMenu({ e, onDuplicate, onCancel }: { e: EventItem; onDuplicate: () => void; onCancel: () => void }) {
+function ActionsMenu({ e, onDuplicate, onCancel, onDelete }: { e: EventItem; onDuplicate: () => void; onCancel: () => void; onDelete: () => void }) {
   const { t } = useApp();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -51,6 +51,7 @@ function ActionsMenu({ e, onDuplicate, onCancel }: { e: EventItem; onDuplicate: 
           <Link to={`/e/${e.slug}`} className={item} onClick={() => setOpen(false)}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
           <button type="button" onClick={() => { setOpen(false); onDuplicate(); }} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>
           {e.status !== 'cancelled' && <button type="button" onClick={() => { setOpen(false); onCancel(); }} className={`${item} text-red-600 hover:bg-red-50`}><XCircle className="h-4 w-4" aria-hidden /> {t('Annuler l’événement')}</button>}
+          <button type="button" onClick={() => { setOpen(false); onDelete(); }} className={`${item} text-red-600 hover:bg-red-50`}><Trash2 className="h-4 w-4" aria-hidden /> {t('Supprimer')}</button>
         </div>
       )}
     </div>
@@ -64,6 +65,7 @@ export default function Events() {
   const [tab, setTab] = useState<'all' | 'published' | 'draft'>('all');
   const [cancel, setCancel] = useState<EventItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [remove, setRemove] = useState<EventItem | null>(null);
 
   if (loading) return <Loading />;
   const list = (data ?? []).filter((e) => tab === 'all' || (tab === 'draft' ? ['draft', 'pending', 'rejected'].includes(e.status) : e.status === tab));
@@ -99,7 +101,7 @@ export default function Events() {
                     <div className="min-w-0 flex-1 py-1">
                       <div className="flex items-start justify-between gap-2">
                         <Badge tone={st.tone}>{t(st.l)}</Badge>
-                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} />
+                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} onDelete={() => setRemove(e)} />
                       </div>
                       <Link to={`/organisateur/evenements/${e.id}/stats`} className="mt-1 line-clamp-1 font-bold hover:text-brand-ink">{e.title}</Link>
                       <div className="text-xs text-ink-muted">{dateShort(e.start, lang)} · {time(e.start, lang)} · {e.venue?.city ?? t('En ligne')}</div>
@@ -115,6 +117,41 @@ export default function Events() {
           })}
         </ul>
       )}
+
+      <Modal
+        open={!!remove}
+        onClose={() => setRemove(null)}
+        title={t('Supprimer l’événement ?')}
+        description={t('« {event} » sera effacé définitivement. Si des billets ont été vendus, annulez plutôt l’événement pour rembourser les participants.', { event: remove?.title ?? '' })}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setRemove(null)}>{t('Garder l’événement')}</Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              loading={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await deleteEvent(remove!.id);
+                  setRemove(null);
+                  toast(t('Événement supprimé'));
+                  reload();
+                } catch {
+                  toast(t('Suppression impossible : des billets ont été vendus. Annulez l’événement à la place.'), 'error');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t('Supprimer')}
+            </Button>
+          </>
+        }
+      >
+        <span />
+      </Modal>
 
       <Modal
         open={!!cancel}

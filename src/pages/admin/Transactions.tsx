@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, Trash2 } from 'lucide-react';
 import { events, organizers } from '@/data/mock';
-import { confirmOrderPayment, listPlatformOrders } from '@/services/api';
+import { confirmOrderPayment, deleteOrder, listPlatformOrders } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, dateNumeric, moneyRaw, num, time } from '@/lib/format';
 import { exportCSV } from '@/lib/export';
-import { Badge, Button, Card, Input, Loading, PageHeader, Pager, Select, StatCard, Table, Td, type Tone } from '@/components/ui';
+import { Badge, Button, Card, Input, Loading, Modal, PageHeader, Pager, Select, StatCard, Table, Td, type Tone } from '@/components/ui';
 import type { Order } from '@/types';
 
 const statusMap: Record<Order['status'], { l: string; tone: Tone }> = {
@@ -35,6 +35,22 @@ export default function Transactions() {
       reload();
     } catch {
       toast(t('La confirmation a échoué. Réessayez.'), 'error');
+    }
+  };
+
+  const [del, setDel] = useState<Order | null>(null);
+  const [busy, setBusy] = useState(false);
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await deleteOrder(del!.id);
+      toast(t('Commande supprimée'));
+      setDel(null);
+      reload();
+    } catch {
+      toast(t('La suppression a échoué. Réessayez.'), 'error');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -91,7 +107,7 @@ export default function Transactions() {
           <Loading />
         ) : (
           <>
-            <Table caption={t('Transactions')} head={[t('Commande'), t('Date'), t('Acheteur'), t('Événement'), t('Méthode'), t('Montant'), t('Statut'), '']}>
+            <Table caption={t('Transactions')} head={[t('Commande'), t('Date'), t('Acheteur'), t('Événement'), t('Méthode'), t('Montant'), t('Statut'), '', '']}>
               {list.slice(page * PER, page * PER + PER).map((o) => (
                 <tr key={o.id}>
                   <Td className="font-mono text-xs">{o.id}</Td>
@@ -102,6 +118,7 @@ export default function Transactions() {
                   <Td className="font-bold">{moneyRaw(o.total, o.currency, lang)}</Td>
                   <Td><Badge tone={statusMap[o.status].tone}>{t(statusMap[o.status].l)}</Badge></Td>
                   <Td>{o.status === 'pending' && <Button size="sm" variant="soft" onClick={() => confirm(o.id)} aria-label={t('Confirmer le paiement de la commande {id}', { id: o.id })}>{t('Confirmer le paiement')}</Button>}</Td>
+                  <Td><Button size="sm" variant="ghost" onClick={() => setDel(o)} aria-label={t('Supprimer la commande {id}', { id: o.id })}><Trash2 className="h-4 w-4 text-red-600" aria-hidden /></Button></Td>
                 </tr>
               ))}
             </Table>
@@ -110,6 +127,21 @@ export default function Transactions() {
           </>
         )}
       </Card>
+      <Modal
+        open={!!del}
+        onClose={() => setDel(null)}
+        title={t('Supprimer cette commande ?')}
+        description={t('La commande {id} et ses billets seront effacés définitivement, sans remboursement ni email. Cette action est irréversible.', { id: del?.id ?? '' })}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setDel(null)}>{t('Garder')}</Button>
+            <Button variant="danger" className="flex-1" loading={busy} onClick={remove}>{t('Supprimer')}</Button>
+          </>
+        }
+      >
+        <span />
+      </Modal>
     </div>
   );
 }

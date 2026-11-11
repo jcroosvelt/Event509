@@ -583,6 +583,53 @@ const setEventStatus: Handler = async (c) => {
   return null;
 };
 
+/** Efface les commandes d'un événement avec tout ce qui s'y rattache (billets, reventes, remboursements, litiges). */
+async function purgeOrders(q: Q, where: string, params: unknown[]) {
+  await q.query(`delete from resale_listings where ticket_id in (select id from tickets where order_id in (select id from orders where ${where}))`, params);
+  await q.query(`delete from tickets where order_id in (select id from orders where ${where})`, params);
+  await q.query(`delete from refunds where order_id in (select id from orders where ${where})`, params);
+  await q.query(`delete from disputes where order_id in (select id from orders where ${where})`, params);
+  await q.query(`delete from orders where ${where}`, params);
+}
+
+const deleteEvent: Handler = async (c) => {
+  const orgId = org(c, 'events');
+  const isAdmin = c.user!.role === 'admin';
+  const e = await eventById(c.params.id);
+  if (!e || (e.organizerId !== orgId && !isAdmin)) fail(404, 'Événement introuvable');
+  await tx(async (q) => {
+    const sold = await one<{ n: string }>(`select count(*) as n from tickets where event_id = $1`, [e!.id], q);
+    // Un organisateur ne peut pas effacer un événement qui a déjà des billets : il doit l'annuler (remboursements)
+    if (!isAdmin && Number(sold?.n ?? 0) > 0) fail(409, 'Des billets ont été vendus : annulez l’événement plutôt que de le supprimer');
+    await q.query(`delete from resale_listings where event_id = $1`, [e!.id]);
+    await q.query(`delete from tickets where event_id = $1`, [e!.id]);
+    await q.query(`delete from refunds where order_id in (select id from orders where event_id = $1)`, [e!.id]);
+    await q.query(`delete from disputes where order_id in (select id from orders where event_id = $1)`, [e!.id]);
+    await q.query(`delete from orders where event_id = $1`, [e!.id]);
+    await q.query(`delete from reports where event_id = $1`, [e!.id]);
+    await q.query(`delete from events where id = $1`, [e!.id]);
+  });
+  if (isAdmin) await audit(c, 'Événement supprimé', e!.title);
+  return null;
+};
+
+const deleteOrder: Handler = async (c) => {
+  admin(c);
+  const o = (await docs<Order>(`select data from orders where id = $1`, [c.params.id]))[0];
+  if (!o) fail(404, 'Commande introuvable');
+  await tx(async (q) => {
+    // Les places redeviennent disponibles
+    const ev = await eventById(o!.eventId, q);
+    if (ev && ['paid', 'pending'].includes(o!.status)) {
+      const tickets = ev.tickets.map((t) => ({ ...t, sold: Math.max(0, t.sold - o!.items.filter((i) => i.ticketTypeId === t.id).reduce((a, i) => a + i.qty, 0)) }));
+      await saveEventRow({ ...ev, tickets }, q);
+    }
+    await purgeOrders(q, 'id = $1', [o!.id]);
+  });
+  await audit(c, 'Commande supprimée', o!.id);
+  return null;
+};
+
 const saveOrganizer: Handler = async (c) => {
   const orgId = org(c, 'settings');
   const cur = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId]))[0];
@@ -1246,6 +1293,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/org/sales', orgSales],
   ['PUT', '/org/events', saveEvent],
   ['POST', '/org/events/:id/status', setEventStatus],
+  ['DELETE', '/org/events/:id', deleteEvent],
   ['GET', '/org/events/:id/stats', eventStats],
   ['PUT', '/org/profile', saveOrganizer],
   ['GET', '/org/attendees', attendees],
@@ -1277,6 +1325,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['DELETE', '/admin/targets/:id', removeTarget],
   ['GET', '/admin/orders', adminOrders],
   ['POST', '/admin/orders/:id/confirm', confirmOrderPayment],
+  ['DELETE', '/admin/orders/:id', deleteOrder],
   ['GET', '/admin/users', listUsers],
   ['GET', '/admin/users/:id', userDetail],
   ['PATCH', '/admin/users/:id', updateUser],

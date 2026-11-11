@@ -1245,5 +1245,16 @@
   "Vos billets sur l’écran d’accueil, même sans connexion.": "Your tickets on your home screen, even offline.",
   "Plus tard": "Later",
   "Touchez « Partager » dans Safari": "Tap “Share” in Safari",
-  "Puis « Sur l’écran d’accueil »": "Then “Add to Home Screen”"
+  "Puis « Sur l’écran d’accueil »": "Then “Add to Home Screen”",
+  "Supprimer": "Delete",
+  "Garder": "Keep",
+  "Commande supprimée": "Order deleted",
+  "La suppression a échoué. Réessayez.": "Deletion failed. Please try again.",
+  "Supprimer la commande {id}": "Delete order {id}",
+  "Supprimer cette commande ?": "Delete this order?",
+  "La commande {id} et ses billets seront effacés définitivement, sans remboursement ni email. Cette action est irréversible.": "Order {id} and its tickets will be permanently deleted, with no refund or email. This cannot be undone.",
+  "Supprimer l’événement ?": "Delete this event?",
+  "« {event} » sera effacé définitivement. Si des billets ont été vendus, annulez plutôt l’événement pour rembourser les participants.": "“{event}” will be permanently deleted. If tickets have been sold, cancel the event instead to refund attendees.",
+  "Événement supprimé": "Event deleted",
+  "Suppression impossible : des billets ont été vendus. Annulez l’événement à la place.": "Cannot delete: tickets have been sold. Cancel the event instead."
 }

@@ -273,6 +273,13 @@ export async function setEventStatus(id: string, status: EventItem['status']) {
   if (e) e.status = status;
 }
 
+export async function deleteEvent(id: string) {
+  if (!DEMO) return void (await http(`/org/events/${encodeURIComponent(id)}`, { method: 'DELETE' }));
+  await wait(200);
+  const i = db.events.findIndex((x) => x.id === id);
+  if (i >= 0) db.events.splice(i, 1);
+}
+
 // ---------- Commandes & billets ----------
 
 export interface CheckoutInput {
@@ -579,6 +586,14 @@ export async function confirmOrderPayment(id: string) {
   if (o) o.status = 'paid';
   audit('Paiement confirmé', id);
   return { emailSent: false };
+}
+
+export async function deleteOrder(id: string) {
+  if (!DEMO) return void (await http(`/admin/orders/${encodeURIComponent(id)}`, { method: 'DELETE' }));
+  await wait(200);
+  const i = db.platformOrders.findIndex((x) => x.id === id);
+  if (i >= 0) db.platformOrders.splice(i, 1);
+  audit('Commande supprimée', id);
 }
 
 // ---------- Fichiers ----------
