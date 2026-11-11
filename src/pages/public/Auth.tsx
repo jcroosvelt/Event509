@@ -55,7 +55,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
 
   const finish = (u: AppUser) => {
     toast(signup ? t('Compte créé, bienvenue !') : t('Bonjour {name} !', { name: u.name.split(' ')[0] }));
-    nav(next ?? (hasOrganizerAccess(u) ? '/organisateur' : u.role === 'admin' ? '/admin' : '/'), { replace: true });
+    nav(next ?? (u.role === 'admin' ? '/admin' : hasOrganizerAccess(u) ? '/organisateur' : '/'), { replace: true });
   };
 
   /** Mode serveur : vraie connexion ou inscription par email et mot de passe. */
