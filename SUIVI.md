@@ -19,6 +19,8 @@
 
 ## En cours (cette session)
 
+- [x] Application installable : bandeau « Installer l'application » (Android/Chrome : bouton natif ; iPhone/iPad : explication « Partager » puis « Sur l'écran d'accueil »)
+- [x] Suppression d'un événement (organisateur : sans billet vendu ; admin : avec tout son contenu) et d'une commande avec ses billets (admin, page Transactions)
 - [x] Champs numériques : on peut effacer et retaper (plus de « 1 » ou de « 0 » collé)
 - [x] Clavier mobile : durcissement des champs (voir détail dans le journal)
 - [x] Emojis remplacés par des icônes
@@ -51,3 +53,4 @@
 - 2026-11-11 : vérifié dans un vrai navigateur sur une base vide (15 contrôles) : création d'événement, champs numériques, achat sans compte, email avec QR décodable, contrôle d'entrée, versements, saisie tactile, et audit de 37 pages (aucune donnée fictive, aucun emoji). Bug corrigé au passage : un billet refusé au contrôle d'entrée renvoyait une erreur 503 (introduit par la page de santé, déjà en ligne).
 - 2026-11-11 : achat sans compte (clé d'accès dans le lien de la commande), email des billets avec QR unique (Resend), virement : billets « en attente » jusqu'à confirmation par l'administration, transfert de billet par email.
 - 2026-11-11 : champs numériques (effaçables), icônes à la place des emojis, versements avec destination, contrôle d'entrée par événement (Valider l'entrée relance le scan), données fictives sorties du site en ligne (vérifié : aucune dans la version de production), exemples des champs de saisie rendus neutres.
+- 2026-11-11 : PWA (bandeau d'installation) et suppression d'événements / de commandes ; vérifié en ligne sur event509.vercel.app : le bandeau est dans le code livré, les routes de suppression répondent « connexion requise » sans session.
