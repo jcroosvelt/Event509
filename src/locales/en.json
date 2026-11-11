@@ -1256,5 +1256,6 @@
   "Supprimer l’événement ?": "Delete this event?",
   "« {event} » sera effacé définitivement. Si des billets ont été vendus, annulez plutôt l’événement pour rembourser les participants.": "“{event}” will be permanently deleted. If tickets have been sold, cancel the event instead to refund attendees.",
   "Événement supprimé": "Event deleted",
-  "Suppression impossible : des billets ont été vendus. Annulez l’événement à la place.": "Cannot delete: tickets have been sold. Cancel the event instead."
+  "Suppression impossible : des billets ont été vendus. Annulez l’événement à la place.": "Cannot delete: tickets have been sold. Cancel the event instead.",
+  "Changer d’espace": "Switch area"
 }

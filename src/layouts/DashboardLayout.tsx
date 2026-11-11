@@ -8,7 +8,7 @@ import { AccessDenied } from '@/components/guards';
 import { BottomNav, NotificationsMenu, OfflineBanner, SkipLink } from './PublicLayout';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
-import { can, teamRoleLabel, type Perm } from '@/lib/permissions';
+import { can, hasOrganizerAccess, teamRoleLabel, type Perm } from '@/lib/permissions';
 
 export interface NavItem {
   to: string;
@@ -105,6 +105,23 @@ export default function DashboardLayout({
     </nav>
   );
 
+  // Un administrateur a deux facettes dans le même espace : organisateur et administration
+  const both = can(user, 'admin') && hasOrganizerAccess(user);
+  const Switch = both ? (
+    <div role="group" aria-label={t('Changer d’espace')} className="flex gap-1 rounded-2xl bg-canvas p-1">
+      {[{ to: '/organisateur', label: t('Organisateur') }, { to: '/admin', label: t('Administration') }].map((x) => (
+        <Link
+          key={x.to}
+          to={x.to}
+          aria-current={x.to === base ? 'page' : undefined}
+          className={cx('flex-1 rounded-xl px-3 py-2 text-center text-sm font-bold transition', x.to === base ? 'bg-contrast text-on-contrast' : 'text-ink-soft hover:text-ink')}
+        >
+          {x.label}
+        </Link>
+      ))}
+    </div>
+  ) : null;
+
   const roleLabel = user?.role === 'admin' ? t('Admin plateforme') : user?.teamRole ? t(teamRoleLabel[user.teamRole]) : '';
   const bottomItems = bottom.filter((i) => can(user, i.perm));
 
@@ -113,7 +130,7 @@ export default function DashboardLayout({
       <SkipLink />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-line bg-surface px-4 py-6 lg:flex">
         <div className="mb-2 px-2"><Logo to={base} /></div>
-        <div className="mb-6 px-2"><Badge tone="brand">{title}</Badge></div>
+        {Switch ? <div className="mb-6">{Switch}</div> : <div className="mb-6 px-2"><Badge tone="brand">{title}</Badge></div>}
         <div className="no-scrollbar flex-1 overflow-y-auto">{Nav}</div>
         <Link to="/" className="mt-4 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-ink-soft hover:bg-canvas">
           <ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour au site')}
@@ -143,8 +160,8 @@ export default function DashboardLayout({
       {open && (
         <div role="presentation" className="fixed inset-0 z-50 bg-navy/50 lg:hidden" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)} onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label={title} className="absolute inset-y-0 right-0 w-[85%] max-w-sm overflow-y-auto bg-surface p-5">
-            <div className="mb-6 flex items-center justify-between">
-              <Badge tone="brand">{title}</Badge>
+            <div className="mb-6 flex items-center justify-between gap-3">
+              {Switch ? <div className="flex-1">{Switch}</div> : <Badge tone="brand">{title}</Badge>}
               <IconButton label={t('Fermer')} tone="soft" onClick={() => setOpen(false)} autoFocus>
                 <X className="h-5 w-5" aria-hidden />
               </IconButton>
