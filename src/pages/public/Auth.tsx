@@ -5,7 +5,7 @@ import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { hasOrganizerAccess } from '@/lib/permissions';
-import { Button, Card, Field, Input, Segmented, Toggle } from '@/components/ui';
+import { Button, Card, Field, Input, Segmented } from '@/components/ui';
 import type { AppUser } from '@/types';
 import { DEMO, signIn, signUp } from '@/services/api';
 import { ApiError } from '@/lib/errors';
@@ -33,13 +33,12 @@ const demoAccounts = [
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const { login, startSession, updateUser, toast, t } = useApp();
   const signup = mode === 'signup';
-  useTitle(signup ? t('Créer un compte') : t('Connexion'));
+  useTitle(signup ? t('Créer un compte organisateur') : t('Connexion organisateur'));
   const nav = useNavigate();
   const [params] = useSearchParams();
   const next = params.get('next');
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
-  const [organizer, setOrganizer] = useState(params.get('organisateur') === '1');
   const [loading, setLoading] = useState(false);
 
   const form = useForm(
@@ -63,7 +62,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
     setLoading(true);
     try {
       const s = signup
-        ? await signUp({ name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password, organizer })
+        ? await signUp({ name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password })
         : await signIn(form.values.email.trim(), form.values.password);
       await startSession(s);
       finish(s.user);
@@ -81,7 +80,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const done = (who?: string) => {
     setLoading(true);
     setTimeout(() => {
-      let u = login(who ?? (organizer ? 'u2' : 'u1'));
+      let u = login(who ?? 'u2');
       if (signup && form.values.name) {
         updateUser({ name: form.values.name, email: form.values.email || u.email });
         u = { ...u, name: form.values.name };
@@ -104,9 +103,10 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
       </div>
 
       <Card className="p-6 sm:p-8">
-        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte') : t('Bon retour !')}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte organisateur') : t('Bon retour !')}</h1>
+        <p className="mt-1 text-sm text-ink-soft">{t('Les comptes sont réservés aux organisateurs. Pour acheter un billet, aucun compte n’est nécessaire.')}</p>
         <p className="mt-1 text-sm text-ink-soft">
-          {signup ? t('Déjà inscrit ?') : t('Pas encore de compte ?')}{' '}
+          {signup ? t('Déjà inscrit ?') : t('Pas encore de compte organisateur ?')}{' '}
           <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand-ink">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
         </p>
 
@@ -173,7 +173,6 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
               )}
             </>
           )}
-          {signup && <Toggle checked={organizer} onChange={setOrganizer} label={t('Je suis organisateur')} description={t('Accédez à la billetterie et au tableau de bord')} />}
           <Button type="submit" size="lg" className="w-full" loading={loading}>
             {via === 'phone' && !otpSent ? t('Recevoir un code') : signup ? t('Créer mon compte') : t('Se connecter')}
           </Button>

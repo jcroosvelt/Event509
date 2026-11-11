@@ -108,17 +108,13 @@ export default function Confirmation() {
               <Button onClick={addToAccount}>{t('Ajouter à mon compte')}</Button>
             </div>
           ) : !user ? (
-            <p className="text-sm text-ink-soft">
-              {t('Un compte est facultatif. Pour retrouver vos billets sur tous vos appareils,')}{' '}
-              <Link to={`/inscription?next=${encodeURIComponent(`/commande/${order.id}?k=${key}`)}`} className="font-bold text-brand-ink">{t('créez-en un')}</Link> {t('ou')}{' '}
-              <Link to={`/connexion?next=${encodeURIComponent(`/commande/${order.id}?k=${key}`)}`} className="font-bold text-brand-ink">{t('connectez-vous')}</Link>.
-            </p>
+            <p className="text-sm text-ink-soft">{t('Pas besoin de compte : gardez l’email de confirmation ou cette page, elle rouvre vos billets à tout moment.')}</p>
           ) : null}
         </Card>
       )}
 
       <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-        <ButtonLink to="/billets" size="lg" className="flex-1">{t('Ouvrir mes billets')}</ButtonLink>
+        {user && <ButtonLink to="/billets" size="lg" className="flex-1">{t('Ouvrir mes billets')}</ButtonLink>}
         <ButtonLink to="/explorer" size="lg" variant="outline" className="flex-1">{t('Continuer à explorer')}</ButtonLink>
       </div>
     </div>
