@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, Search } from 'lucide-react';
 import { events, organizers } from '@/data/mock';
-import { listPlatformOrders } from '@/services/api';
+import { confirmOrderPayment, listPlatformOrders } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, dateNumeric, moneyRaw, num, time } from '@/lib/format';
@@ -20,14 +20,23 @@ const methodLabel: Record<Order['method'], string> = { card: 'Carte', moncash: '
 const PER = 15;
 
 export default function Transactions() {
-  const { t, lang } = useApp();
+  const { t, lang, toast } = useApp();
   useTitle(t('Transactions'));
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<Order['status'] | ''>('');
   const [method, setMethod] = useState<Order['method'] | ''>('');
   const [org, setOrg] = useState('');
   const [page, setPage] = useState(0);
-  const { data, loading } = useAsync(() => listPlatformOrders({ q, status, method, organizerId: org }), [q, status, method, org], { throwOnError: true });
+  const { data, loading, reload } = useAsync(() => listPlatformOrders({ q, status, method, organizerId: org }), [q, status, method, org], { throwOnError: true });
+  const confirm = async (id: string) => {
+    try {
+      const r = await confirmOrderPayment(id);
+      toast(r.emailSent ? t('Paiement confirmé : les billets ont été envoyés à l’acheteur') : t('Paiement confirmé : les billets sont valables (l’email n’a pas pu être envoyé)'));
+      reload();
+    } catch {
+      toast(t('La confirmation a échoué. Réessayez.'), 'error');
+    }
+  };
 
   const list = data ?? [];
   const toHTG = (o: Order, v: number) => convert(v, o.currency, 'HTG');
@@ -82,7 +91,7 @@ export default function Transactions() {
           <Loading />
         ) : (
           <>
-            <Table caption={t('Transactions')} head={[t('Commande'), t('Date'), t('Acheteur'), t('Événement'), t('Méthode'), t('Montant'), t('Statut')]}>
+            <Table caption={t('Transactions')} head={[t('Commande'), t('Date'), t('Acheteur'), t('Événement'), t('Méthode'), t('Montant'), t('Statut'), '']}>
               {list.slice(page * PER, page * PER + PER).map((o) => (
                 <tr key={o.id}>
                   <Td className="font-mono text-xs">{o.id}</Td>
@@ -92,6 +101,7 @@ export default function Transactions() {
                   <Td>{t(methodLabel[o.method])}</Td>
                   <Td className="font-bold">{moneyRaw(o.total, o.currency, lang)}</Td>
                   <Td><Badge tone={statusMap[o.status].tone}>{t(statusMap[o.status].l)}</Badge></Td>
+                  <Td>{o.status === 'pending' && <Button size="sm" variant="soft" onClick={() => confirm(o.id)} aria-label={t('Confirmer le paiement de la commande {id}', { id: o.id })}>{t('Confirmer le paiement')}</Button>}</Td>
                 </tr>
               ))}
             </Table>

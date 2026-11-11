@@ -3,7 +3,8 @@ import type {
   PlatformTarget, PromoCode, RefundRequest, Report, TeamMember, TeamRole, VerificationRequest,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
-import { hashPassword, newId, newTicketCode, signToken, verifyPassword } from './auth.js';
+import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
+import { sendTicketsEmail } from './mail.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
@@ -114,14 +115,14 @@ function toAttendee(t: IssuedTicket & { phone?: string; purchasedAt?: string; am
     id: t.id, eventId: t.eventId, name: t.holderName, email: t.holderEmail, phone: t.phone ?? '',
     ticketType: ev?.tickets.find((x) => x.id === t.ticketTypeId)?.name ?? t.ticketTypeId,
     orderId: t.orderId, checkedIn: t.status === 'used', checkedInAt: t.checkedInAt,
-    purchasedAt: t.purchasedAt ?? '', amount: t.amount ?? 0, code: t.code,
+    purchasedAt: t.purchasedAt ?? '', amount: t.amount ?? 0, code: t.code, seat: t.seat, sessionLabel: t.sessionLabel,
   };
 }
 
 /** Places vendues par session : { "": ["A-1"], "Jour 1": [...] }. */
 async function takenSeats(eventId: string, q: Q = db()) {
   const rows = await all<{ seat: string; session_label: string | null }>(
-    `select seat, session_label from tickets where event_id = $1 and seat is not null and status in ('valid','used','resale')`, [eventId], q);
+    `select seat, session_label from tickets where event_id = $1 and seat is not null and status in ('pending','valid','used','resale')`, [eventId], q);
   const out: Record<string, string[]> = {};
   for (const r of rows) (out[r.session_label ?? ''] ??= []).push(r.seat);
   return out;
@@ -170,8 +171,6 @@ const signup: Handler = async (c) => {
       `insert into users (id, email, password_hash, role, team_role, organizer_id, data) values ($1,$2,$3,$4,$5,$6,$7)`,
       [id, email, await hashPassword(password), role, teamRole, organizerId, JSON.stringify(data)],
     );
-    // Les billets achetés avant l'inscription avec ce même email apparaissent dans le compte
-    await q.query(`update orders set user_id = $1 where lower(buyer_email) = $2 and user_id is null`, [id, email]);
     const u = (await one<UserRow>(`select * from users where id = $1`, [id], q))!;
     return session(u);
   });
@@ -292,7 +291,7 @@ const createOrder: Handler = async (c) => {
   const b = c.body as {
     eventId: string; items: { ticketTypeId: string; qty: number; seats?: string[] }[]; promoCode?: string;
     method: Order['method']; currency: Currency; buyer: { name: string; email: string; phone?: string };
-    sessionLabel?: string; referral?: string;
+    sessionLabel?: string; referral?: string; lang?: string;
   };
   const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'paypal', 'transfer'];
   if (!methods.includes(b.method)) fail(422, 'Moyen de paiement invalide');
@@ -301,8 +300,10 @@ const createOrder: Handler = async (c) => {
   if (!buyer.name || !isEmail(buyer.email)) fail(422, 'Nom et email de l’acheteur requis');
   if (!Array.isArray(b.items) || !b.items.length) fail(422, 'Panier vide');
 
+  const accessKey = newAccessKey();
+  const lang = b.lang === 'en' ? 'en' : 'fr';
   try {
-    return await tx(async (q) => {
+    const result = await tx(async (q) => {
       // Verrou sur l'événement : deux achats simultanés ne peuvent pas dépasser le quota
       const row = await one<{ data: EventItem }>(`select data from events where id = $1 for update`, [b.eventId], q);
       const ev = row?.data;
@@ -347,8 +348,8 @@ const createOrder: Handler = async (c) => {
         buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone,
         promoCode: promo?.code, referral: str(b.referral, 40) || undefined, sessionLabel: str(b.sessionLabel, 80) || undefined,
       };
-      await q.query(`insert into orders (id, event_id, user_id, buyer_email, status, created_at, data) values ($1,$2,$3,$4,$5,$6,$7)`,
-        [order.id, order.eventId, c.user?.id ?? null, buyer.email, order.status, order.createdAt, JSON.stringify(order)]);
+      await q.query(`insert into orders (id, event_id, user_id, buyer_email, status, created_at, data, access_key) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [order.id, order.eventId, c.user?.id ?? null, buyer.email, order.status, order.createdAt, JSON.stringify(order), accessKey]);
 
       const tickets: IssuedTicket[] = [];
       for (const l of lines) {
@@ -357,7 +358,8 @@ const createOrder: Handler = async (c) => {
         for (let i = 0; i < l.qty; i++) {
           const t: IssuedTicket & { phone?: string; purchasedAt: string; amount: number } = {
             id: newId('it'), code: newTicketCode(), eventId: ev!.id, ticketTypeId: l.tt.id, holderName: buyer.name, holderEmail: buyer.email,
-            seat: l.seats?.[i], status: 'valid', orderId: order.id, sessionLabel: order.sessionLabel,
+            // Tant que le virement n'est pas confirmé, le billet existe (il réserve sa place) mais ne passe pas à l'entrée
+            seat: l.seats?.[i], status: order.status === 'pending' ? 'pending' : 'valid', orderId: order.id, sessionLabel: order.sessionLabel,
             phone: buyer.phone, purchasedAt: order.createdAt, amount: unit,
           };
           tickets.push(t);
@@ -373,8 +375,13 @@ const createOrder: Handler = async (c) => {
           `update ambassadors set data = jsonb_set(jsonb_set(data, '{sales}', to_jsonb((data->>'sales')::numeric + $2)), '{revenue}', to_jsonb((data->>'revenue')::numeric + $3)) where code = $1`,
           [order.referral, tickets.length, subtotal],
         );
-      return { order, tickets };
+      return { order, tickets, event: ev! };
     });
+    // Billets par email (pas de compte nécessaire) : un échec d'envoi n'annule jamais la commande
+    const emailSent = result.order.status === 'paid'
+      ? await sendTicketsEmail({ to: buyer.email, name: buyer.name, lang, event: result.event, tickets: result.tickets, orderId: result.order.id, accessKey })
+      : false;
+    return { order: result.order, tickets: result.tickets, accessKey, emailSent };
   } catch (e) {
     // Index unique sur les places : quelqu'un vient de prendre la même place
     if ((e as { code?: string }).code === '23505') fail(409, 'Une des places choisies vient d’être vendue. Choisissez-en une autre.');
@@ -382,29 +389,55 @@ const createOrder: Handler = async (c) => {
   }
 };
 
+/** Retrouver une commande et ses billets : par le lien reçu (clé d'accès) ou, une fois connecté, par son compte. */
+async function orderAccess(c: Ctx, id: string, key: string, q: Q = db()) {
+  const r = await one<{ user_id: string | null; access_key: string | null; data: Order }>(`select user_id, access_key, data from orders where id = $1`, [id], q);
+  const mine = !!c.user && r?.user_id === c.user.id;
+  // Même réponse (introuvable) si la commande n'existe pas ou si la clé est fausse
+  if (!r || !(mine || sameKey(r.access_key, key))) fail(404, 'Commande introuvable');
+  return r!;
+}
+
+const getOrder: Handler = async (c) => {
+  const r = await orderAccess(c, c.params.id, str(c.query.k, 60));
+  const tickets = await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [c.params.id]);
+  return { order: r.data, tickets, event: await eventById(r.data.eventId), claimed: !!r.user_id };
+};
+
+/** Rattacher une commande passée sans compte au compte connecté : la clé du lien prouve que la commande est bien la sienne. */
+const claimOrder: Handler = async (c) => {
+  const u = auth(c);
+  const r = await orderAccess(c, c.params.id, str(c.body.key, 60));
+  if (r.user_id && r.user_id !== u.id) fail(409, 'Cette commande est déjà rattachée à un autre compte');
+  await db().query(`update orders set user_id = $2 where id = $1`, [c.params.id, u.id]);
+  return null;
+};
+
+// Un billet appartient à un compte seulement si sa commande y est rattachée (achat connecté, ou lien de commande réclamé).
+// Une adresse email seule ne suffit jamais : elle n'est pas vérifiée à l'inscription.
 const myTickets: Handler = async (c) => {
   const u = auth(c);
   return docs<IssuedTicket>(
-    `select t.data from tickets t left join orders o on o.id = t.order_id
-     where lower(t.owner_email) = $1 or o.user_id = $2 order by t.data->>'purchasedAt' desc nulls last`, [u.email, u.id]);
+    `select t.data from tickets t join orders o on o.id = t.order_id
+     where o.user_id = $1 order by t.data->>'purchasedAt' desc nulls last`, [u.id]);
 };
 const myOrders: Handler = async (c) => {
   const u = auth(c);
-  return docs<Order>(`select data from orders where user_id = $1 or lower(buyer_email) = $2 order by created_at desc`, [u.id, u.email]);
+  return docs<Order>(`select data from orders where user_id = $1 order by created_at desc`, [u.id]);
 };
 
 async function ownTicket(c: Ctx, id: string, q: Q = db()) {
   const u = auth(c);
   const t = (await docs<IssuedTicket>(
-    `select t.data from tickets t left join orders o on o.id = t.order_id where t.id = $1 and (lower(t.owner_email) = $2 or o.user_id = $3)`,
-    [id, u.email, u.id], q))[0];
+    `select t.data from tickets t join orders o on o.id = t.order_id where t.id = $1 and o.user_id = $2`,
+    [id, u.id], q))[0];
   if (!t) fail(404, 'Billet introuvable');
   return t!;
 }
 
 const requestRefund: Handler = async (c) => {
   const u = auth(c);
-  const o = (await docs<Order>(`select data from orders where id = $1 and (user_id = $2 or lower(buyer_email) = $3)`, [c.params.id, u.id, u.email]))[0];
+  const o = (await docs<Order>(`select data from orders where id = $1 and user_id = $2`, [c.params.id, u.id]))[0];
   if (!o) fail(404, 'Commande introuvable');
   if (o!.status !== 'paid') fail(409, 'Cette commande ne peut pas être remboursée');
   const ev = await eventById(o!.eventId);
@@ -422,20 +455,34 @@ const requestRefund: Handler = async (c) => {
 };
 
 const transferTicket: Handler = async (c) => {
-  const to = str(c.body.to, 160);
-  if (!to) fail(422, 'Destinataire manquant');
-  return tx(async (q) => {
+  const to = str(c.body.to, 160).toLowerCase();
+  if (!isEmail(to)) fail(422, 'Indiquez l’adresse email du destinataire');
+  const lang = c.body.lang === 'en' ? 'en' : 'fr';
+  const out = await tx(async (q) => {
     const t = await ownTicket(c, c.params.id, q);
     if (t.status !== 'valid') fail(409, 'Ce billet ne peut plus être transféré');
-    // L'ancien billet est désactivé ; un nouveau code est émis pour le destinataire
-    const fresh: IssuedTicket = { ...t, id: newId('it'), code: newTicketCode(), holderName: to, holderEmail: isEmail(to) ? to.toLowerCase() : t.holderEmail, transferredTo: undefined };
+    const ev = (await eventById(t.eventId, q))!;
+    // Le destinataire reçoit une commande à lui (gratuite) avec sa propre clé d'accès et un nouveau QR code
+    const key = newAccessKey();
+    const order: Order = {
+      id: newId('o'), eventId: t.eventId, createdAt: new Date().toISOString(),
+      items: [{ ticketTypeId: t.ticketTypeId, qty: 1, unitPrice: 0, seats: t.seat ? [t.seat] : undefined }],
+      subtotal: 0, discount: 0, fees: 0, total: 0, currency: ev.currency, method: 'card', status: 'paid',
+      buyerName: to, buyerEmail: to, sessionLabel: t.sessionLabel,
+    };
+    await q.query(`insert into orders (id, event_id, user_id, buyer_email, status, created_at, data, access_key) values ($1,$2,null,$3,'paid',$4,$5,$6)`,
+      [order.id, order.eventId, to, order.createdAt, JSON.stringify(order), key]);
+    // L'ancien billet est désactivé et sa place libérée avant d'émettre le nouveau
     await q.query(`update tickets set status = 'transferred', seat = null, data = data || $2::jsonb where id = $1`, [t.id, JSON.stringify({ status: 'transferred', transferredTo: to })]);
+    const fresh: IssuedTicket = { ...t, id: newId('it'), code: newTicketCode(), holderName: to, holderEmail: to, status: 'valid', orderId: order.id, transferredTo: undefined };
     await q.query(
       `insert into tickets (id, code, event_id, order_id, owner_email, seat, session_label, status, data) values ($1,$2,$3,$4,$5,$6,$7,'valid',$8)`,
-      [fresh.id, fresh.code, fresh.eventId, fresh.orderId, isEmail(to) ? to.toLowerCase() : null, fresh.seat ?? null, fresh.sessionLabel ?? null, JSON.stringify(fresh)],
+      [fresh.id, fresh.code, fresh.eventId, fresh.orderId, to, fresh.seat ?? null, fresh.sessionLabel ?? null, JSON.stringify(fresh)],
     );
-    return { ticketId: t.id, to, newCode: fresh.code };
+    return { ticketId: t.id, to, newCode: fresh.code, link: `/commande/${order.id}?k=${key}`, ev, fresh, order, key };
   });
+  const emailSent = await sendTicketsEmail({ to, name: to, lang, event: out.ev, tickets: [out.fresh], orderId: out.order.id, accessKey: out.key });
+  return { ticketId: out.ticketId, to, newCode: out.newCode, link: out.link, emailSent };
 };
 
 const listResale: Handler = async (c) =>
@@ -458,7 +505,7 @@ const cancelResale: Handler = async (c) => {
   const u = auth(c);
   await tx(async (q) => {
     const l = await one<{ ticket_id: string }>(
-      `select r.ticket_id from resale_listings r join tickets t on t.id = r.ticket_id where t.code = $1 and lower(t.owner_email) = $2`, [c.params.code, u.email], q);
+      `select r.ticket_id from resale_listings r join tickets t on t.id = r.ticket_id join orders o on o.id = t.order_id where t.code = $1 and o.user_id = $2`, [c.params.code, u.id], q);
     if (!l) fail(404, 'Annonce introuvable');
     await q.query(`delete from resale_listings where ticket_id = $1`, [l!.ticket_id]);
     await q.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where id = $1`, [l!.ticket_id]);
@@ -586,7 +633,22 @@ const checkin: Handler = async (c) => {
   const a = toAttendee(t, await ev(t.eventId));
   if (eventId && t.eventId !== eventId) return { ok: false, reason: 'wrong_event', attendee: a };
   if (t.status === 'used') return { ok: false, reason: 'used', attendee: a };
-  return { ok: false, reason: 'unknown', attendee: a };
+  return { ok: false, reason: 'inactive', attendee: a };
+};
+
+/** Recherche d'un billet à l'entrée, sans rien modifier : l'organisateur vérifie qui entre, puis valide. */
+const checkinLookup: Handler = async (c) => {
+  const orgId = org(c, 'checkin');
+  const code = str(c.body.code, 40).toUpperCase();
+  const eventId = str(c.body.eventId, 60);
+  const t = (await docs<IssuedTicket>(
+    `select t.data from tickets t join events e on e.id = t.event_id where e.organizer_id = $1 and t.code = $2`, [orgId, code]))[0];
+  if (!t) return { ok: false, reason: 'unknown' };
+  const a = toAttendee(t, (await eventById(t.eventId)) ?? undefined);
+  if (eventId && t.eventId !== eventId) return { ok: false, reason: 'wrong_event', attendee: a };
+  if (t.status === 'used') return { ok: false, reason: 'used', attendee: a };
+  if (t.status !== 'valid') return { ok: false, reason: 'inactive', attendee: a };
+  return { ok: true, attendee: a };
 };
 
 const eventStats: Handler = async (c) => {
@@ -814,15 +876,31 @@ async function balanceOf(orgId: string) {
 
 const listPayouts: Handler = async (c) => docs<Payout>(`select data from payouts where organizer_id = $1 order by created_at desc`, [org(c, 'payouts')]);
 const balance: Handler = async (c) => balanceOf(org(c, 'payouts'));
+/** Destination d'un versement : MonCash et NatCash = numéro + nom complet ; PayPal = email PayPal. */
+function checkDestination(method: Payout['method'], raw: unknown): Payout['destination'] {
+  const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (method === 'paypal') {
+    const email = str(d.email, 160).toLowerCase();
+    if (!isEmail(email)) fail(422, 'Indiquez votre adresse email PayPal');
+    return { email };
+  }
+  const name = str(d.name, 80).replace(/\s+/g, ' ');
+  const phone = str(d.phone, 30);
+  if (name.split(' ').filter((w) => w.length >= 2).length < 2) fail(422, 'Indiquez le nom complet du titulaire du compte (prénom et nom)');
+  if (phone.replace(/\D/g, '').length < 8 || !/^[+\d][\d\s().-]*$/.test(phone)) fail(422, `Indiquez le numéro ${method === 'moncash' ? 'MonCash' : 'NatCash'}`);
+  return { name, phone };
+}
+
 const requestPayout: Handler = async (c) => {
   const orgId = org(c, 'payouts');
   const amount = num(c.body.amount);
   const currency = c.body.currency as Currency;
   const method = c.body.method as Payout['method'];
-  if (!['moncash', 'bank', 'paypal'].includes(method) || (currency !== 'HTG' && currency !== 'USD')) fail(422, 'Demande invalide');
+  if (!['moncash', 'natcash', 'paypal'].includes(method) || (currency !== 'HTG' && currency !== 'USD')) fail(422, 'Demande invalide');
+  const destination = checkDestination(method, c.body.destination);
   const bal = (await balanceOf(orgId))[currency];
   if (!(amount > 0) || amount > bal.balance) fail(422, 'Le montant dépasse le solde disponible');
-  const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
+  const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
   await upsert('payouts', { id: p.id, organizer_id: orgId, status: p.status, created_at: new Date().toISOString(), data: p });
   return p;
 };
@@ -1014,6 +1092,21 @@ const userDetail: Handler = async (c) => {
   };
 };
 
+/** Un virement bancaire est arrivé : la commande est payée, les billets deviennent valables et sont envoyés. */
+const confirmOrderPayment: Handler = async (c) => {
+  admin(c);
+  const out = await tx(async (q) => {
+    const r = await one<{ access_key: string; data: Order }>(`select access_key, data from orders where id = $1 and status = 'pending' for update`, [c.params.id], q);
+    if (!r) fail(404, 'Commande en attente introuvable');
+    await q.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [c.params.id]);
+    await q.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where order_id = $1 and status = 'pending'`, [c.params.id]);
+    await audit(c, 'Paiement confirmé', `${r!.data.id} — ${r!.data.buyerName}`, q);
+    return { order: { ...r!.data, status: 'paid' as const }, key: r!.access_key, tickets: await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [c.params.id], q), event: await eventById(r!.data.eventId, q) };
+  });
+  const emailSent = out.event ? await sendTicketsEmail({ to: out.order.buyerEmail, name: out.order.buyerName, lang: 'fr', event: out.event, tickets: out.tickets, orderId: out.order.id, accessKey: out.key }) : false;
+  return { emailSent };
+};
+
 const adminEvents: Handler = async (c) => {
   admin(c);
   return docs<EventItem>(`select data from events order by start_at desc`);
@@ -1138,6 +1231,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/files/:id', readFile],
   ['GET', '/org/verification', orgVerification],
   ['POST', '/orders', createOrder],
+  ['GET', '/orders/:id', getOrder],
+  ['POST', '/orders/:id/claim', claimOrder],
   ['GET', '/me/tickets', myTickets],
   ['GET', '/me/orders', myOrders],
   ['POST', '/orders/:id/refund', requestRefund],
@@ -1154,6 +1249,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/org/events/:id/stats', eventStats],
   ['PUT', '/org/profile', saveOrganizer],
   ['GET', '/org/attendees', attendees],
+  ['POST', '/org/checkin/lookup', checkinLookup],
   ['POST', '/org/checkin', checkin],
   ['GET', '/org/promos', listPromos],
   ['PUT', '/org/promos', savePromo],
@@ -1180,6 +1276,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['PUT', '/admin/targets', saveTarget],
   ['DELETE', '/admin/targets/:id', removeTarget],
   ['GET', '/admin/orders', adminOrders],
+  ['POST', '/admin/orders/:id/confirm', confirmOrderPayment],
   ['GET', '/admin/users', listUsers],
   ['GET', '/admin/users/:id', userDetail],
   ['PATCH', '/admin/users/:id', updateUser],

@@ -1,5 +1,9 @@
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { loadDemo } from '@/data/demo';
+
+// Les tests s'exécutent sur des données fictives, jamais sur de vraies données
+loadDemo();
 
 // jsdom ne fournit pas matchMedia (utilisé pour le thème et la réduction des animations)
 if (!window.matchMedia) {

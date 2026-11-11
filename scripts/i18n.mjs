@@ -42,13 +42,8 @@ export function extract() {
   for (const file of walk(src)) {
     if (file.includes(join('src', 'locales')) || file.endsWith('Legal.tsx')) continue; // Legal : textes bilingues dans le fichier
     const code = readFileSync(file, 'utf8');
-    const isMock = file.endsWith(join('data', 'mock.ts'));
-    if (isMock) {
-      // Seules les catégories sont des libellés d'interface ; le reste est du contenu
-      const cats = code.slice(code.indexOf('export const categories'), code.indexOf('export const cities'));
-      for (const m of cats.matchAll(new RegExp(`label: ${STR}`, 'g'))) add(m[1], file);
-      continue;
-    }
+    // Données de démonstration : du contenu fictif, pas du texte d'interface
+    if (/data[\\/](mock|demo|demo-data)\.ts$/.test(file)) continue;
     for (const m of code.matchAll(new RegExp(`\\bt\\(\\s*${STR}`, 'g'))) add(m[1], file);
     for (const m of code.matchAll(new RegExp(`\\bt\\(\\s*[^'()]*?\\?\\s*${STR}\\s*:\\s*${STR}`, 'g'))) {
       add(m[1], file);
@@ -65,7 +60,7 @@ export function extract() {
 }
 
 /** Phrases qui ne sont pas du texte d'interface (noms propres, marques, codes). */
-const IGNORE = new Set(['MonCash', 'NatCash', 'PayPal', 'WhatsApp', 'VIP', 'Event509', 'Live', 'HTG', 'USD', 'CVC', 'Zoom', 'Instagram', 'Facebook', 'X', 'SMS', 'Jakmèl Arts Collectif', 'Konbit Events', 'Saveurs du Nord']);
+const IGNORE = new Set(['MonCash', 'NatCash', 'PayPal', 'WhatsApp', 'VIP', 'Event509', 'Live', 'HTG', 'USD', 'CVC', 'Zoom', 'Instagram', 'Facebook', 'X', 'SMS', 'Jakmèl Arts Collectif', 'Konbit Events', 'Saveurs du Nord', 'camera']);
 
 const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 

@@ -59,3 +59,13 @@ export function newTicketCode() {
   const s = [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
   return `E509-${s.slice(0, 4)}-${s.slice(4)}`;
 }
+
+/** Clé d'accès à une commande (144 bits) : placée dans le lien envoyé à l'acheteur. */
+export const newAccessKey = () => randomBytes(18).toString('base64url');
+
+export function sameKey(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false;
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}

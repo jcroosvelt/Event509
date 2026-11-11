@@ -22,7 +22,7 @@ const perms = [
   ['Scanner les billets', true, true, false],
   ['Exporter les participants', true, false, true],
   ['Gérer les remboursements', true, false, true],
-  ['Versements et factures', true, false, true],
+  ['Versements', true, false, true],
   ['Gérer l’équipe', true, false, false],
 ] as const;
 

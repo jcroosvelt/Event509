@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Heart, MapPin, Plus, Radio, Repeat, Ticket } from 'lucide-react';
+import { Briefcase, Drama, GraduationCap, Heart, HandHeart, MapPin, Mic, Monitor, Music, PartyPopper, Plus, Radio, Repeat, Ticket, Trophy, UtensilsCrossed, type LucideIcon } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
 import { minPrice } from '@/services/api';
 import { useApp } from '@/store/app';
@@ -9,6 +9,17 @@ import { Badge, IconBadge } from './ui';
 
 export function categoryOf(id: string) {
   return categories.find((c) => c.id === id);
+}
+
+const categoryIcons: Record<string, LucideIcon> = {
+  music: Music, party: PartyPopper, conference: Mic, sport: Trophy, culture: Drama,
+  food: UtensilsCrossed, business: Briefcase, education: GraduationCap, religion: HandHeart, online: Monitor,
+};
+
+/** Icône d'une catégorie (décorative : le nom de la catégorie est toujours écrit à côté). */
+export function CategoryIcon({ id, className }: { id?: string; className?: string }) {
+  const I = (id && categoryIcons[id]) || Ticket;
+  return <I aria-hidden className={className ?? 'h-4 w-4'} />;
 }
 
 /** Visuel d'événement : image fournie par le backend, sinon dégradé + motif. */
@@ -22,9 +33,7 @@ export function EventCover({ event, className, children }: { event: EventItem; c
       ) : (
         <>
           <div className="cover-pattern absolute inset-0 opacity-30" />
-          <span className="absolute -bottom-4 -right-2 select-none text-[7rem] leading-none opacity-90 drop-shadow-xl" aria-hidden>
-            {cat?.emoji}
-          </span>
+          <CategoryIcon id={cat?.id} className="absolute -bottom-3 -right-2 h-28 w-28 text-white/25" />
         </>
       )}
       {children}

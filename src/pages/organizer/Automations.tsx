@@ -64,7 +64,10 @@ export default function Automations() {
 
   return (
     <div>
-      <PageHeader title={t('Emails automatiques')} subtitle={t('Confirmation, rappels et mises à jour envoyés automatiquement à vos participants.')} />
+      <PageHeader title={t('Emails automatiques')} subtitle={t('Modèles des messages envoyés automatiquement à vos participants.')} />
+      <p role="note" className="mb-6 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
+        {t('Aujourd’hui, seul l’email de confirmation avec les billets est envoyé, avec un texte fixe. Vos modèles sont enregistrés pour l’envoi automatique des rappels et des mises à jour, qui sera activé prochainement.')}
+      </p>
       <ul className="grid gap-4 lg:grid-cols-2">
         {list.map((a) => {
           const I = icons[a.id] ?? icons.confirm;

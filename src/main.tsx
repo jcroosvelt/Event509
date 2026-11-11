@@ -31,12 +31,20 @@ function render() {
   );
 }
 
-resetDemoStorage();
-// Mode serveur : le catalogue est chargé avant le premier affichage
-hydrate()
-  .catch(() => {
+async function start() {
+  resetDemoStorage();
+  // Version de démonstration seulement : la condition est évaluée à la compilation, si bien que le site en ligne
+  // (VITE_API_URL défini) ne contient ni ce chargement ni aucune donnée fictive.
+  if (!import.meta.env.VITE_API_URL) (await import('./data/demo')).loadDemo();
+  // Mode serveur : le catalogue est chargé avant le premier affichage
+  try {
+    await hydrate();
+  } catch {
     document.getElementById('root')!.innerHTML =
       '<p style="font-family:system-ui;padding:48px 16px;text-align:center">Event509 est momentanément indisponible. Vérifiez votre connexion puis rechargez la page.</p>';
-    throw new Error('hydrate');
-  })
-  .then(render, () => {});
+    return;
+  }
+  render();
+}
+
+void start();

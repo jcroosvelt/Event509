@@ -7,7 +7,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort } from '@/lib/format';
 import { Avatar, Card, Chip, IconBadge, ProgressRing, SectionHeader, Skeleton, StatCard } from '@/components/ui';
-import { EventCard, EventRow } from '@/components/events';
+import { CategoryIcon, EventCard, EventRow } from '@/components/events';
 import { WeekStrip } from '@/components/WeekStrip';
 
 function startOfWeek(d: Date) {
@@ -124,7 +124,7 @@ export default function Home() {
             <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
               {categories.map((c) => (
                 <Chip key={c.id} onClick={() => nav(`/explorer?category=${c.id}`)}>
-                  <span aria-hidden>{c.emoji}</span> {t(c.label)}
+                  <CategoryIcon id={c.id} className="h-4 w-4 text-brand-ink" /> {t(c.label)}
                 </Chip>
               ))}
             </div>

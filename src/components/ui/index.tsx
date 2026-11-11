@@ -1,5 +1,5 @@
 import {
-  createContext, useContext, useEffect, useId, useRef,
+  createContext, useContext, useEffect, useId, useRef, useState,
   type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +10,7 @@ import { useApp } from '@/store/app';
 
 // ---------------- Boutons ----------------
 
-type BtnVariant = 'primary' | 'dark' | 'soft' | 'ghost' | 'outline' | 'danger';
+type BtnVariant = 'primary' | 'dark' | 'soft' | 'ghost' | 'outline' | 'danger' | 'light';
 const btnBase =
   'inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none';
 const btnVariants: Record<BtnVariant, string> = {
@@ -20,6 +20,8 @@ const btnVariants: Record<BtnVariant, string> = {
   ghost: 'text-ink hover:bg-ink/5',
   outline: 'border border-line bg-surface text-ink hover:border-ink/20',
   danger: 'bg-red-50 text-red-700 hover:bg-red-100',
+  // Sur un fond de couleur (résultat d'un scan)
+  light: 'bg-white text-navy hover:bg-white/90',
 };
 const btnSizes = { sm: 'h-9 px-4 text-sm', md: 'h-11 px-5 text-sm', lg: 'h-14 px-7 text-base' };
 
@@ -194,6 +196,59 @@ export function Input({ className, icon, inputRef, ...p }: InputHTMLAttributes<H
       </div>
     );
   return <input ref={inputRef} className={cx(inputCls, 'h-12', className)} {...p} {...f} />;
+}
+
+/**
+ * Champ numérique : on peut l'effacer et retaper librement (pas de « 0 » ou de « 1 » qui reste collé).
+ * La valeur n'est transmise que lorsqu'elle est valable ; à la sortie du champ, un champ vide ou hors
+ * limites revient à une valeur correcte. Clavier numérique sur mobile.
+ */
+export function NumberInput({
+  value, onValue, min = 0, max, decimal, className, onBlur, onFocus, ...p
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type' | 'min' | 'max'> & {
+  value: number; onValue: (n: number) => void; min?: number; max?: number; decimal?: boolean; className?: string;
+}) {
+  const f = useFieldProps(p);
+  const [text, setText] = useState(() => String(value));
+  const focused = useRef(false);
+  // Une valeur modifiée de l'extérieur (ex. billet gratuit : prix remis à 0) met le champ à jour, sauf pendant la frappe
+  useEffect(() => {
+    if (!focused.current) setText(String(value));
+  }, [value]);
+  const parse = (raw: string) => (raw.trim() === '' ? NaN : Number(raw));
+  const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min, n));
+  return (
+    <input
+      {...p}
+      {...f}
+      type="text"
+      inputMode={decimal ? 'decimal' : 'numeric'}
+      autoComplete="off"
+      enterKeyHint="next"
+      className={cx(inputCls, 'h-12', className)}
+      value={text}
+      onFocus={(e) => {
+        focused.current = true;
+        onFocus?.(e);
+      }}
+      onChange={(e) => {
+        // Chiffres seulement (et une virgule ou un point pour les décimaux)
+        let raw = e.target.value.replace(decimal ? /[^\d.,]/g : /\D/g, '');
+        if (decimal) raw = raw.replace(',', '.').replace(/^(\d*\.\d*).*$/, '$1');
+        setText(raw);
+        const n = parse(raw);
+        if (Number.isFinite(n) && n >= min && n <= (max ?? Infinity)) onValue(n);
+      }}
+      onBlur={(e) => {
+        focused.current = false;
+        const n = parse(text);
+        const next = Number.isFinite(n) ? clamp(n) : value;
+        if (next !== value) onValue(next);
+        setText(String(next));
+        onBlur?.(e);
+      }}
+    />
+  );
 }
 
 export function Textarea({ className, inputRef, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement> & { inputRef?: ElRef }) {
@@ -459,8 +514,10 @@ export function Modal({
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     const node = ref.current!;
-    // Focus initial : premier champ, sinon la fenêtre elle-même
-    const first = node.querySelector<HTMLElement>('input,select,textarea') ?? node;
+    // Sur écran tactile, on ne force pas le focus dans un champ : le clavier ne s'ouvre qu'au toucher de l'utilisateur
+    // (un clavier qui s'ouvre tout seul masque les boutons, et un focus sans geste peut ne rien ouvrir du tout).
+    const touch = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    const first = (touch ? null : node.querySelector<HTMLElement>('input,select,textarea')) ?? node;
     first.focus();
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -480,7 +537,8 @@ export function Modal({
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
-      opener?.focus?.();
+      // Ne pas rouvrir le clavier en rendant le focus à un champ de saisie sur écran tactile
+      if (!(touch && (opener instanceof HTMLInputElement || opener instanceof HTMLTextAreaElement))) opener?.focus?.();
     };
   }, [open]);
 

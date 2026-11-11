@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, BarChart3, Eye, Megaphone, Plus, ScanLine, Ticket, TrendingUp, Users, Wallet } from 'lucide-react';
-import { organizers, weeklySales } from '@/data/mock';
-import { DEMO, listOrganizerEvents, orgSales, type OrgSales } from '@/services/api';
+import { organizers } from '@/data/mock';
+import { listOrganizerEvents, orgSales, type OrgSales } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, dateShort, moneyRaw, num } from '@/lib/format';
@@ -12,35 +12,6 @@ import {
 } from '@/components/ui';
 import { EventCover } from '@/components/events';
 
-const buyers = ['Wilson C.', 'Nadège L.', 'Kervens M.', 'Fabiola D.', 'Junior A.', 'Mirlande S.', 'Peterson D.', 'Darline E.'];
-const types = ['Standard', 'VIP', 'Standard', 'Pack Groupe x5', 'Standard'];
-const prices: Record<string, number> = { Standard: 2500, VIP: 7500, 'Pack Groupe x5': 10000 };
-
-interface LiveSale { id: number | string; who: string; type: string; qty: number; amount: number }
-
-/** Flux de ventes en temps réel (simulé ; à brancher sur WebSocket / SSE). */
-function useLiveSales() {
-  const [sales, setSales] = useState<LiveSale[]>(() =>
-    Array.from({ length: 5 }, (_, i) => {
-      const type = types[i % types.length];
-      return { id: i, who: buyers[i], type, qty: 1 + (i % 2), amount: prices[type] * (1 + (i % 2)) };
-    }),
-  );
-  useEffect(() => {
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      setSales((s) => {
-        const type = types[Math.floor(Math.random() * types.length)];
-        const qty = 1 + Math.floor(Math.random() * 3);
-        return [{ id: Date.now(), who: buyers[Math.floor(Math.random() * buyers.length)], type, qty, amount: prices[type] * qty }, ...s].slice(0, 8);
-      });
-    }, reduced ? 15000 : 6000);
-    return () => clearInterval(timer);
-  }, []);
-  return sales;
-}
-
 export default function Dashboard() {
   const { lang, t, user } = useApp();
   useTitle(t('Tableau de bord'));
@@ -49,12 +20,11 @@ export default function Dashboard() {
   const { data: events, loading } = useAsync(() => listOrganizerEvents(orgId), [orgId]);
   const [eventId, setEventId] = useState('all');
   const [metric, setMetric] = useState<'tickets' | 'revenue'>('tickets');
-  const [active, setActive] = useState(2);
-  const demoLive = useLiveSales();
-  // Mode serveur : vraies ventes, rafraîchies toutes les 20 secondes
+  const [active, setActive] = useState(6);
+  // Ventes réelles des 7 derniers jours et dernières commandes, rafraîchies toutes les 20 secondes
   const [real, setReal] = useState<OrgSales | null>(null);
   useEffect(() => {
-    if (DEMO || !orgId) return;
+    if (!orgId) return;
     let stop = false;
     const load = () => orgSales(orgId).then((r) => !stop && setReal(r)).catch(() => {});
     void load();
@@ -64,10 +34,8 @@ export default function Dashboard() {
       clearInterval(timer);
     };
   }, [orgId]);
-  const live = DEMO ? demoLive : real?.recent ?? [];
-  const daily = DEMO
-    ? weeklySales
-    : (real?.week ?? []).map((d) => ({ ...d, target: Math.max(1, ...(real?.week ?? []).map((x) => x.tickets)) }));
+  const live = real?.recent ?? [];
+  const daily = real?.week ?? [];
 
   const scope = useMemo(() => (events ?? []).filter((e) => eventId === 'all' || e.id === eventId), [events, eventId]);
   const sold = scope.reduce((a, e) => a + e.tickets.reduce((x, tt) => x + tt.sold, 0), 0);
@@ -76,18 +44,12 @@ export default function Dashboard() {
   const views = scope.reduce((a, e) => a + e.views, 0);
   const liveTotal = live.reduce((a, s) => a + s.amount, 0);
 
-  // Libellés des jours dans la langue de l'interface (lundi → dimanche)
-  const dayNames = useMemo(() => {
-    const monday = new Date(2024, 0, 1);
-    return Array.from({ length: 7 }, (_, i) => new Date(monday.getFullYear(), 0, 1 + i).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', ''));
-  }, [lang]);
-  const week = daily.map((d, i) => ({
-    label: !DEMO ? new Date(`${(d as { date: string }).date}T12:00:00`).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', '') : dayNames[i],
+  const week = daily.map((d) => ({
+    label: new Date(`${d.date}T12:00:00`).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', ''),
     value: metric === 'tickets' ? d.tickets : d.revenue,
-    max: metric === 'tickets' ? d.target : d.target * 2500,
+    max: metric === 'tickets' ? d.tickets : d.revenue,
   }));
   const weekTotal = daily.reduce((a, d) => a + (metric === 'tickets' ? d.tickets : d.revenue), 0);
-  const weekTarget = daily.reduce((a, d) => a + (metric === 'tickets' ? d.target : d.target * 2500), 0);
 
   if (loading) return <Loading />;
 
@@ -123,7 +85,6 @@ export default function Dashboard() {
             </div>
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <Segmented label={t('Indicateur')} size="sm" value={metric} onChange={setMetric} options={[{ value: 'tickets', label: t('Billets') }, { value: 'revenue', label: t('Revenus') }]} />
-              <span className="text-sm text-ink-muted">{t('Objectif :')} <b className="text-ink">{metric === 'tickets' ? num(weekTarget, lang) : compact(weekTarget, lang)}</b></span>
             </div>
           </div>
           <div className="mt-6">

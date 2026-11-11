@@ -22,7 +22,7 @@ const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process
 const site = (process.env.SITE_URL || vercelUrl || 'https://event509.com').replace(/\/$/, '');
 
 async function loadData() {
-  const ts = readFileSync(join(root, 'src/data/mock.ts'), 'utf8');
+  const ts = readFileSync(join(root, 'src/data/demo-data.ts'), 'utf8');
   const { code } = transformSync(ts, { loader: 'ts', format: 'esm' });
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
@@ -46,6 +46,12 @@ function page(template, { title, description, url, image }) {
   return html;
 }
 
+// Pages de partage des événements de démonstration seulement. Sur le site en ligne (VITE_API_URL défini),
+// aucune donnée fictive ne doit être publiée : cette étape est ignorée.
+if (process.env.VITE_API_URL) {
+  console.log('prerender-og : ignoré (site relié au serveur, aucune donnée de démonstration publiée)');
+  process.exit(0);
+}
 const { events, organizers } = await loadData();
 const template = readFileSync(join(dist, 'index.html'), 'utf8');
 /** Écrit /e/slug.html et /e/slug/index.html : les hébergeurs résolvent l'un ou l'autre. */

@@ -12,7 +12,7 @@ import { convert, cx, dateLong, dateShort, money, num, time } from '@/lib/format
 import { downloadICS } from '@/lib/export';
 import { trackPixel } from '@/lib/pixels';
 import { Avatar, Badge, Button, Card, Field, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, Select, Textarea, type Tone } from '@/components/ui';
-import { EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
+import { CategoryIcon, EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
 import { useSessionLabel } from '@/components/TicketCard';
 import NotFound from './NotFound';
 import type { Report, TicketType } from '@/types';
@@ -113,7 +113,7 @@ export default function EventDetail() {
         </div>
         <div className="absolute bottom-5 left-5 right-5 flex flex-wrap gap-2">
           {ev.categories.map((c) => (
-            <Badge key={c} className="!bg-surface/90 text-ink"><span aria-hidden>{categoryOf(c)?.emoji}</span> {t(categoryOf(c)?.label ?? '')}</Badge>
+            <Badge key={c} className="!bg-surface/90 text-ink"><CategoryIcon id={c} className="h-3.5 w-3.5" /> {t(categoryOf(c)?.label ?? '')}</Badge>
           ))}
           {ev.tags?.map((tg) => <Badge key={tg} className="!bg-navy/70 !text-white backdrop-blur">{tg}</Badge>)}
         </div>

@@ -10,7 +10,6 @@ export type CategoryId =
 export interface Category {
   id: CategoryId;
   label: string;
-  emoji: string;
 }
 
 export type TicketKind = 'free' | 'paid' | 'vip' | 'early_bird' | 'group';
@@ -99,7 +98,7 @@ export interface Organizer {
 
 export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'paypal' | 'transfer';
 
-export type TicketStatus = 'valid' | 'used' | 'transferred' | 'refunded' | 'resale';
+export type TicketStatus = 'pending' | 'valid' | 'used' | 'transferred' | 'refunded' | 'resale';
 
 export interface IssuedTicket {
   id: string;
@@ -175,6 +174,9 @@ export interface Attendee {
   purchasedAt: string;
   amount: number;
   code: string;
+  /** Place numérotée et session, pour les vérifier à l'entrée. */
+  seat?: string;
+  sessionLabel?: string;
 }
 
 export interface RefundRequest {
@@ -194,7 +196,9 @@ export interface Payout {
   organizerId: string;
   amount: number;
   currency: Currency;
-  method: 'moncash' | 'bank' | 'paypal';
+  method: 'moncash' | 'natcash' | 'paypal';
+  /** Où envoyer l'argent : MonCash et NatCash = numéro + nom complet du titulaire ; PayPal = adresse email PayPal. */
+  destination: { name?: string; phone?: string; email?: string };
   /** requested : demandé par l'organisateur, en attente de validation par l'administration. */
   status: 'requested' | 'processing' | 'scheduled' | 'paid' | 'rejected';
   date: string;

@@ -7,7 +7,7 @@ import { cancelResale, listForResale, transferTicket } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { dateLong, money, time } from '@/lib/format';
-import { isEmail, isPhone, useForm } from '@/lib/form';
+import { isEmail, useForm, cleanNumber } from '@/lib/form';
 import { downloadTicketImage } from '@/lib/ticketImage';
 import { Badge, Button, Card, Field, Input, Modal, ProgressBar } from '@/components/ui';
 import { EventCover } from '@/components/events';
@@ -40,7 +40,8 @@ export default function TicketDetail() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const transfer = useForm({ to: '' }, { to: (v) => (!isEmail(v) && !isPhone(v) ? t('Saisissez un email (nom@domaine.com) ou un numéro (+509…)') : undefined) });
+  const transfer = useForm({ to: '' }, { to: (v) => (!isEmail(v) ? t('Saisissez l’adresse email du destinataire (nom@domaine.com)') : undefined) });
+  const [sentLink, setSentLink] = useState<{ to: string; url: string } | null>(null);
   const resale = useForm(
     { price: String(tt?.price ?? 0) },
     { price: (v) => (!(Number(v) > 0) ? t('Indiquez un prix supérieur à 0') : tt && Number(v) > tt.price ? t('Le prix ne peut pas dépasser {max}', { max: money(tt.price, ev!.currency, lang) }) : undefined) },
@@ -61,10 +62,12 @@ export default function TicketDetail() {
     if (!transfer.validate()) return;
     setBusy(true);
     try {
-      await transferTicket(tk.id, transfer.values.to);
+      const r = await transferTicket(tk.id, transfer.values.to.trim(), lang);
       updateTicket(tk.id, { status: 'transferred', transferredTo: transfer.values.to });
       setTransferOpen(false);
-      toast(t('Billet envoyé à {to}. Votre QR code est désactivé.', { to: transfer.values.to }));
+      // Si l'email n'a pas pu partir, on donne le lien à transmettre soi-même au destinataire
+      if (r.link && !r.emailSent) setSentLink({ to: transfer.values.to, url: `${window.location.origin}${r.link}` });
+      else toast(t('Billet envoyé à {to}. Votre QR code est désactivé.', { to: transfer.values.to }));
     } catch {
       toast(t('Le transfert n’a pas abouti. Votre billet reste valide ; réessayez.'), 'error');
     } finally {
@@ -211,10 +214,21 @@ export default function TicketDetail() {
         footer={<Button className="flex-1" onClick={doTransfer} loading={busy}>{t('Transférer')}</Button>}
       >
         <form noValidate onSubmit={(e) => { e.preventDefault(); doTransfer(); }}>
-          <Field label={t('Email ou téléphone du destinataire')} error={transfer.errors.to} required>
-            <Input placeholder="ami@exemple.com" autoComplete="off" {...transfer.bind('to')} />
+          <Field label={t('Email du destinataire')} error={transfer.errors.to} required>
+            <Input type="email" inputMode="email" placeholder="ami@exemple.com" autoComplete="off" {...transfer.bind('to')} />
           </Field>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!sentLink}
+        onClose={() => setSentLink(null)}
+        title={t('Billet transféré')}
+        description={t('Votre QR code est désactivé. L’email n’a pas pu partir : envoyez ce lien à {to}, il lui donne accès à son billet.', { to: sentLink?.to ?? '' })}
+        size="sm"
+        footer={<Button className="flex-1" onClick={() => { void navigator.clipboard?.writeText(sentLink!.url).then(() => toast(t('Lien copié'))).catch(() => {}); }}>{t('Copier le lien')}</Button>}
+      >
+        <p className="select-all break-all rounded-2xl bg-canvas p-3 font-mono text-xs">{sentLink?.url}</p>
       </Modal>
 
       <Modal
@@ -227,7 +241,7 @@ export default function TicketDetail() {
       >
         <form noValidate onSubmit={(e) => { e.preventDefault(); doResale(); }}>
           <Field label={t('Prix ({cur})', { cur: ev.currency })} error={resale.errors.price} hint={t('Maximum : {max}', { max: money(tt.price, ev.currency, lang) })} required>
-            <Input type="number" inputMode="decimal" min={1} max={tt.price} {...resale.bind('price')} />
+            <Input type="text" inputMode="decimal" autoComplete="off" {...resale.bind('price')} onChange={(e) => resale.set('price', cleanNumber(e.target.value, true))} />
           </Field>
         </form>
       </Modal>

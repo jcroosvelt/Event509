@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Ticket } from 'lucide-react';
 import { events } from '@/data/mock';
 import { useApp } from '@/store/app';
@@ -7,7 +8,7 @@ import { ButtonLink, EmptyState, PageHeader, Segmented } from '@/components/ui';
 import { TicketCard } from '@/components/TicketCard';
 
 export default function Wallet() {
-  const { tickets, t } = useApp();
+  const { tickets, t, user } = useApp();
   useTitle(t('Mes billets'));
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
 
@@ -25,6 +26,12 @@ export default function Wallet() {
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 lg:pt-10">
       <PageHeader title={t('Mes billets')} subtitle={t('Présentez le QR code à l’entrée. Il reste disponible sans connexion.')} />
+      {!user && (
+        <p className="mb-5 rounded-2xl bg-brand-50 p-4 text-sm text-ink-soft">
+          {t('Vous voyez les billets achetés sur cet appareil. Pour les retrouver partout, ouvrez le lien reçu par email, ou')}{' '}
+          <Link to="/connexion?next=/billets" className="font-bold text-brand-ink">{t('connectez-vous')}</Link>.
+        </p>
+      )}
       <Segmented
         label={t('Période')}
         className="mb-6"
@@ -37,7 +44,7 @@ export default function Wallet() {
       />
       {list.length ? (
         <ul className="grid gap-4">
-          {list.map((x) => <li key={x.id}><TicketCard ticket={x} /></li>)}
+          {list.map((x) => <li key={x.id}><TicketCard ticket={x} linked={!!user} /></li>)}
         </ul>
       ) : (
         <EmptyState

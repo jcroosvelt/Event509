@@ -9,6 +9,7 @@ import { Badge, type Tone } from './ui';
 import { EventCover } from './events';
 
 export const statusLabel: Record<IssuedTicket['status'], { label: string; tone: Tone }> = {
+  pending: { label: 'En attente de paiement', tone: 'amber' },
   valid: { label: 'Valide', tone: 'green' },
   used: { label: 'Utilisé', tone: 'gray' },
   transferred: { label: 'Transféré', tone: 'violet' },
@@ -34,7 +35,7 @@ export function TicketCard({ ticket, compact, linked = true }: { ticket: IssuedT
 
   const body = (
     <div className={cx('overflow-hidden rounded-3xl bg-surface shadow-card transition', linked && 'hover:-translate-y-0.5', dim && 'opacity-75')}>
-      <EventCover event={ev} className="h-24 [&>span]:!text-[4.5rem]">
+      <EventCover event={ev} className="h-24 [&>svg]:!h-16 [&>svg]:!w-16">
         <div className="absolute inset-0 bg-gradient-to-r from-navy/75 to-transparent" />
         <div className="absolute inset-y-0 left-5 flex flex-col justify-center text-white">
           <span className="text-xs font-semibold opacity-90">{tt?.name}</span>

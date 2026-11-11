@@ -176,3 +176,11 @@ create table if not exists files (
   created_at timestamptz not null default now()
 );
 create index if not exists files_org on files(organizer_id, kind);
+
+-- Achat sans compte : la clé d'accès (dans le lien reçu par email) permet de retrouver une commande et ses billets.
+alter table orders add column if not exists access_key text;
+
+-- Une place numérotée n'est vendue qu'une fois, y compris tant que le virement n'est pas confirmé (billet « pending »).
+create unique index if not exists tickets_seat_once_v2 on tickets(event_id, coalesce(session_label, ''), seat)
+  where seat is not null and status in ('pending', 'valid', 'used', 'resale');
+drop index if exists tickets_seat_once;

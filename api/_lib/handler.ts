@@ -38,8 +38,9 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       const out = await r.handler(ctx);
       if (out === null || out === undefined) return { status: 204, body: null };
       if (out instanceof Binary) return { status: 200, body: out };
-      // Un diagnostic « ok: false » (voir /health) est renvoyé avec le code 503
-      const down = typeof out === 'object' && (out as { ok?: unknown }).ok === false;
+      // Seul le diagnostic de /health est renvoyé en 503 quand le serveur est en panne ; ailleurs « ok: false »
+      // est une réponse normale (ex. billet refusé au contrôle d'entrée)
+      const down = req.path === '/health' && typeof out === 'object' && (out as { ok?: unknown }).ok === false;
       return { status: down ? 503 : 200, body: out };
     }
     return pathMatched ? { status: 405, body: { message: 'Méthode non autorisée' } } : { status: 404, body: { message: 'Route inconnue' } };

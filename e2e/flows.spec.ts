@@ -43,7 +43,7 @@ test.describe('participant', () => {
   test('transfère un billet : il devient inactif', async ({ page }) => {
     await fresh(page, '/billets/it1');
     await page.getByRole('button', { name: 'Transférer' }).click();
-    await page.getByLabel(/Email ou téléphone du destinataire/).fill('ami@example.com');
+    await page.getByLabel(/Email du destinataire/).fill('ami@example.com');
     await page.getByRole('dialog').getByRole('button', { name: 'Transférer' }).click();
     await expect(page.getByText('QR désactivé')).toBeVisible();
     await expect(page.getByText('Transféré à ami@example.com')).toBeVisible();
@@ -65,11 +65,11 @@ test.describe('accès et rôles', () => {
   test('un visiteur est renvoyé vers la connexion puis revient à la page demandée', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.setItem('e509.user', 'null'));
-    await page.goto('/billets');
-    await expect(page).toHaveURL(/\/connexion\?next=%2Fbillets/);
+    await page.goto('/compte');
+    await expect(page).toHaveURL(/\/connexion\?next=%2Fcompte/);
     await page.getByText('Comptes de démonstration').click();
     await page.getByRole('button', { name: 'Participant' }).click();
-    await expect(page).toHaveURL(/\/billets$/);
+    await expect(page).toHaveURL(/\/compte$/);
   });
 
   test('un participant ne voit pas l’administration', async ({ page }) => {
@@ -90,30 +90,43 @@ test.describe('accès et rôles', () => {
   test('le comptable voit les versements mais pas l’éditeur d’événement', async ({ page }) => {
     await loginAs(page, /Comptable/);
     await page.goto('/organisateur/versements');
-    await expect(page.getByRole('heading', { name: 'Versements et factures' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Versements', exact: true })).toBeVisible();
     await page.goto('/organisateur/evenements/nouveau');
     await expect(page).not.toHaveURL(/nouveau/);
   });
 });
 
 test.describe('organisateur', () => {
-  test('check-in : valide, refuse un doublon et un faux billet, puis valide hors ligne', async ({ page }) => {
+  test('contrôle d’entrée : choix de l’événement, vérification puis validation, refus d’un doublon et d’un faux billet, puis hors ligne', async ({ page }) => {
     await loginAs(page, /Organisateur \(admin\)/);
     await page.goto('/organisateur/checkin');
+    // Plusieurs événements publiés : on choisit d'abord celui dont on contrôle les billets
+    await page.getByRole('link', { name: /Festival Kompa Live 2026/ }).click();
+    await page.waitForURL(/\/organisateur\/checkin\/.+/);
     await expect(page.locator('.text-3xl.font-extrabold')).toContainText(/\/ [1-9]/); // liste des participants chargée
-    const result = page.locator('p[aria-live="assertive"]');
+    const validate = page.getByRole('button', { name: 'Valider l’entrée' });
+    const next = page.getByRole('button', { name: 'OK, scanner le suivant' });
+
+    // Billet valide : le scanner s'arrête, l'organisateur voit qui entre, puis valide ; le scan reprend
     await page.getByRole('button', { name: 'Billet valide' }).click();
-    await expect(result).toContainText('Entrée validée');
-    await page.waitForTimeout(3100); // anti double lecture
+    await expect(validate).toBeVisible();
+    await validate.click();
+    await expect(page.getByText(/Entrée validée :/)).toBeVisible();
+    await expect(validate).toHaveCount(0);
+
     await page.getByRole('button', { name: 'Billet déjà utilisé' }).click();
-    await expect(result).toContainText('Déjà scanné');
-    await page.waitForTimeout(3100);
+    await expect(page.getByText('Déjà scanné').first()).toBeVisible();
+    await next.click();
+    await expect(next).toHaveCount(0);
+
     await page.getByRole('button', { name: 'Faux billet' }).click();
-    await expect(result).toContainText('Billet invalide');
+    await expect(page.getByText('Billet invalide').first()).toBeVisible();
+    await next.click();
+
+    // Hors ligne : la validation est gardée puis synchronisée au retour du réseau
     await page.getByRole('switch', { name: 'Forcer hors ligne' }).click();
-    await page.waitForTimeout(3100);
     await page.getByRole('button', { name: 'Billet valide' }).click();
-    await expect(result).toContainText('Entrée validée');
+    await validate.click();
     await expect(page.getByRole('button', { name: /Synchroniser \(1\)/ })).toBeVisible();
   });
 

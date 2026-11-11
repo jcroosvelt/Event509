@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Building2, Check, Smartphone, Wallet, X } from 'lucide-react';
+import { Check, Smartphone, Wallet, X } from 'lucide-react';
 import { organizers } from '@/data/mock';
 import { listAllPayouts, setPayoutStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric, moneyRaw } from '@/lib/format';
+import { destinationText } from '@/lib/labels';
 import { Badge, Button, Card, EmptyState, Loading, Modal, PageHeader, Segmented, Table, Td, type Tone } from '@/components/ui';
 import type { Payout } from '@/types';
 
-const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = { bank: { l: 'Virement bancaire', i: Building2 }, moncash: { l: 'MonCash', i: Smartphone }, paypal: { l: 'PayPal', i: Wallet } };
+const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = { moncash: { l: 'MonCash', i: Smartphone }, natcash: { l: 'NatCash', i: Smartphone }, paypal: { l: 'PayPal', i: Wallet } };
 const status: Record<Payout['status'], { l: string; tone: Tone }> = {
   requested: { l: 'À valider', tone: 'amber' },
   processing: { l: 'En cours', tone: 'brand' },
@@ -37,13 +38,13 @@ export default function AdminPayouts() {
 
   return (
     <div>
-      <PageHeader title={t('Versements aux organisateurs')} subtitle={t('Validez les demandes puis confirmez le paiement une fois le virement effectué.')} />
+      <PageHeader title={t('Versements aux organisateurs')} subtitle={t('Validez les demandes, envoyez l’argent à la destination indiquée, puis confirmez le paiement.')} />
       <Segmented label={t('Filtre')} className="mb-5" value={tab} onChange={setTab} options={[{ value: 'todo', label: t('À traiter ({n})', { n: all.filter((p) => p.status === 'requested' || p.status === 'processing').length }) }, { value: 'all', label: t('Tous') }]} />
       {!list.length ? (
         <EmptyState icon={<Wallet className="h-5 w-5" />} title={t('Aucun versement à traiter')} />
       ) : (
         <Card>
-          <Table caption={t('Versements aux organisateurs')} head={[t('Organisateur'), t('Référence'), t('Date'), t('Méthode'), t('Montant'), t('Statut'), '']}>
+          <Table caption={t('Versements aux organisateurs')} head={[t('Organisateur'), t('Référence'), t('Date'), t('Envoyer à'), t('Montant'), t('Statut'), '']}>
             {list.map((p) => {
               const M = method[p.method];
               return (
@@ -51,7 +52,7 @@ export default function AdminPayouts() {
                   <Td className="font-semibold">{orgName(p.organizerId)}</Td>
                   <Td className="font-mono text-xs">{p.reference}</Td>
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
-                  <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 text-ink-muted" aria-hidden />{t(M.l)}</span></Td>
+                  <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="select-all text-xs text-ink-soft">{destinationText(p)}</span></span></span></Td>
                   <Td className="font-bold">{moneyRaw(p.amount, p.currency, lang)}</Td>
                   <Td><Badge tone={status[p.status].tone}>{t(status[p.status].l)}</Badge></Td>
                   <Td>

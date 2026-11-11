@@ -282,18 +282,28 @@ export interface CheckoutInput {
   method: PaymentMethod;
   currency: Currency;
   buyer: { name: string; email: string; phone?: string };
-  delivery: { email: boolean; whatsapp: boolean; app: boolean };
   feePercent: number;
   totals: { subtotal: number; discount: number; fees: number; total: number };
   sessionLabel?: string;
   referral?: string;
+  /** Langue de l'email des billets. */
+  lang?: 'fr' | 'en';
 }
 
-export async function createOrder(input: CheckoutInput): Promise<{ order: Order; tickets: IssuedTicket[] }> {
+export interface OrderResult {
+  order: Order;
+  tickets: IssuedTicket[];
+  /** Clé du lien qui permet de retrouver la commande sans compte (mode serveur). */
+  accessKey?: string;
+  /** L'email des billets est parti (mode serveur, envoi configuré). */
+  emailSent?: boolean;
+}
+
+export async function createOrder(input: CheckoutInput): Promise<OrderResult> {
   if (!DEMO)
     return http('/orders', {
       method: 'POST',
-      body: JSON.stringify({ eventId: input.eventId, items: input.items, promoCode: input.promo?.code, method: input.method, currency: input.currency, buyer: input.buyer, sessionLabel: input.sessionLabel, referral: input.referral }),
+      body: JSON.stringify({ eventId: input.eventId, items: input.items, promoCode: input.promo?.code, method: input.method, currency: input.currency, buyer: input.buyer, sessionLabel: input.sessionLabel, referral: input.referral, lang: input.lang }),
     });
   await wait(1200); // simulation passerelle de paiement
   const ev = db.events.find((e) => e.id === input.eventId)!;
@@ -388,8 +398,16 @@ export async function requestRefund(order: Order, reason: string) {
   return { reason, at: new Date().toISOString(), status: 'pending' as const };
 }
 
-export async function transferTicket(ticketId: string, to: string) {
-  if (!DEMO) return http<{ ticketId: string; to: string; newCode: string }>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: JSON.stringify({ to }) });
+export interface TransferResult {
+  ticketId: string;
+  to: string;
+  newCode: string;
+  /** Lien de la commande du destinataire (à lui transmettre si l'email n'est pas parti). */
+  link?: string;
+  emailSent?: boolean;
+}
+export async function transferTicket(ticketId: string, to: string, lang?: 'fr' | 'en'): Promise<TransferResult> {
+  if (!DEMO) return http<TransferResult>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: JSON.stringify({ to, lang }) });
   await wait(500);
   if (!to.trim()) throw new ApiError(422, 'Destinataire manquant');
   return { ticketId, to, newCode: ticketCode() };
@@ -534,13 +552,33 @@ export async function getBalance(orgId: string) {
   return { HTG: by('HTG'), USD: by('USD'), passToBuyer: feeSettings.passToBuyer };
 }
 
-export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method']) {
-  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method }) });
+export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination']) {
+  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination }) });
   await wait(500);
   // La demande attend la validation de l'administration
-  const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
+  const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
   db.payouts.unshift(p);
   return clone(p);
+}
+
+/** Retrouver une commande sans compte grâce à la clé du lien reçu par email. */
+export async function getOrderByKey(id: string, key: string) {
+  const r = await http<{ order: Order; tickets: IssuedTicket[]; event: EventItem | null; claimed: boolean }>(`/orders/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`);
+  if (r.event) cacheEvent(r.event);
+  return r;
+}
+/** Rattacher une commande passée sans compte au compte connecté. */
+export async function claimOrder(id: string, key: string) {
+  await http(`/orders/${encodeURIComponent(id)}/claim`, { method: 'POST', body: JSON.stringify({ key }) });
+}
+/** Administration : un virement est arrivé, les billets deviennent valables. */
+export async function confirmOrderPayment(id: string) {
+  if (!DEMO) return http<{ emailSent: boolean }>(`/admin/orders/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+  await wait(200);
+  const o = db.platformOrders.find((x) => x.id === id);
+  if (o) o.status = 'paid';
+  audit('Paiement confirmé', id);
+  return { emailSent: false };
 }
 
 // ---------- Fichiers ----------
@@ -579,8 +617,25 @@ export interface OrgSales {
   recent: { id: string; who: string; type: string; qty: number; amount: number }[];
 }
 /** Mode serveur : ventes réelles des 7 derniers jours et dernières commandes. */
-export function orgSales(orgId: string) {
-  return http<OrgSales>(`/org/sales${orgQ(orgId)}`);
+export async function orgSales(orgId: string): Promise<OrgSales> {
+  if (!DEMO) return http<OrgSales>(`/org/sales${orgQ(orgId)}`);
+  await wait(100);
+  const mine = db.platformOrders.filter((o) => o.status === 'paid' && orgOfEvent(o.eventId) === orgId);
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const day = d.toISOString().slice(0, 10);
+    const inDay = mine.filter((o) => o.createdAt.slice(0, 10) === day);
+    return { date: day, tickets: inDay.reduce((a, o) => a + o.items.reduce((x, it) => x + it.qty, 0), 0), revenue: Math.round(inDay.reduce((a, o) => a + toHTG(o.subtotal - o.discount, o.currency), 0)) };
+  });
+  const recent = [...mine].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8).map((o) => ({
+    id: o.id,
+    who: o.buyerName,
+    type: db.events.find((e) => e.id === o.eventId)?.tickets.find((t) => t.id === o.items[0]?.ticketTypeId)?.name ?? '',
+    qty: o.items.reduce((a, it) => a + it.qty, 0),
+    amount: Math.round(toHTG(o.total, o.currency)),
+  }));
+  return { week, recent };
 }
 
 export async function listCampaigns() {
@@ -636,17 +691,32 @@ export async function eventStats(eventId: string) {
   });
 }
 
-/** Validation d'un billet au check-in. Le backend vérifiera la signature et l'usage unique. */
-export async function verifyTicket(code: string, eventId?: string) {
-  if (!DEMO) return http<never>('/org/checkin', { method: 'POST', body: JSON.stringify({ code, eventId }) });
+export type TicketCheck =
+  | { ok: true; attendee: Attendee }
+  | { ok: false; reason: 'unknown' | 'used' | 'wrong_event' | 'inactive'; attendee?: Attendee };
+
+/** Recherche d'un billet à l'entrée, sans rien modifier : l'organisateur vérifie qui entre, puis valide. */
+export async function lookupTicket(code: string, eventId?: string): Promise<TicketCheck> {
+  if (!DEMO) return http<TicketCheck>('/org/checkin/lookup', { method: 'POST', body: JSON.stringify({ code, eventId }) });
+  await wait(120);
+  const a = db.attendees.find((x) => x.code === code);
+  if (!a) return { ok: false, reason: 'unknown' };
+  if (eventId && a.eventId !== eventId) return { ok: false, reason: 'wrong_event', attendee: clone(a) };
+  if (a.checkedIn) return { ok: false, reason: 'used', attendee: clone(a) };
+  return { ok: true, attendee: clone(a) };
+}
+
+/** Validation d'un billet à l'entrée : un billet ne peut être validé qu'une seule fois (contrôle atomique côté serveur). */
+export async function verifyTicket(code: string, eventId?: string): Promise<TicketCheck> {
+  if (!DEMO) return http<TicketCheck>('/org/checkin', { method: 'POST', body: JSON.stringify({ code, eventId }) });
   await wait(150);
   const a = db.attendees.find((x) => x.code === code);
-  if (!a) return { ok: false as const, reason: 'unknown' as const };
-  if (eventId && a.eventId !== eventId) return { ok: false as const, reason: 'wrong_event' as const, attendee: clone(a) };
-  if (a.checkedIn) return { ok: false as const, reason: 'used' as const, attendee: clone(a) };
+  if (!a) return { ok: false, reason: 'unknown' };
+  if (eventId && a.eventId !== eventId) return { ok: false, reason: 'wrong_event', attendee: clone(a) };
+  if (a.checkedIn) return { ok: false, reason: 'used', attendee: clone(a) };
   a.checkedIn = true;
   a.checkedInAt = new Date().toISOString();
-  return { ok: true as const, attendee: clone(a) };
+  return { ok: true, attendee: clone(a) };
 }
 
 // ---------- Commissions ----------
@@ -670,8 +740,6 @@ function writeLocal(k: string, v: unknown) {
 }
 // En démo, les réglages survivent au rechargement (le backend les stockera)
 const feeSettings: FeeSettings = { ...DEFAULT_FEES, ...db.platformSettings.fees, ...((DEMO && readLocal<FeeSettings>(FEES_KEY)) || {}) };
-const storedCustom = DEMO ? readLocal<typeof db.customCommissions>(CUSTOM_KEY) : null;
-if (storedCustom) db.customCommissions.splice(0, db.customCommissions.length, ...storedCustom);
 
 /** Réglages de frais en vigueur (lecture synchrone, utilisée au paiement). */
 export function currentFeeSettings(): FeeSettings {

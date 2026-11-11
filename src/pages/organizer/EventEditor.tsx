@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, MonitorPlay, Plus, Radio, Trash2 } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
@@ -8,8 +8,8 @@ import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { cx, uid } from '@/lib/format';
 import { orgOf } from '@/lib/permissions';
-import { Badge, Button, Card, Field, Input, Loading, Segmented, Select, Textarea, Toggle } from '@/components/ui';
-import { EventCard } from '@/components/events';
+import { Badge, Button, Card, Field, Input, Loading, NumberInput, Segmented, Select, Textarea, Toggle } from '@/components/ui';
+import { CategoryIcon, EventCard } from '@/components/events';
 import { SeatMap } from '@/components/SeatMap';
 import NotFound from '../public/NotFound';
 import type { CategoryId, Currency, EventItem, SeatMapConfig, Session, TicketKind, TicketType } from '@/types';
@@ -64,6 +64,8 @@ export default function EventEditor() {
   const [multi, setMulti] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
+  // L'aperçu se met à jour juste après la frappe, sans la ralentir (important sur les téléphones modestes)
+  const deferredEv = useDeferredValue(ev);
   const fileRef = useRef<HTMLInputElement>(null);
   useTitle(id ? t('Modifier l’événement') : t('Nouvel événement'));
 
@@ -188,7 +190,7 @@ export default function EventEditor() {
   };
 
   const preview: EventItem = {
-    ...ev,
+    ...(deferredEv ?? ev),
     slug: ev.slug || slugify(ev.title),
     title: ev.title || t('Titre de votre événement'),
     venue: mode === 'online' ? null : ev.venue,
@@ -234,7 +236,7 @@ export default function EventEditor() {
           {step === 0 && (
             <>
               <Card className="space-y-5">
-                <div data-field="title"><Field label={t('Titre de l’événement')} error={errors.title} required><Input value={ev.title} onChange={(e) => up({ title: e.target.value })} placeholder={t('Ex. Festival Kompa Live 2026')} maxLength={90} /></Field></div>
+                <div data-field="title"><Field label={t('Titre de l’événement')} error={errors.title} required><Input value={ev.title} onChange={(e) => up({ title: e.target.value })} placeholder={t('Ex. Concert de fin d’année')} maxLength={90} /></Field></div>
                 <div data-field="description">
                   <Field label={t('Description')} error={errors.description} hint={`${ev.description.length}/2000`} required>
                     <Textarea value={ev.description} onChange={(e) => up({ description: e.target.value.slice(0, 2000) })} placeholder={t('Programme, artistes, ce qui est inclus, règles d’accès…')} className="min-h-[160px]" />
@@ -253,7 +255,7 @@ export default function EventEditor() {
                           onClick={() => up({ categories: on ? ev.categories.filter((x) => x !== c.id) : [...ev.categories, c.id as CategoryId] })}
                           className={cx('rounded-full px-3.5 py-2 text-sm font-semibold transition', on ? 'bg-contrast text-on-contrast' : 'bg-canvas text-ink-soft hover:text-ink')}
                         >
-                          <span aria-hidden>{c.emoji}</span> {t(c.label)}
+                          <CategoryIcon id={c.id} className="h-4 w-4" /> {t(c.label)}
                         </button>
                       );
                     })}
@@ -302,7 +304,7 @@ export default function EventEditor() {
                 />
                 {mode !== 'online' && (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div data-field="venue" className="sm:col-span-2"><Field label={t('Nom du lieu')} error={errors.venue} required><Input value={ev.venue?.name ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { address: '', city: '' }), name: e.target.value } })} placeholder={t('Ex. Parc Historique de la Canne à Sucre')} /></Field></div>
+                    <div data-field="venue" className="sm:col-span-2"><Field label={t('Nom du lieu')} error={errors.venue} required><Input value={ev.venue?.name ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { address: '', city: '' }), name: e.target.value } })} placeholder={t('Ex. Salle des fêtes')} /></Field></div>
                     <Field label={t('Adresse')}><Input autoComplete="street-address" value={ev.venue?.address ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { name: '', city: '' }), address: e.target.value } })} /></Field>
                     <Field label={t('Ville')}><Input autoComplete="address-level2" value={ev.venue?.city ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { name: '', address: '' }), city: e.target.value } })} /></Field>
                   </div>
@@ -372,7 +374,7 @@ export default function EventEditor() {
                     <option value="USD">{t('USD — Dollar')}</option>
                   </Select>
                 </Field>
-                <Field label={t('Limite par personne')} hint={t('Limite la revente abusive')}><Input type="number" inputMode="numeric" min={1} value={ev.maxPerPerson} onChange={(e) => up({ maxPerPerson: Math.max(1, +e.target.value || 1) })} /></Field>
+                <Field label={t('Limite par personne')} hint={t('Limite la revente abusive')}><NumberInput min={1} max={50} value={ev.maxPerPerson} onValue={(n) => up({ maxPerPerson: n })} /></Field>
                 <div className="flex items-end pb-2"><Toggle checked={ev.seated} onChange={(v) => up({ seated: v })} label={t('Plan de salle')} description={t('Places numérotées')} /></div>
               </Card>
               {errors.tickets && <p role="alert" className="text-sm font-medium text-red-600">{errors.tickets}</p>}
@@ -396,12 +398,12 @@ export default function EventEditor() {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Field label={t('Nom')} error={errors[`t-${x.id}`] || undefined} className="sm:col-span-2" required><Input value={x.name} onChange={(e) => upT(x.id, { name: e.target.value })} /></Field>
-                    <Field label={t('Prix ({cur})', { cur: ev.currency })}><Input type="number" inputMode="decimal" min={0} disabled={x.kind === 'free'} value={x.price} onChange={(e) => upT(x.id, { price: Math.max(0, +e.target.value || 0) })} /></Field>
-                    <Field label={t('Quota')} hint={x.sold ? t('{n} vendus', { n: x.sold }) : undefined}><Input type="number" inputMode="numeric" min={x.sold || 1} value={x.quota} onChange={(e) => upT(x.id, { quota: Math.max(x.sold, +e.target.value || 0) })} /></Field>
+                    <Field label={t('Prix ({cur})', { cur: ev.currency })}><NumberInput decimal min={0} disabled={x.kind === 'free'} value={x.price} onValue={(n) => upT(x.id, { price: n })} /></Field>
+                    <Field label={t('Quota')} hint={x.sold ? t('{n} vendus', { n: x.sold }) : undefined}><NumberInput min={x.sold || 1} value={x.quota} onValue={(n) => upT(x.id, { quota: n })} /></Field>
                     <Field label={t('Début des ventes')} className="lg:col-span-2"><Input type="datetime-local" value={local(x.salesStart)} onChange={(e) => upT(x.id, { salesStart: e.target.value })} /></Field>
                     <Field label={t('Fin des ventes')} className="lg:col-span-2"><Input type="datetime-local" value={local(x.salesEnd)} onChange={(e) => upT(x.id, { salesEnd: e.target.value })} /></Field>
-                    <Field label={t('Maximum par commande')}><Input type="number" inputMode="numeric" min={1} value={x.maxPerOrder} onChange={(e) => upT(x.id, { maxPerOrder: Math.max(1, +e.target.value || 1) })} /></Field>
-                    {x.kind === 'group' && <Field label={t('Personnes par pack')}><Input type="number" inputMode="numeric" min={2} value={x.groupSize ?? 5} onChange={(e) => upT(x.id, { groupSize: Math.max(2, +e.target.value || 2) })} /></Field>}
+                    <Field label={t('Maximum par commande')}><NumberInput min={1} max={50} value={x.maxPerOrder} onValue={(n) => upT(x.id, { maxPerOrder: n })} /></Field>
+                    {x.kind === 'group' && <Field label={t('Personnes par pack')}><NumberInput min={2} max={50} value={x.groupSize ?? 5} onValue={(n) => upT(x.id, { groupSize: n })} /></Field>}
                     <Field label={t('Description')} hint={t('Optionnel')} className="sm:col-span-2 lg:col-span-4"><Input value={x.description ?? ''} onChange={(e) => upT(x.id, { description: e.target.value })} placeholder={t('Ce qui est inclus')} /></Field>
                   </div>
                 </Card>
@@ -417,9 +419,9 @@ export default function EventEditor() {
                     <p className="text-sm text-ink-soft">{t('Définissez la grille, puis attribuez des rangs à chaque type de billet. Touchez une place pour la neutraliser (pilier, régie…).')}</p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <Field label={t('Rangs')}><Input type="number" inputMode="numeric" min={1} max={26} value={map.rows} onChange={(e) => upMap({ rows: Math.min(26, Math.max(1, +e.target.value || 1)) })} /></Field>
-                    <Field label={t('Places par rang')}><Input type="number" inputMode="numeric" min={1} max={40} value={map.cols} onChange={(e) => upMap({ cols: Math.min(40, Math.max(1, +e.target.value || 1)) })} /></Field>
-                    <Field label={t('Allée après la place')} hint={t('0 = aucune allée')}><Input type="number" inputMode="numeric" min={0} max={map.cols - 1} value={map.aisleAfter} onChange={(e) => upMap({ aisleAfter: Math.min(map.cols - 1, Math.max(0, +e.target.value || 0)) })} /></Field>
+                    <Field label={t('Rangs')}><NumberInput min={1} max={26} value={map.rows} onValue={(n) => upMap({ rows: n })} /></Field>
+                    <Field label={t('Places par rang')}><NumberInput min={1} max={40} value={map.cols} onValue={(n) => upMap({ cols: n })} /></Field>
+                    <Field label={t('Allée après la place')} hint={t('0 = aucune allée')}><NumberInput min={0} max={map.cols - 1} value={map.aisleAfter} onValue={(n) => upMap({ aisleAfter: n })} /></Field>
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">{t('Zones tarifaires')}</h3>
