@@ -78,3 +78,9 @@ export function useForm<V extends Record<string, unknown>>(initial: V, rules: Pa
 
 export const isEmail = (s: unknown) => typeof s === 'string' && /^\S+@\S+\.\S{2,}$/.test(s.trim());
 export const isPhone = (s: unknown) => typeof s === 'string' && s.replace(/\D/g, '').length >= 8;
+
+/** Nettoie une saisie numérique : chiffres seulement (et un point pour les décimaux, la virgule est acceptée). */
+export function cleanNumber(raw: string, decimal = false) {
+  if (!decimal) return raw.replace(/\D/g, '');
+  return raw.replace(/[^\d.,]/g, '').replace(',', '.').replace(/^(\d*\.\d*).*$/, '$1');
+}

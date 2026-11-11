@@ -68,7 +68,6 @@ describe('commande', () => {
       method: 'moncash',
       currency: 'HTG',
       buyer: { name: 'Test', email: 'test@example.com' },
-      delivery: { email: true, whatsapp: false, app: true },
       feePercent: 5,
       totals: { subtotal: 7000, discount: 1050, fees: 298, total: 6248 },
       sessionLabel: 'Jour 1 — Keynotes & panels',
@@ -85,7 +84,7 @@ describe('commande', () => {
   it('laisse une commande par virement en attente', async () => {
     const { order } = await api.createOrder({
       eventId: 'e5', items: [{ ticketTypeId: 't5a', qty: 1 }], method: 'transfer', currency: 'HTG',
-      buyer: { name: 'A', email: 'a@b.co' }, delivery: { email: true, whatsapp: false, app: true }, feePercent: 5,
+      buyer: { name: 'A', email: 'a@b.co' }, feePercent: 5,
       totals: { subtotal: 300, discount: 0, fees: 15, total: 315 },
     });
     expect(order.status).toBe('pending');
@@ -156,8 +155,9 @@ describe('administration', () => {
   });
 
   it('fait passer une demande de versement de « demandé » à « payé »', async () => {
-    const p = await api.requestPayout('org1', 1000, 'HTG', 'bank');
+    const p = await api.requestPayout('org1', 1000, 'HTG', 'natcash', { name: 'Marie Claire Joseph', phone: '+509 4600 1111' });
     expect(p.status).toBe('requested');
+    expect(p.destination).toEqual({ name: 'Marie Claire Joseph', phone: '+509 4600 1111' });
     await api.setPayoutStatus(p.id, 'processing');
     await api.setPayoutStatus(p.id, 'paid');
     expect((await api.listAllPayouts()).find((x) => x.id === p.id)?.status).toBe('paid');

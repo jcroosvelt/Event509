@@ -1,30 +1,65 @@
-import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, Clock, Mail, MessageCircle, Smartphone } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Clock, Copy, Mail, TriangleAlert } from 'lucide-react';
+import { claimOrder, DEMO, getOrderByKey } from '@/services/api';
 import { useApp } from '@/store/app';
-import { useTitle } from '@/lib/hooks';
+import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
-import { ButtonLink, Card } from '@/components/ui';
+import { Button, ButtonLink, Card, Loading } from '@/components/ui';
 import { TicketCard } from '@/components/TicketCard';
 import type { IssuedTicket, Order } from '@/types';
 
+/**
+ * Confirmation d'achat. Elle se retrouve sans compte : le lien reçu par email (avec sa clé) rouvre la commande
+ * et ses billets, chacun avec son QR code unique.
+ */
 export default function Confirmation() {
-  const { id } = useParams();
-  const { state } = useLocation() as { state?: { order: Order; tickets: IssuedTicket[]; delivery: Record<string, boolean> } };
+  const { id = '' } = useParams();
+  const [params] = useSearchParams();
+  const key = params.get('k') ?? '';
+  const { state } = useLocation() as { state?: { order: Order; tickets: IssuedTicket[]; emailSent?: boolean } };
   const app = useApp();
-  const { t } = app;
-  const order = state?.order ?? app.orders.find((o) => o.id === id);
-  const tickets = state?.tickets ?? app.tickets.filter((x) => x.orderId === id);
-  const delivery = state?.delivery ?? { email: true, whatsapp: false, app: true };
+  const { t, user, refresh } = app;
+  const [claimed, setClaimed] = useState(false);
+  // Page ouverte depuis l'email, ou rechargée : on relit la commande sur le serveur avec la clé du lien
+  const remote = useAsync(() => (state?.order || DEMO || !key ? Promise.resolve(null) : getOrderByKey(id, key)), [id, key]);
+  const order = state?.order ?? remote.data?.order ?? app.orders.find((o) => o.id === id);
+  const tickets = state?.tickets ?? remote.data?.tickets ?? app.tickets.filter((x) => x.orderId === id);
   const pending = order?.status === 'pending';
+  const mine = !!user && (!!state || !!remote.data?.claimed || claimed);
   useTitle(pending ? t('Commande en attente') : t('Commande confirmée'));
 
+  if (remote.loading && !order) return <Loading />;
   if (!order)
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold">{t('Commande introuvable')}</h1>
-        <Link to="/billets" className="mt-4 inline-block font-semibold text-brand-ink">{t('Voir mes billets')}</Link>
+        <p className="mt-2 text-ink-soft">{t('Ouvrez le lien reçu par email : il contient la clé qui permet de retrouver vos billets.')}</p>
+        <Link to="/explorer" className="mt-4 inline-block font-semibold text-brand-ink">{t('Explorer les événements')}</Link>
       </div>
     );
+
+  const emailSent = state?.emailSent;
+  const link = `${window.location.origin}/commande/${order.id}${key ? `?k=${encodeURIComponent(key)}` : ''}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      app.toast(t('Lien copié'));
+    } catch {
+      app.toast(t('Copiez l’adresse de la page depuis la barre du navigateur.'), 'info');
+    }
+  };
+  const addToAccount = async () => {
+    try {
+      await claimOrder(order.id, key);
+      setClaimed(true);
+      await refresh();
+      app.toast(t('Billets ajoutés à votre compte'));
+    } catch {
+      app.toast(t('Ces billets n’ont pas pu être ajoutés à votre compte.'), 'error');
+    }
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-10 sm:px-6">
@@ -40,19 +75,50 @@ export default function Confirmation() {
         </p>
       </div>
 
-      <Card className="mb-6">
-        <h2 className="mb-3 text-sm font-bold">{t('Billets envoyés')}</h2>
-        <ul className="grid gap-2 sm:grid-cols-3">
-          {delivery.email && <li className="flex min-w-0 items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><Mail className="h-4 w-4 shrink-0 text-brand-ink" aria-hidden /> <span className="truncate">{order.buyerEmail}</span></li>}
-          {delivery.whatsapp && <li className="flex items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><MessageCircle className="h-4 w-4 text-emerald-600" aria-hidden /> WhatsApp</li>}
-          {delivery.app && <li className="flex items-center gap-2 rounded-2xl bg-canvas p-3 text-sm"><Smartphone className="h-4 w-4 text-ink" aria-hidden /> {t('Portefeuille de l’app')}</li>}
-        </ul>
-      </Card>
+      {!pending && (
+        <Card className="mb-6">
+          {emailSent === false ? (
+            <div className="flex items-start gap-3 text-sm">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="font-bold">{t('L’email n’a pas pu être envoyé pour l’instant')}</p>
+                <p className="mt-1 text-ink-soft">{t('Vos billets sont valables et affichés ci-dessous. Gardez cette page : copiez son lien ou ajoutez-la à vos favoris pour les retrouver.')}</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={copy}><Copy className="h-4 w-4" aria-hidden /> {t('Copier le lien de mes billets')}</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 text-sm">
+              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-brand-ink" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="font-bold">{t('Vos billets sont envoyés à {email}', { email: order.buyerEmail })}</p>
+                <p className="mt-1 text-ink-soft">{t('Chaque billet a son QR code unique, joint à l’email. Pensez à vérifier vos courriers indésirables.')}</p>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
-      {!pending && <div className="space-y-4">{tickets.map((x) => <TicketCard key={x.id} ticket={x} />)}</div>}
+      {!pending && <div className="space-y-4">{tickets.map((x) => <TicketCard key={x.id} ticket={x} linked={mine} />)}</div>}
+
+      {!pending && key && (
+        <Card className="mt-6">
+          {user && !mine ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="min-w-0 flex-1 text-sm text-ink-soft">{t('Ajoutez ces billets à votre compte pour les retrouver dans votre espace, et les transférer ou les revendre.')}</p>
+              <Button onClick={addToAccount}>{t('Ajouter à mon compte')}</Button>
+            </div>
+          ) : !user ? (
+            <p className="text-sm text-ink-soft">
+              {t('Un compte est facultatif. Pour retrouver vos billets sur tous vos appareils,')}{' '}
+              <Link to={`/inscription?next=${encodeURIComponent(`/commande/${order.id}?k=${key}`)}`} className="font-bold text-brand-ink">{t('créez-en un')}</Link> {t('ou')}{' '}
+              <Link to={`/connexion?next=${encodeURIComponent(`/commande/${order.id}?k=${key}`)}`} className="font-bold text-brand-ink">{t('connectez-vous')}</Link>.
+            </p>
+          ) : null}
+        </Card>
+      )}
 
       <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-        <ButtonLink to="/billets" size="lg" className="flex-1">{t('Ouvrir mon portefeuille')}</ButtonLink>
+        <ButtonLink to="/billets" size="lg" className="flex-1">{t('Ouvrir mes billets')}</ButtonLink>
         <ButtonLink to="/explorer" size="lg" variant="outline" className="flex-1">{t('Continuer à explorer')}</ButtonLink>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, XCircle } from 'lucide-react';
+import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, XCircle } from 'lucide-react';
 import { listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
@@ -46,6 +46,7 @@ function ActionsMenu({ e, onDuplicate, onCancel }: { e: EventItem; onDuplicate: 
       {open && (
         <div id={id} className="absolute right-0 z-10 mt-1 w-52 rounded-2xl bg-surface p-1.5 shadow-2xl ring-1 ring-line">
           <Link to={`/organisateur/evenements/${e.id}`} className={item} onClick={() => setOpen(false)}><Pencil className="h-4 w-4" aria-hidden /> {t('Modifier')}</Link>
+          {e.status === 'published' && <Link to={`/organisateur/checkin/${e.id}`} className={item} onClick={() => setOpen(false)}><ScanLine className="h-4 w-4" aria-hidden /> {t('Scanner les billets')}</Link>}
           <Link to={`/organisateur/evenements/${e.id}/stats`} className={item} onClick={() => setOpen(false)}><BarChart3 className="h-4 w-4" aria-hidden /> {t('Statistiques')}</Link>
           <Link to={`/e/${e.slug}`} className={item} onClick={() => setOpen(false)}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
           <button type="button" onClick={() => { setOpen(false); onDuplicate(); }} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>

@@ -6,7 +6,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric, uid } from '@/lib/format';
 import { orgOf } from '@/lib/permissions';
-import { useForm } from '@/lib/form';
+import { useForm, cleanNumber } from '@/lib/form';
 import { ApiError } from '@/lib/errors';
 import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, ProgressBar, Segmented, Select, Table, Td, Toggle } from '@/components/ui';
 import type { PromoCode } from '@/types';
@@ -91,15 +91,15 @@ export default function Promos() {
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.code ? t('Code {code}', { code: editing.code }) : t('Nouveau code promo')} footer={<Button className="flex-1" onClick={save} loading={busy}>{t('Enregistrer')}</Button>}>
         <form noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-4">
           <Field label={t('Code')} error={form.errors.code} hint={t('Lettres et chiffres, sans espace')} required>
-            <Input placeholder="NOEL2026" autoCapitalize="characters" {...form.bind('code')} onChange={(e) => form.set('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+            <Input placeholder="MONCODE" autoCapitalize="characters" {...form.bind('code')} onChange={(e) => form.set('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="mb-1.5 block text-sm font-semibold">{t('Type')}</span>
               <Segmented label={t('Type de réduction')} value={form.values.type} onChange={(v) => form.set('type', v)} options={[{ value: 'percent', label: '%' }, { value: 'fixed', label: t('Montant') }]} />
             </div>
-            <Field label={t('Valeur')} error={form.errors.value} required><Input type="number" inputMode="decimal" min={1} {...form.bind('value')} /></Field>
-            <Field label={t('Utilisations max.')} error={form.errors.limit} required><Input type="number" inputMode="numeric" min={1} {...form.bind('limit')} /></Field>
+            <Field label={t('Valeur')} error={form.errors.value} required><Input type="text" inputMode="decimal" autoComplete="off" {...form.bind('value')} onChange={(e) => form.set('value', cleanNumber(e.target.value, true))} /></Field>
+            <Field label={t('Utilisations max.')} error={form.errors.limit} required><Input type="text" inputMode="numeric" autoComplete="off" {...form.bind('limit')} onChange={(e) => form.set('limit', cleanNumber(e.target.value, false))} /></Field>
             <Field label={t('Expiration')} error={form.errors.expiresAt} required><Input type="datetime-local" {...form.bind('expiresAt')} /></Field>
           </div>
           <Field label={t('Événement')}>

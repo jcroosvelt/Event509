@@ -118,7 +118,7 @@ export default function Attendees() {
               <Td className="text-ink-soft">{a.orderId}</Td>
               <Td className="font-mono text-xs">{a.code}</Td>
               <Td className="font-semibold">{a.amount ? moneyRaw(a.amount, ev?.currency ?? 'HTG', lang) : t('Gratuit')}</Td>
-              <Td>{a.checkedIn ? <span className="text-sm font-semibold text-emerald-700">✓ {a.checkedInAt && time(a.checkedInAt, lang)}</span> : <span className="text-sm text-ink-muted">{t('Pas encore')}</span>}</Td>
+              <Td>{a.checkedIn ? <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" aria-hidden /> {a.checkedInAt && time(a.checkedInAt, lang)}</span> : <span className="text-sm text-ink-muted">{t('Pas encore')}</span>}</Td>
             </tr>
           ))}
         </Table>

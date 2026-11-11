@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
-import { becomeOrganizer, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
+import { becomeOrganizer, claimOrder, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
 import { translate, type Vars } from '@/lib/i18n';
 import type { AppUser, Currency, IssuedTicket, Lang, NotificationItem, Order } from '@/types';
 
@@ -21,6 +21,13 @@ export function persist(key: string, value: unknown) {
   } catch {
     /* stockage indisponible : l'état reste en mémoire */
   }
+}
+
+/** Commandes passées sans compte sur cet appareil : leur clé permet de les rattacher à un compte plus tard. */
+const GUEST_KEY = 'e509.guestOrders';
+export function rememberGuestOrder(id: string, key: string) {
+  const all = load<{ id: string; key: string }[]>(GUEST_KEY, []);
+  persist(GUEST_KEY, [...all.filter((x) => x.id !== id), { id, key }].slice(-50));
 }
 
 function usePersisted<T>(key: string, initial: T) {
@@ -67,6 +74,8 @@ interface AppState {
   login: (who?: string) => AppUser;
   /** Mode API : ouvre la session renvoyée par le serveur et charge billets et commandes. */
   startSession: (s: Session_) => Promise<void>;
+  /** Mode serveur : recharge profil, billets et commandes du compte. */
+  refresh: () => Promise<void>;
   logout: () => void;
   updateUser: (patch: Partial<AppUser>) => void;
 
@@ -196,6 +205,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       persist('e509.user', s.user);
       setUser(s.user);
+      // Les commandes passées sans compte sur cet appareil rejoignent le compte (leur clé prouve qu'elles sont bien à vous)
+      const guest = load<{ id: string; key: string }[]>(GUEST_KEY, []);
+      if (guest.length) {
+        await Promise.all(guest.map((g) => claimOrder(g.id, g.key).catch(() => {})));
+        persist(GUEST_KEY, []);
+      }
       await Promise.all([sync(), refreshCatalog()]);
     },
     [setUser, sync],
@@ -229,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       lang, setLang, t, currency, setCurrency, theme, setTheme,
-      user, login, startSession, logout,
+      user, login, startSession, refresh: sync, logout,
       updateUser: (patch) => {
         setUser((u) => (u ? { ...u, ...patch } : u));
         if (DEMO) return;

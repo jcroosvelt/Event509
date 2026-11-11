@@ -8,3 +8,9 @@ export const reportReason: Record<Report['reason'], string> = {
   cancelled: 'Événement annulé ou inexistant',
   other: 'Autre problème',
 };
+
+/** Texte lisible de la destination d'un versement (nom et numéro MonCash/NatCash, ou email PayPal). */
+export function destinationText(p: { method: string; destination?: { name?: string; phone?: string; email?: string } }) {
+  const d = p.destination ?? {};
+  return p.method === 'paypal' ? d.email ?? '' : [d.name, d.phone].filter(Boolean).join(' · ');
+}

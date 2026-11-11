@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2, CalendarDays, Check, CreditCard, Gift, Lock, Mail, MessageCircle, Smartphone, Tag, Wallet, X } from 'lucide-react';
+import { ArrowLeft, Building2, CalendarDays, CreditCard, Gift, Lock, Mail, Smartphone, Tag, Wallet, X } from 'lucide-react';
 import { createOrder, currentFeeSettings, feeRateFor, getEvent, seatMapOf, takenSeats, validatePromo, DEMO } from '@/services/api';
 import { computeFees } from '@/lib/fees';
 import { ambassadors } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
-import { useApp } from '@/store/app';
+import { rememberGuestOrder, useApp } from '@/store/app';
 import { convert, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { trackPixel } from '@/lib/pixels';
@@ -57,7 +57,6 @@ export default function Checkout() {
   const [currency, setCurrency] = useState<Currency>(app.currency);
   const [seats, setSeats] = useState<Record<string, string[]>>({});
   const [activeLine, setActiveLine] = useState<string>('');
-  const [delivery, setDelivery] = useState({ email: true, whatsapp: true, app: true });
   const [method, setMethod] = useState<PaymentMethod>('moncash');
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<PromoCode | null>(null);
@@ -67,11 +66,13 @@ export default function Checkout() {
   const [seatErr, setSeatErr] = useState('');
 
   const form = useForm(
-    { name: app.user?.name ?? '', email: app.user?.email ?? '', phone: app.user?.phone ?? '', card: '', exp: '', cvc: '' },
+    { name: app.user?.name ?? '', email: app.user?.email ?? '', email2: app.user?.email ?? '', phone: app.user?.phone ?? '', card: '', exp: '', cvc: '' },
     {
       name: (v) => (!String(v).trim() ? t('Indiquez le nom qui figurera sur les billets') : undefined),
       email: (v) => (!isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined),
-      phone: (v) => ((delivery.whatsapp || method === 'moncash' || method === 'natcash') && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
+      // Le billet part par email : on demande l'adresse deux fois pour éviter une faute de frappe qui l'enverrait ailleurs
+      email2: (v, all) => (String(v).trim().toLowerCase() !== String(all.email).trim().toLowerCase() ? t('Les deux adresses email doivent être identiques') : undefined),
+      phone: (v) => ((method === 'moncash' || method === 'natcash') && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
       card: (v) => (method === 'card' && String(v).replace(/\D/g, '').length < 15 ? t('Saisissez les 15 ou 16 chiffres de la carte') : undefined),
       exp: (v) => (method === 'card' && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(String(v)) ? t('Format MM/AA') : undefined),
       cvc: (v) => (method === 'card' && !/^\d{3,4}$/.test(String(v)) ? t('3 ou 4 chiffres au dos de la carte') : undefined),
@@ -134,14 +135,14 @@ export default function Checkout() {
     if (!formOk || !seatsOk) return;
     setPaying(true);
     try {
-      const { order, tickets } = await createOrder({
+      const { order, tickets, accessKey, emailSent } = await createOrder({
         eventId: ev.id,
         items: lines.map((l) => ({ ticketTypeId: l.tt.id, qty: l.qty, seats: ev.seated ? seats[l.tt.id] : undefined })),
         promo,
         method: isFree ? 'card' : method,
         currency,
         buyer: { name: form.values.name, email: form.values.email, phone: form.values.phone },
-        delivery,
+        lang: app.lang,
         feePercent: fb.rate,
         totals: { subtotal, discount, fees: fb.fee, total },
         sessionLabel: occ,
@@ -151,7 +152,9 @@ export default function Checkout() {
       app.addTickets(tickets);
       app.pushNotification({ title: t('Commande confirmée'), body: `${ev.title} — ${order.id}`, kind: 'sale' });
       trackPixel('Purchase', { value: total, currency, event: ev.id });
-      nav(`/commande/${order.id}`, { state: { order, tickets, delivery } });
+      // Sans compte : la clé du lien permet de retrouver la commande ; on la garde sur cet appareil pour la rattacher à un compte plus tard
+      if (!app.user && accessKey) rememberGuestOrder(order.id, accessKey);
+      nav(`/commande/${order.id}${accessKey ? `?k=${encodeURIComponent(accessKey)}` : ''}`, { state: { order, tickets, emailSent } });
     } catch {
       setPaying(false);
       app.toast(t('Le paiement n’a pas abouti et vous n’avez pas été débité. Vos informations sont conservées.'), 'error', { label: t('Réessayer'), run: pay });
@@ -217,38 +220,18 @@ export default function Checkout() {
             {step(t('Vos informations'))}
             {!app.user && (
               <div className="mb-4 rounded-2xl bg-brand-50 p-4 text-sm">
-                {t('Déjà inscrit ?')} <Link to={`/connexion?next=${encodeURIComponent(location.pathname + location.search)}`} className="font-bold text-brand-ink">{t('Connectez-vous')}</Link> {t('pour retrouver vos billets dans l’app.')}
+                {t('Vous avez un compte ?')} <Link to={`/connexion?next=${encodeURIComponent(location.pathname + location.search)}`} className="font-bold text-brand-ink">{t('Connectez-vous')}</Link> {t('pour retrouver vos billets dans votre espace.')}
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t('Nom complet')} error={form.errors.name} required><Input {...form.bind('name')} autoComplete="name" /></Field>
-              <Field label={t('Email')} error={form.errors.email} hint={t('Vos billets y seront envoyés')} required><Input type="email" inputMode="email" {...form.bind('email')} autoComplete="email" /></Field>
-              <Field label={t('Téléphone / WhatsApp')} error={form.errors.phone} className="sm:col-span-2" required={delivery.whatsapp || method === 'moncash' || method === 'natcash'}>
+              <Field label={t('Email')} error={form.errors.email} hint={t('Vos billets avec leur QR code y seront envoyés')} required><Input type="email" inputMode="email" {...form.bind('email')} autoComplete="email" /></Field>
+              <Field label={t('Confirmez votre email')} error={form.errors.email2} required><Input type="email" inputMode="email" {...form.bind('email2')} autoComplete="email" onPaste={(e) => e.preventDefault()} /></Field>
+              <Field label={t('Téléphone')} error={form.errors.phone} className="sm:col-span-2" hint={method === 'moncash' || method === 'natcash' ? undefined : t('Facultatif')} required={method === 'moncash' || method === 'natcash'}>
                 <Input type="tel" inputMode="tel" {...form.bind('phone')} placeholder="+509 3712 3456" autoComplete="tel" />
               </Field>
             </div>
-            <fieldset className="mt-5">
-              <legend className="mb-2 text-sm font-semibold">{t('Recevoir mes billets par')}</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {([
-                  ['email', t('Email'), Mail],
-                  ['whatsapp', 'WhatsApp', MessageCircle],
-                  ['app', t('Dans l’app'), Smartphone],
-                ] as const).map(([k, l, I]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="checkbox"
-                    aria-checked={delivery[k]}
-                    onClick={() => setDelivery((d) => ({ ...d, [k]: !d[k] }))}
-                    className={cx('flex items-center gap-2 rounded-2xl border p-3 text-sm font-semibold transition', delivery[k] ? 'border-brand bg-brand-50' : 'border-line')}
-                  >
-                    <I className="h-4 w-4" aria-hidden /> {l}
-                    <span aria-hidden className={cx('ml-auto grid h-5 w-5 place-items-center rounded-full', delivery[k] ? 'bg-brand text-white' : 'border border-line')}>{delivery[k] && <Check className="h-3 w-3" />}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <p className="mt-4 flex items-start gap-2 rounded-2xl bg-canvas p-3 text-sm text-ink-soft"><Mail className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink" aria-hidden /> {t('Aucun compte n’est nécessaire : chaque billet, avec son QR code unique, arrive par email.')}</p>
           </Card>
 
           {!isFree && (
@@ -282,7 +265,7 @@ export default function Checkout() {
                 {method === 'card' && (
                   <div className="grid grid-cols-2 gap-3">
                     <Field label={t('Numéro de carte')} error={form.errors.card} className="col-span-2" required>
-                      <Input inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242" {...form.bind('card')} onChange={(e) => form.set('card', formatCard(e.target.value))} />
+                      <Input inputMode="numeric" autoComplete="cc-number" placeholder="1234 5678 9012 3456" {...form.bind('card')} onChange={(e) => form.set('card', formatCard(e.target.value))} />
                     </Field>
                     <Field label={t('Expiration')} error={form.errors.exp} required><Input inputMode="numeric" autoComplete="cc-exp" placeholder={t('MM/AA')} {...form.bind('exp')} onChange={(e) => form.set('exp', formatExp(e.target.value))} /></Field>
                     <Field label="CVC" error={form.errors.cvc} required><Input inputMode="numeric" autoComplete="cc-csc" placeholder="123" {...form.bind('cvc')} onChange={(e) => form.set('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))} /></Field>

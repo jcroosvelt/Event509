@@ -4,7 +4,7 @@ import { listAmbassadors, saveAmbassador } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, moneyRaw, num, uid } from '@/lib/format';
-import { isEmail, useForm } from '@/lib/form';
+import { isEmail, useForm, cleanNumber } from '@/lib/form';
 import { ApiError } from '@/lib/errors';
 import { Avatar, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, StatCard, Table, Td } from '@/components/ui';
 
@@ -93,7 +93,7 @@ export default function Affiliates() {
           </Field>
           <Field label={t('Email')} error={form.errors.email} required><Input type="email" autoComplete="off" {...form.bind('email')} /></Field>
           <Field label={t('Code de parrainage')} error={form.errors.code} required><Input autoCapitalize="characters" {...form.bind('code')} onChange={(e) => form.set('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /></Field>
-          <Field label={t('Commission (%)')} error={form.errors.commission} required><Input type="number" inputMode="decimal" min={1} max={30} {...form.bind('commission')} /></Field>
+          <Field label={t('Commission (%)')} error={form.errors.commission} required><Input type="text" inputMode="decimal" autoComplete="off" {...form.bind('commission')} onChange={(e) => form.set('commission', cleanNumber(e.target.value, true))} /></Field>
         </form>
       </Modal>
     </div>

@@ -9,7 +9,7 @@ import { listAudit, platformStats, removeTarget, saveTarget } from '@/services/a
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, cx, dateLong, dateShort, moneyRaw, num, relative, time, uid } from '@/lib/format';
-import { useForm } from '@/lib/form';
+import { useForm, cleanNumber } from '@/lib/form';
 import { Button, Field, Input, Loading, Modal, Segmented, Select, Textarea } from '@/components/ui';
 import type { Order, PlatformTarget } from '@/types';
 
@@ -463,7 +463,7 @@ export default function Overview() {
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t('Valeur cible')} error={form.errors.target} required><Input type="number" inputMode="numeric" min={1} {...form.bind('target')} /></Field>
+            <Field label={t('Valeur cible')} error={form.errors.target} required><Input type="text" inputMode="numeric" autoComplete="off" {...form.bind('target')} onChange={(e) => form.set('target', cleanNumber(e.target.value, false))} /></Field>
             <Field label={t('Échéance')} error={form.errors.deadline} required><Input type="date" {...form.bind('deadline')} /></Field>
           </div>
           <div>

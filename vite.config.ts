@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 
+// Garde-fou : le site de production ne doit jamais tourner en mode démonstration (données fictives).
+// Sans VITE_API_URL, l'interface se remplirait de faux événements, faux comptes et fausses commandes.
+if (process.env.VERCEL_ENV === 'production' && !process.env.VITE_API_URL) {
+  throw new Error('VITE_API_URL manque dans les variables de Vercel : le site de production ne doit jamais afficher de données de démonstration.');
+}
+
 export default defineConfig({
   plugins: [
     react(),

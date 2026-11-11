@@ -6,7 +6,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { moneyRaw } from '@/lib/format';
 import { computeFees, type FeeSettings } from '@/lib/fees';
-import { useForm } from '@/lib/form';
+import { useForm, cleanNumber } from '@/lib/form';
 import { Button, Card, Field, Input, Loading, Modal, PageHeader, Select, Table, Td, Toggle } from '@/components/ui';
 
 export default function Commissions() {
@@ -67,8 +67,8 @@ export default function Commissions() {
         <Card>
           <form noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t('Pourcentage (%)')} error={main.errors.fee} hint={t('Appliqué au prix après réduction')}><Input type="number" inputMode="decimal" min={0} max={20} step={0.5} {...main.bind('fee')} /></Field>
-              <Field label={t('Frais fixes (HTG par billet)')} error={main.errors.fixed} hint={t('Convertis en USD pour les commandes en dollars ; 0 pour désactiver')}><Input type="number" inputMode="numeric" min={0} {...main.bind('fixed')} /></Field>
+              <Field label={t('Pourcentage (%)')} error={main.errors.fee} hint={t('Appliqué au prix après réduction')}><Input type="text" inputMode="decimal" autoComplete="off" {...main.bind('fee')} onChange={(e) => main.set('fee', cleanNumber(e.target.value, true))} /></Field>
+              <Field label={t('Frais fixes (HTG par billet)')} error={main.errors.fixed} hint={t('Convertis en USD pour les commandes en dollars ; 0 pour désactiver')}><Input type="text" inputMode="numeric" autoComplete="off" {...main.bind('fixed')} onChange={(e) => main.set('fixed', cleanNumber(e.target.value, false))} /></Field>
             </div>
             <Button type="submit" loading={saving}>{t('Enregistrer')}</Button>
           </form>
@@ -134,7 +134,7 @@ export default function Commissions() {
           <Field label={t('Organisateur')}>
             <Select {...custom.bind('organizerId')} disabled={editing !== 'new'}>{organizers.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select>
           </Field>
-          <Field label={t('Taux (%)')} error={custom.errors.rate} required><Input type="number" inputMode="decimal" step={0.5} min={0} max={20} {...custom.bind('rate')} /></Field>
+          <Field label={t('Taux (%)')} error={custom.errors.rate} required><Input type="text" inputMode="decimal" autoComplete="off" {...custom.bind('rate')} onChange={(e) => custom.set('rate', cleanNumber(e.target.value, true))} /></Field>
           <Field label={t('Motif')} error={custom.errors.reason} required><Input {...custom.bind('reason')} placeholder={t('Ex. Association, gros volume…')} /></Field>
         </form>
       </Modal>

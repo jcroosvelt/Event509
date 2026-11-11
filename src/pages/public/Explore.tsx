@@ -7,7 +7,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
 import { Button, Chip, EmptyState, Field, Input, Modal, Segmented, Select, Skeleton, Toggle } from '@/components/ui';
-import { EventCard } from '@/components/events';
+import { CategoryIcon, EventCard } from '@/components/events';
 import type { CategoryId } from '@/types';
 
 const whenLabels = { '': 'Toutes', today: 'Aujourd’hui', weekend: 'Ce week-end', week: '7 prochains jours', month: 'Ce mois-ci' } as const;
@@ -48,7 +48,7 @@ export default function Explore() {
       <Field label={t('Catégorie')}>
         <Select value={f.category} onChange={(e) => set('category', e.target.value)}>
           <option value="">{t('Toutes les catégories')}</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {t(c.label)}</option>)}
+          {categories.map((c) => <option key={c.id} value={c.id}>{t(c.label)}</option>)}
         </Select>
       </Field>
       <fieldset>
@@ -99,7 +99,7 @@ export default function Explore() {
         <Chip active={!f.category} onClick={() => set('category', '')}>{t('Tous')}</Chip>
         {categories.map((c) => (
           <Chip key={c.id} active={f.category === c.id} onClick={() => set('category', f.category === c.id ? '' : c.id)}>
-            <span aria-hidden>{c.emoji}</span> {t(c.label)}
+            <CategoryIcon id={c.id} className="h-4 w-4 text-brand-ink" /> {t(c.label)}
           </Chip>
         ))}
       </div>

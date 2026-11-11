@@ -77,7 +77,7 @@ Le serveur est dans **`api/`** : une seule fonction Vercel (`api/index.ts`) qui 
 | `api/_lib/db.ts` | connexion Postgres |
 | `scripts/db-setup.mjs` | crée le schéma et charge le contenu de départ |
 
-**Mise en ligne sur Vercel** : définissez `DATABASE_URL`, `JWT_SECRET` et `VITE_API_URL=/api` (voir `.env.example`), puis redéployez. Au build, le schéma est mis à jour (sans jamais toucher aux données). Le contenu de démonstration ne se charge qu'à la demande, sur une base de test : `npm run db:seed`. Sans ces variables, le site reste en mode démo.
+**Mise en ligne sur Vercel** : définissez `DATABASE_URL`, `JWT_SECRET` et `VITE_API_URL=/api` (voir `.env.example`), puis redéployez. Pour que les billets partent par email, ajoutez aussi `RESEND_API_KEY` et `MAIL_FROM`. Au build, le schéma est mis à jour (sans jamais toucher aux données). Le contenu de démonstration ne se charge qu'à la demande, sur une base de test : `npm run db:seed`. Sans ces variables, le site reste en mode démo.
 
 **Ce que le serveur garantit** : les prix, réductions et frais sont recalculés côté serveur ; les quotas sont respectés même avec des achats simultanés ; une place numérotée ne peut être vendue qu'une fois ; un billet n'est validé qu'une fois au check-in, même avec deux scanners ; chaque route vérifie le rôle (participant, équipe organisateur par rôle, administration) et l'organisation.
 
@@ -89,11 +89,19 @@ DATABASE_URL=… JWT_SECRET=… npm run api:dev              # API sur :8787
 VITE_API_URL=/api npm run dev                             # interface, /api redirigé vers :8787
 ```
 
+**Achat sans compte** : un billet n'est créé qu'au moment de l'achat, jamais à l'inscription. L'acheteur donne son nom et son email (saisi deux fois) ; il reçoit un email avec un QR code unique par billet (en pièce jointe) et un lien vers la page de sa commande. Ce lien contient une clé secrète (144 bits) : il rouvre la commande sans compte, et permet de l'ajouter à un compte (« Ajouter à mon compte »). Un billet n'appartient à un compte que si sa commande y est rattachée ; une adresse email seule ne suffit jamais, puisqu'elle n'est pas vérifiée à l'inscription. Un virement bancaire laisse les billets « en attente » (ils réservent leur place mais ne passent pas à l'entrée) jusqu'à ce que l'administration confirme le paiement.
+
+**Contrôle d'entrée** : l'organisateur choisit d'abord l'événement (on y entre directement s'il n'y en a qu'un), puis scanne ses billets. Un scan cherche le billet et affiche qui entre sans rien modifier ; « Valider l'entrée » l'enregistre (le serveur ne l'accepte qu'une fois par billet), puis le scan reprend tout seul.
+
+**Versements** : l'organisateur indique où envoyer l'argent. MonCash et NatCash : numéro et nom complet du titulaire ; PayPal : email PayPal. L'administration voit cette destination, envoie l'argent, puis marque le versement comme payé.
+
+**Données de démonstration** : elles sont fictives et n'existent que dans `src/data/demo-data.ts`, chargé uniquement par la version de démonstration (build sans `VITE_API_URL`) et par les tests. Le site en ligne n'en contient aucune ; un garde-fou fait échouer le build de production de Vercel si `VITE_API_URL` manque.
+
 **Fichiers** : les affiches, logos et documents de vérification sont stockés dans la base (table `files`). Les images sont réduites dans le navigateur avant l'envoi (affiches 1600 px, logos 512 px). Le serveur lit le type réel du fichier (JPG, PNG, WebP, et PDF pour la vérification seulement), limite les tailles (2 Mo pour une image, 3 Mo pour un PDF) et sert les fichiers avec `nosniff`. Les affiches et logos sont publics et mis en cache ; les documents de vérification sont privés : seuls l'administration et l'équipe de l'organisation concernée peuvent les lire. Si le volume devient important, le contenu pourra passer sur un stockage d'objets (Vercel Blob, S3) en ne changeant que `api/_lib/routes.ts` et `uploadFile` dans `src/services/api.ts`.
 
 Encore à brancher :
-- **Paiements** : MonCash, NatCash, carte, PayPal et leurs webhooks. Pour l'instant, une commande est confirmée sans débit réel (sauf le virement, qui reste « en attente »).
-- **Envois** : emails (billets, mot de passe oublié), SMS et WhatsApp. La connexion par téléphone et Google n'apparaît qu'en démo.
+- **Paiements** : MonCash, NatCash, carte, PayPal et leurs webhooks. Pour l'instant, une commande est confirmée sans débit réel (sauf le virement, qui reste « en attente » jusqu'à confirmation par l'administration).
+- **Envois** : l'email des billets est prêt (à activer avec Resend). Restent : mot de passe oublié, rappels et campagnes par email, SMS et WhatsApp. La connexion par téléphone et Google n'existe pas encore.
 - **Cartes Wallet** Apple et Google, **taux de change** du jour, **temps réel** (le tableau de bord se rafraîchit toutes les 20 s).
 - **Aperçus de partage** : `scripts/prerender-og.mjs` lit encore la démo.
 

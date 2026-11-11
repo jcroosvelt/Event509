@@ -39,6 +39,7 @@ const OrgEvents = lazy(() => import('@/pages/organizer/Events'));
 const EventEditor = lazy(() => import('@/pages/organizer/EventEditor'));
 const EventStats = lazy(() => import('@/pages/organizer/EventStats'));
 const Attendees = lazy(() => import('@/pages/organizer/Attendees'));
+const CheckInHome = lazy(() => import('@/pages/organizer/CheckInHome'));
 const CheckIn = lazy(() => import('@/pages/organizer/CheckIn'));
 const Promos = lazy(() => import('@/pages/organizer/Promos'));
 const Refunds = lazy(() => import('@/pages/organizer/Refunds'));
@@ -99,7 +100,7 @@ export default function App() {
             <Route path="cgu" element={<Legal page="terms" />} />
             <Route path="confidentialite" element={<Legal page="privacy" />} />
             <Route path="ambassadeurs" element={<Ambassador />} />
-            <Route path="billets" element={auth(<Wallet_ />)} />
+            <Route path="billets" element={<Wallet_ />} />
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
             <Route path="favoris" element={auth(<Favorites />)} />
             <Route path="notifications" element={auth(<Notifications />)} />
@@ -125,7 +126,7 @@ export default function App() {
                   { title: t('Ventes'), items: [
                     { to: `${O}/codes-promo`, label: t('Codes promo'), icon: BadgePercent, perm: 'promos' },
                     { to: `${O}/remboursements`, label: t('Remboursements'), icon: Undo2, perm: 'refunds' },
-                    { to: `${O}/versements`, label: t('Versements & factures'), icon: Wallet, perm: 'payouts' },
+                    { to: `${O}/versements`, label: t('Versements'), icon: Wallet, perm: 'payouts' },
                   ] },
                   { title: t('Croissance'), items: [
                     { to: `${O}/marketing`, label: t('Campagnes'), icon: Megaphone, perm: 'marketing' },
@@ -153,7 +154,8 @@ export default function App() {
             <Route path="evenements/:id" element={<EventEditor />} />
             <Route path="evenements/:id/stats" element={<EventStats />} />
             <Route path="participants" element={<Attendees />} />
-            <Route path="checkin" element={<CheckIn />} />
+            <Route path="checkin" element={<CheckInHome />} />
+            <Route path="checkin/:id" element={<CheckIn />} />
             <Route path="codes-promo" element={<Promos />} />
             <Route path="remboursements" element={<Refunds />} />
             <Route path="marketing" element={<Marketing />} />
