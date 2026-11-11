@@ -19,6 +19,7 @@
 
 ## En cours (cette session)
 
+- [x] Comptes réservés aux organisateurs : l'inscription crée toujours un compte organisateur ; les participants achètent sans compte et retrouvent leurs billets par l'email / le lien de commande (plus d'invitation à créer un compte, plus de « Mes billets » pour les visiteurs)
 - [x] Compte admin : un seul espace à deux facettes (sélecteur « Organisateur | Administration » en haut du menu, sur ordinateur et mobile) ; l'admin arrive sur l'Administration à la connexion
 - [x] Application installable : bandeau « Installer l'application » (Android/Chrome : bouton natif ; iPhone/iPad : explication « Partager » puis « Sur l'écran d'accueil »)
 - [x] Suppression d'un événement (organisateur : sans billet vendu ; admin : avec tout son contenu) et d'une commande avec ses billets (admin, page Transactions)
@@ -56,3 +57,4 @@
 - 2026-11-11 : champs numériques (effaçables), icônes à la place des emojis, versements avec destination, contrôle d'entrée par événement (Valider l'entrée relance le scan), données fictives sorties du site en ligne (vérifié : aucune dans la version de production), exemples des champs de saisie rendus neutres.
 - 2026-11-11 : PWA (bandeau d'installation) et suppression d'événements / de commandes ; vérifié en ligne sur event509.vercel.app : le bandeau est dans le code livré, les routes de suppression répondent « connexion requise » sans session.
 - 2026-11-11 : espace unique à deux facettes pour le compte admin (sélecteur Organisateur / Administration).
+- 2026-11-11 : comptes réservés aux organisateurs (inscription = organisateur ; visiteurs sans menu de compte).

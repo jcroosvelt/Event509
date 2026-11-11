@@ -155,7 +155,8 @@ const signup: Handler = async (c) => {
       teamRole = invite.data.role;
       organizerId = invite.organizer_id;
       await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [email]);
-    } else if (c.body.organizer === true) {
+    } else {
+      // Les comptes sont réservés aux organisateurs : les participants achètent sans compte
       role = 'organizer';
       teamRole = 'admin';
       organizerId = newId('org');

@@ -136,7 +136,7 @@ export interface Session_ {
 export function signIn(email: string, password: string) {
   return http<Session_>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
-export function signUp(input: { name: string; email: string; password: string; organizer: boolean }) {
+export function signUp(input: { name: string; email: string; password: string }) {
   return http<Session_>('/auth/signup', { method: 'POST', body: JSON.stringify(input) });
 }
 export function fetchMe() {

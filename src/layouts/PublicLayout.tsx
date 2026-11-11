@@ -112,7 +112,7 @@ function UserMenu() {
   if (!user)
     return (
       <Link to="/connexion" className="inline-flex h-11 items-center rounded-full bg-contrast px-5 text-sm font-semibold text-on-contrast">
-        {t('Connexion')}
+        {t('Espace organisateur')}
       </Link>
     );
   const items = [
@@ -260,7 +260,7 @@ export default function PublicLayout() {
   const links = [
     { to: '/', label: t('Découvrir'), end: true },
     { to: '/explorer', label: t('Explorer') },
-    { to: '/billets', label: t('Mes billets') },
+    ...(user ? [{ to: '/billets', label: t('Mes billets') }] : []),
     hasOrganizerAccess(user) ? { to: '/organisateur', label: t('Espace organisateur') } : { to: '/organisateur/evenements/nouveau', label: t('Créer un événement') },
   ];
 
@@ -358,9 +358,9 @@ export default function PublicLayout() {
           { to: '/', icon: Home, label: t('Accueil'), end: true },
           { to: '/explorer', icon: Compass, label: t('Explorer') },
           { to: '/favoris', icon: Heart, label: t('Favoris') },
-          { to: user ? '/compte' : '/connexion', icon: User, label: t('Profil') },
+          { to: user ? '/compte' : '/connexion', icon: User, label: user ? t('Profil') : t('Organisateur') },
         ]}
-        center={{ to: '/billets', icon: Ticket, label: t('Mes billets') }}
+        center={user ? { to: '/billets', icon: Ticket, label: t('Mes billets') } : undefined}
       />
     </div>
   );
