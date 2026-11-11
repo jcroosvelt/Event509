@@ -1239,5 +1239,11 @@
   "Tous mes participants": "All my attendees",
   "Participants — {event}": "Attendees — {event}",
   "L’envoi des campagnes (email, SMS, WhatsApp) n’est pas encore activé : vous pouvez préparer et enregistrer vos brouillons, ils partiront dès que l’envoi sera branché. Seul l’email qui accompagne chaque billet acheté est envoyé aujourd’hui.": "Sending campaigns (email, SMS, WhatsApp) is not enabled yet: you can prepare and save your drafts, they will go out as soon as sending is connected. Only the email that comes with each ticket purchased is sent today.",
-  "Préparez des messages pour vos participants.": "Prepare messages for your attendees."
+  "Préparez des messages pour vos participants.": "Prepare messages for your attendees.",
+  "Installer l’application": "Install the app",
+  "Installez Event509": "Install Event509",
+  "Vos billets sur l’écran d’accueil, même sans connexion.": "Your tickets on your home screen, even offline.",
+  "Plus tard": "Later",
+  "Touchez « Partager » dans Safari": "Tap “Share” in Safari",
+  "Puis « Sur l’écran d’accueil »": "Then “Add to Home Screen”"
 }
