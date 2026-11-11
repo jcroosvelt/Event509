@@ -34,6 +34,8 @@
 
 ## À faire ensuite
 
+0. **À faire par vous** : créer un compte Resend, vérifier un domaine d'envoi, puis ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel (Production) pour que les billets partent par email.
+
 1. Paiements réels (MonCash, NatCash, carte, PayPal) et leurs notifications
 2. Envois SMS et WhatsApp
 3. Aperçus de partage des événements (WhatsApp, Facebook) générés depuis la base
@@ -45,6 +47,7 @@
 ## Journal
 
 - 2026-11-11 : création du fichier de suivi.
+- 2026-11-11 : vérifié sur le site en ligne (compte et événement de test, supprimés ensuite) : achat sans compte, billets créés à l'achat, lien de commande qui rouvre les billets sans compte, mauvaise clé refusée ; le code livré ne contient aucune donnée fictive (81 fichiers examinés). L'email des billets ne part pas encore : `RESEND_API_KEY` et `MAIL_FROM` ne sont pas définis dans Vercel.
 - 2026-11-11 : vérifié dans un vrai navigateur sur une base vide (15 contrôles) : création d'événement, champs numériques, achat sans compte, email avec QR décodable, contrôle d'entrée, versements, saisie tactile, et audit de 37 pages (aucune donnée fictive, aucun emoji). Bug corrigé au passage : un billet refusé au contrôle d'entrée renvoyait une erreur 503 (introduit par la page de santé, déjà en ligne).
 - 2026-11-11 : achat sans compte (clé d'accès dans le lien de la commande), email des billets avec QR unique (Resend), virement : billets « en attente » jusqu'à confirmation par l'administration, transfert de billet par email.
 - 2026-11-11 : champs numériques (effaçables), icônes à la place des emojis, versements avec destination, contrôle d'entrée par événement (Valider l'entrée relance le scan), données fictives sorties du site en ligne (vérifié : aucune dans la version de production), exemples des champs de saisie rendus neutres.
