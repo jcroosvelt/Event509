@@ -18,7 +18,7 @@ const statusMap: Record<Order['status'], { l: string; tone: Tone }> = {
   partially_refunded: { l: 'Remb. partiel', tone: 'violet' },
   cancelled: { l: 'Annulée', tone: 'red' },
 };
-const methodLabel = { card: 'Carte', moncash: 'MonCash', natcash: 'NatCash', paypal: 'PayPal', transfer: 'Virement' };
+const methodLabel = { card: 'Carte', moncash: 'MonCash', natcash: 'NatCash', kashpaw: 'KashPaw', paypal: 'PayPal', transfer: 'Virement' };
 const reasons = ['Empêchement', 'Achat en double', 'Événement modifié ou reporté', 'Autre'];
 
 export default function Orders() {

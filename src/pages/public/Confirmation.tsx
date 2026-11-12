@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, Copy, Download, Mail, TriangleAlert } from 'lucide-react';
-import { claimOrder, DEMO, getOrderByKey } from '@/services/api';
+import { claimOrder, DEMO, getOrderByKey, verifyOrderPayment } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
@@ -22,18 +22,39 @@ export default function Confirmation() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
   const key = params.get('k') ?? '';
-  const { state } = useLocation() as { state?: { order: Order; tickets: IssuedTicket[]; emailSent?: boolean } };
+  const { state: navState } = useLocation() as { state?: { order: Order; tickets: IssuedTicket[]; emailSent?: boolean } };
+  // Commande en attente : on relit toujours le serveur (le paiement a pu être confirmé depuis)
+  const state = navState?.order?.status === 'pending' ? undefined : navState;
+  const [tick, setTick] = useState(0);
   const app = useApp();
   const { t, user, refresh } = app;
   const [claimed, setClaimed] = useState(false);
   const [saving, setSaving] = useState(false);
   const sessionLabel = useSessionLabel();
   // Page ouverte depuis l'email, ou rechargée : on relit la commande sur le serveur avec la clé du lien
-  const remote = useAsync(() => (state?.order || DEMO || !key ? Promise.resolve(null) : getOrderByKey(id, key)), [id, key]);
+  const remote = useAsync(() => (state?.order || DEMO || !key ? Promise.resolve(null) : getOrderByKey(id, key)), [id, key, tick]);
   const order = state?.order ?? remote.data?.order ?? app.orders.find((o) => o.id === id);
   const tickets = state?.tickets ?? remote.data?.tickets ?? app.tickets.filter((x) => x.orderId === id);
   const pending = order?.status === 'pending';
   const mine = !!user && (!!state || !!remote.data?.claimed || claimed);
+  // Paiement en ligne en cours : la page se met à jour toute seule dès que la plateforme de paiement confirme
+  const online = !!order && ['moncash', 'natcash', 'kashpaw', 'card'].includes(order.method);
+  useEffect(() => {
+    if (DEMO || !pending || !online) return;
+    let n = 0;
+    const i = setInterval(async () => {
+      if (++n > 60) return clearInterval(i);
+      try {
+        if ((await verifyOrderPayment(id)) === 'paid') {
+          clearInterval(i);
+          setTick((x) => x + 1);
+        }
+      } catch {
+        /* réseau : on réessaie */
+      }
+    }, 5000);
+    return () => clearInterval(i);
+  }, [pending, online, id]);
   // Application Android : cet appareil recevra les notifications de cette commande (billet prêt, événement modifié…)
   useEffect(() => {
     if (!DEMO && key) registerPush({ orderId: id, key });
@@ -95,10 +116,10 @@ export default function Confirmation() {
         <div aria-hidden className={`mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full ${pending ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-ink'}`}>
           {pending ? <Clock className="h-10 w-10" /> : <CheckCircle2 className="h-10 w-10" />}
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight">{pending ? t('Commande en attente') : t('C’est confirmé !')}</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight">{pending ? (online ? t('Paiement en cours de confirmation') : t('Commande en attente')) : t('C’est confirmé !')}</h1>
         <p className="mt-2 text-ink-soft">
           {pending
-            ? t('Vos billets seront émis dès réception du virement.')
+            ? online ? t('Cette page se met à jour toute seule dès que le paiement est confirmé, puis vos billets s’affichent ici et arrivent par email.') : t('Vos billets seront émis dès réception du virement.')
             : `${t('Commande {id}', { id: order.id })} · ${order.total ? moneyRaw(order.total, order.currency, app.lang) : t('Gratuit')}`}
         </p>
       </div>

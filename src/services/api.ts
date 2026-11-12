@@ -304,6 +304,15 @@ export interface OrderResult {
   accessKey?: string;
   /** L'email des billets est parti (mode serveur, envoi configuré). */
   emailSent?: boolean;
+  /** Paiement en ligne : adresse de la page de paiement sécurisée où envoyer l'acheteur. */
+  payUrl?: string;
+}
+
+/** État du paiement en ligne d'une commande, relu par le serveur auprès de la plateforme de paiement. */
+export async function verifyOrderPayment(orderId: string): Promise<'paid' | 'pending' | 'failed' | 'cancelled'> {
+  if (DEMO) return 'paid';
+  const r = await http<{ status: string }>(`/orders/${encodeURIComponent(orderId)}/verify`, { method: 'POST', body: '{}' });
+  return r.status === 'paid' || r.status === 'failed' || r.status === 'cancelled' ? r.status : 'pending';
 }
 
 export async function createOrder(input: CheckoutInput): Promise<OrderResult> {

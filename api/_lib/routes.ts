@@ -5,6 +5,7 @@ import type {
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
 import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
+import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
@@ -296,7 +297,7 @@ const createOrder: Handler = async (c) => {
     method: Order['method']; currency: Currency; buyer: { name: string; email: string; phone?: string };
     sessionLabel?: string; referral?: string; lang?: string;
   };
-  const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'paypal', 'transfer'];
+  const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'kashpaw', 'paypal', 'transfer'];
   if (!methods.includes(b.method)) fail(422, 'Moyen de paiement invalide');
   if (b.currency !== 'HTG' && b.currency !== 'USD') fail(422, 'Devise invalide');
   const buyer = { name: str(b.buyer?.name, 80), email: str(b.buyer?.email, 160).toLowerCase(), phone: str(b.buyer?.phone, 30) || undefined };
@@ -347,7 +348,8 @@ const createOrder: Handler = async (c) => {
         subtotal, discount, fees: fb.fee, total: fb.total, currency: cur,
         // Le virement attend la réception des fonds ; les autres moyens seront confirmés par la passerelle de paiement
         method: subtotal === 0 ? 'card' : b.method,
-        status: b.method === 'transfer' && subtotal > 0 ? 'pending' : 'paid',
+        // Virement et paiement en ligne (MonCash, NatCash, KashPaw, carte) : en attente jusqu'à la confirmation du paiement
+        status: (b.method === 'transfer' && subtotal > 0) || (payConfigured() && ONLINE_METHODS.includes(b.method) && fb.total > 0) ? 'pending' : 'paid',
         buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone,
         promoCode: promo?.code, referral: str(b.referral, 40) || undefined, sessionLabel: str(b.sessionLabel, 80) || undefined,
       };
@@ -380,12 +382,29 @@ const createOrder: Handler = async (c) => {
         );
       return { order, tickets, event: ev! };
     });
+    // Paiement en ligne : la plateforme renvoie l'adresse de sa page sécurisée (MonCash, NatCash, KashPaw ou carte)
+    let payUrl: string | undefined;
+    if (result.order.status === 'pending' && payConfigured() && ONLINE_METHODS.includes(result.order.method)) {
+      try {
+        const amountHtg = Math.round(convert(result.order.total, result.order.currency, 'HTG'));
+        if (amountHtg < MIN_HTG) fail(422, `Le montant minimum pour un paiement en ligne est de ${MIN_HTG} HTG`);
+        const p = await createPayment({ reference: result.order.id, amountHtg, method: result.order.method as OnlineMethod });
+        payUrl = p.url;
+        await db().query(`update orders set data = data || $2::jsonb where id = $1`, [result.order.id, JSON.stringify({ payTx: p.transactionId })]);
+      } catch (e) {
+        // La commande n'est pas payable : on libère les places tout de suite
+        await dropOrder(result.order.id);
+        if (e instanceof HttpError) throw e;
+        console.error('[pay]', e);
+        fail(502, 'Le paiement en ligne est momentanément indisponible. Réessayez dans un instant.');
+      }
+    }
     // Billets par email (pas de compte nécessaire) : un échec d'envoi n'annule jamais la commande
     const emailSent = result.order.status === 'paid'
       ? await sendTicketsEmail({ to: buyer.email, name: buyer.name, lang, event: result.event, tickets: result.tickets, orderId: result.order.id, accessKey })
       : false;
     if (result.order.status === 'paid') await notifySale(result.order, result.event, result.tickets.length, accessKey);
-    return { order: result.order, tickets: result.tickets, accessKey, emailSent };
+    return { order: result.order, tickets: result.tickets, accessKey, emailSent, ...(payUrl ? { payUrl } : {}) };
   } catch (e) {
     // Index unique sur les places : quelqu'un vient de prendre la même place
     if ((e as { code?: string }).code === '23505') fail(409, 'Une des places choisies vient d’être vendue. Choisissez-en une autre.');
@@ -408,11 +427,19 @@ async function safely(fn: () => Promise<unknown>) {
   }
 }
 
-/** Achat : billet pour l'acheteur (si son appareil est connu), nouvelle vente et « presque complet » pour l'organisation. */
+/** Achat : billet pour l'acheteur (si son appareil est connu), puis nouvelle vente et « presque complet » pour l'organisation. */
 async function notifySale(order: Order, ev: EventItem, count: number, key: string) {
   if (!pushConfigured()) return;
   await safely(async () => {
     await notifyEmails([order.buyerEmail], { title: 'Billet reçu', body: `${count} billet(s) pour ${ev.title}`, url: orderPath(order.id, key), channel: 'tickets' });
+  });
+  await notifyTeamSale(ev, count);
+}
+
+/** Nouvelle vente et « presque complet » pour l'organisation. */
+async function notifyTeamSale(ev: EventItem, count: number) {
+  if (!pushConfigured()) return;
+  await safely(async () => {
     const team = await organizerUserIds(ev.organizerId);
     await notifyUsers(team, { title: 'Nouvelle vente', body: `${count} billet(s) vendu(s) — ${ev.title}`, url: '/organisateur/participants', channel: 'sales' });
     const capacity = ev.tickets.reduce((s, x) => s + x.quota, 0);
@@ -1225,20 +1252,84 @@ const userDetail: Handler = async (c) => {
   };
 };
 
+/**
+ * Une commande en attente est payée : les billets deviennent valables et sont envoyés (email + notification).
+ * Sert au virement confirmé par l'admin et au paiement en ligne confirmé par la plateforme de paiement.
+ * Renvoie null si la commande n'est pas (ou plus) en attente : l'appel est donc idempotent.
+ */
+async function settleOrder(orderId: string, by?: Ctx) {
+  const out = await tx(async (q) => {
+    const r = await one<{ access_key: string; data: Order }>(`select access_key, data from orders where id = $1 and status = 'pending' for update`, [orderId], q);
+    if (!r) return null;
+    await q.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [orderId]);
+    await q.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where order_id = $1 and status = 'pending'`, [orderId]);
+    if (by) await audit(by, 'Paiement confirmé', `${r.data.id} — ${r.data.buyerName}`, q);
+    return { order: { ...r.data, status: 'paid' as const }, key: r.access_key, tickets: await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [orderId], q), event: await eventById(r.data.eventId, q) };
+  });
+  if (!out) return null;
+  const emailSent = out.event ? await sendTicketsEmail({ to: out.order.buyerEmail, name: out.order.buyerName, lang: 'fr', event: out.event, tickets: out.tickets, orderId: out.order.id, accessKey: out.key }) : false;
+  if (out.event) {
+    await safely(() => notifyEmails([out.order.buyerEmail], { title: 'Paiement confirmé', body: `Vos billets pour ${out.event!.title} sont prêts`, url: orderPath(out.order.id, out.key), channel: 'tickets' }));
+    await notifyTeamSale(out.event, out.tickets.length);
+  }
+  return { emailSent };
+}
+
 /** Un virement bancaire est arrivé : la commande est payée, les billets deviennent valables et sont envoyés. */
 const confirmOrderPayment: Handler = async (c) => {
   admin(c);
-  const out = await tx(async (q) => {
-    const r = await one<{ access_key: string; data: Order }>(`select access_key, data from orders where id = $1 and status = 'pending' for update`, [c.params.id], q);
-    if (!r) fail(404, 'Commande en attente introuvable');
-    await q.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [c.params.id]);
-    await q.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where order_id = $1 and status = 'pending'`, [c.params.id]);
-    await audit(c, 'Paiement confirmé', `${r!.data.id} — ${r!.data.buyerName}`, q);
-    return { order: { ...r!.data, status: 'paid' as const }, key: r!.access_key, tickets: await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [c.params.id], q), event: await eventById(r!.data.eventId, q) };
+  const out = await settleOrder(c.params.id, c);
+  if (!out) fail(404, 'Commande en attente introuvable');
+  return out;
+};
+
+/** Supprime une commande jamais payée (paiement échoué ou abandonné) et libère ses places. */
+async function dropOrder(orderId: string) {
+  const o = (await docs<Order>(`select data from orders where id = $1`, [orderId]))[0];
+  if (!o) return;
+  await tx(async (q) => {
+    const ev = await eventById(o.eventId, q);
+    if (ev && ['paid', 'pending'].includes(o.status)) {
+      const tickets = ev.tickets.map((t) => ({ ...t, sold: Math.max(0, t.sold - o.items.filter((i) => i.ticketTypeId === t.id).reduce((a, i) => a + i.qty, 0)) }));
+      await saveEventRow({ ...ev, tickets }, q);
+    }
+    await purgeOrders(q, 'id = $1', [o.id]);
   });
-  const emailSent = out.event ? await sendTicketsEmail({ to: out.order.buyerEmail, name: out.order.buyerName, lang: 'fr', event: out.event, tickets: out.tickets, orderId: out.order.id, accessKey: out.key }) : false;
-  if (out.event) await safely(() => notifyEmails([out.order.buyerEmail], { title: 'Paiement confirmé', body: `Vos billets pour ${out.event!.title} sont prêts`, url: orderPath(out.order.id, out.key), channel: 'tickets' }));
-  return { emailSent };
+}
+
+/** Interroge la plateforme de paiement pour une commande en ligne : confirmée, échouée ou toujours en attente. */
+async function checkPayment(orderId: string): Promise<PayStatus> {
+  if (!payConfigured()) return 'pending';
+  let st: PayStatus;
+  try {
+    st = await verifyPayment(orderId);
+  } catch (e) {
+    console.error('[pay] vérification', e);
+    return 'pending';
+  }
+  if (st === 'paid') await settleOrder(orderId);
+  else if (st === 'failed') await dropOrder(orderId);
+  return st;
+}
+
+/** Appelé par la page de retour et par la page de commande : état du paiement d'une commande. */
+const verifyOrder: Handler = async (c) => {
+  const r = await one<{ status: string; method: string | null }>(`select status, data->>'method' as method from orders where id = $1`, [c.params.id]);
+  if (!r) fail(404, 'Commande introuvable');
+  if (r!.status !== 'pending') return { status: r!.status === 'paid' ? 'paid' : r!.status };
+  // Un virement n'a pas de paiement en ligne à vérifier
+  if (!r!.method || !ONLINE_METHODS.includes(r!.method)) return { status: 'pending' };
+  return { status: await checkPayment(c.params.id) };
+};
+
+/**
+ * Notification de la plateforme de paiement (webhook). Son contenu n'est jamais cru sur parole : il sert seulement
+ * à savoir quelle commande vérifier, et l'état est relu auprès de la plateforme (impossible à falsifier).
+ */
+const payWebhook: Handler = async (c) => {
+  const ref = str((c.body.transaction as { reference_id?: unknown } | undefined)?.reference_id, 60);
+  if (ref) await checkPayment(ref);
+  return { ok: true };
 };
 
 const adminEvents: Handler = async (c) => {
@@ -1383,6 +1474,10 @@ const localMs = (iso: string) => Date.parse(iso.length === 16 ? `${iso}:00Z` : `
 const runReminders: Handler = async (c) => {
   const secret = process.env.CRON_SECRET;
   if (!secret || !sameKey(c.authorization?.replace(/^Bearer\s+/i, ''), secret)) fail(401, 'Non autorisé');
+  // Paiements en ligne abandonnés depuis plus de 2 h : dernière vérification, puis les places sont libérées
+  const stale = await all<{ id: string }>(
+    `select id from orders where status = 'pending' and data->>'method' = any($1) and created_at < now() - interval '2 hours'`, [[...ONLINE_METHODS]]);
+  for (const o of stale) if ((await checkPayment(o.id)) === 'pending') await dropOrder(o.id);
   if (!pushConfigured()) return { sent: 0, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
   const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
   const now = Date.parse(`${nowLocal}Z`);
@@ -1433,6 +1528,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/orders', createOrder],
   ['GET', '/orders/:id', getOrder],
   ['POST', '/orders/:id/claim', claimOrder],
+  ['POST', '/orders/:id/verify', verifyOrder],
+  ['POST', '/pay/webhook', payWebhook],
   ['POST', '/devices', registerDevice],
   ['DELETE', '/devices', unregisterDevice],
   ['GET', '/cron/reminders', runReminders],

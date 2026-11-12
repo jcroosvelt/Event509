@@ -31,6 +31,11 @@ export function rememberGuestOrder(id: string, key: string) {
   persist(GUEST_KEY, [...all.filter((x) => x.id !== id), { id, key }].slice(-50));
 }
 
+/** Clé du lien d'une commande passée sans compte sur cet appareil (retour du paiement en ligne). */
+export function guestOrderKey(id: string) {
+  return load<{ id: string; key: string }[]>(GUEST_KEY, []).find((x) => x.id === id)?.key ?? '';
+}
+
 function usePersisted<T>(key: string, initial: T) {
   const [v, setV] = useState<T>(() => load(key, initial));
   useEffect(() => {
