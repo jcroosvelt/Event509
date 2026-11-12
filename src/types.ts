@@ -96,7 +96,7 @@ export interface Organizer {
   city: string;
 }
 
-export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'paypal' | 'transfer';
+export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'kashpaw' | 'paypal' | 'transfer';
 
 export type TicketStatus = 'pending' | 'valid' | 'used' | 'transferred' | 'refunded' | 'resale';
 

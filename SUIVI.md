@@ -13,12 +13,15 @@
 | Fichiers (affiches, logos, documents de vérification) | En ligne |
 | Contrôle d'entrée par événement | Refait et testé |
 | Versements aux organisateurs (MonCash, NatCash, PayPal) | Refait et testé |
-| Paiements réels (MonCash, NatCash, carte, PayPal) | **Pas encore branchés** |
+| Paiements en ligne MonCash, NatCash, KashPaw et carte (une seule API) | Code prêt, **à activer** : définir `PAY_CLIENT_ID` dans Vercel et régler chez la plateforme de paiement le lien de retour `https://event509.vercel.app/retour-paiement` et le webhook `https://event509.vercel.app/api/pay/webhook`. Sans `PAY_CLIENT_ID`, les commandes restent validées sans paiement réel |
+| Paiement PayPal | Pas encore branché |
 | Envoi des billets par email | Code prêt ; **il faut ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel** pour que les emails partent |
 | SMS et WhatsApp | Pas encore branchés |
 | Notifications push (application Android) | Code prêt, **à activer** : exécuter le SQL `device_tokens` / `notification_log` de `db/schema.sql` dans Neon, puis définir `FIREBASE_SERVICE_ACCOUNT` et `CRON_SECRET` dans Vercel |
 
 ## En cours (cette session)
+
+- [x] Paiement en ligne par une seule API (MonCash, NatCash, KashPaw, carte Square) : l'acheteur est redirigé vers la page sécurisée, la commande reste « en attente » (places réservées), puis est confirmée par le webhook ou par la vérification serveur (`/api/orders/:id/verify`, page `/retour-paiement`, mise à jour automatique de la page de commande). Paiement échoué ou abandonné depuis plus de 2 h : commande supprimée et places libérées (le contrôle tourne avec le cron quotidien). Plus aucune saisie de carte sur le site. Logos des moyens de paiement dans `public/pay/`. Testé de bout en bout sur une base locale avec un faux fournisseur.
 
 - [x] Billet refait dans le style d'un billet de spectacle (bloc coloré avec titre, zone centrale, souche avec QR code) et téléchargeable en ultra HD (3840 × 1400 px, QR net) ; page de confirmation : « Téléchargez vos billets (recommandé) »
 - [x] Déconnexion plus visible sur téléphone (icône rouge dans la barre du haut des espaces organisateur et administration)
@@ -73,3 +76,4 @@
 - 2026-11-12 : notifications de suppression (commande, événement), bouton d'en-tête retiré, bouton S'inscrire sur la connexion.
 - 2026-11-12 : bouton Déconnexion dans les espaces organisateur et administration.
 - 2026-11-12 : nouveau billet ultra HD, téléchargement recommandé à la confirmation, déconnexion visible.
+- 2026-11-12 : paiement en ligne MonCash / NatCash / KashPaw / carte (API unique), logos, page de retour, vérification et webhook.

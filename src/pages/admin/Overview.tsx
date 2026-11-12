@@ -108,7 +108,7 @@ function PairedBars({ data, active, onSelect, label }: { data: { label: string; 
   );
 }
 
-const methodLabel: Record<Order['method'], string> = { card: 'Carte', moncash: 'MonCash', natcash: 'NatCash', paypal: 'PayPal', transfer: 'Virement' };
+const methodLabel: Record<Order['method'], string> = { card: 'Carte', moncash: 'MonCash', natcash: 'NatCash', kashpaw: 'KashPaw', paypal: 'PayPal', transfer: 'Virement' };
 
 export default function Overview() {
   const { lang, t, toast } = useApp();

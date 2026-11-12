@@ -7,7 +7,7 @@ import { ambassadors } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { rememberGuestOrder, useApp } from '@/store/app';
 import { convert, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
-import { isEmail, isPhone, useForm } from '@/lib/form';
+import { isEmail, useForm } from '@/lib/form';
 import { trackPixel } from '@/lib/pixels';
 import { Button, Card, Field, IconBadge, Input, Loading, Segmented } from '@/components/ui';
 import { EventCover } from '@/components/events';
@@ -15,20 +15,15 @@ import { SeatMap } from '@/components/SeatMap';
 import { useSessionLabel } from '@/components/TicketCard';
 import type { Currency, PaymentMethod, PromoCode } from '@/types';
 
-const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string }[] = [
-  { id: 'moncash', label: 'MonCash', sub: 'Paiement mobile Digicel', icon: Smartphone, color: 'bg-red-50 text-red-600' },
-  { id: 'natcash', label: 'NatCash', sub: 'Paiement mobile Natcom', icon: Smartphone, color: 'bg-orange-50 text-orange-500' },
+const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string; logo?: string }[] = [
+  { id: 'moncash', label: 'MonCash', sub: 'Paiement mobile Digicel', icon: Smartphone, color: 'bg-red-50 text-red-600', logo: '/pay/moncash.png' },
+  { id: 'natcash', label: 'NatCash', sub: 'Paiement mobile Natcom', icon: Smartphone, color: 'bg-orange-50 text-orange-500', logo: '/pay/natcash.png' },
+  { id: 'kashpaw', label: 'KashPaw', sub: 'Paiement mobile', icon: Smartphone, color: 'bg-yellow-50 text-yellow-600', logo: '/pay/kashpaw.png' },
   { id: 'card', label: 'Carte bancaire', sub: 'Visa, Mastercard, Amex', icon: CreditCard, color: 'bg-brand-50 text-brand-ink' },
   { id: 'paypal', label: 'PayPal', sub: 'Compte PayPal ou carte', icon: Wallet, color: 'bg-sky-50 text-sky-600' },
   { id: 'transfer', label: 'Virement bancaire', sub: 'Validation sous 24–48 h', icon: Building2, color: 'bg-emerald-50 text-emerald-600' },
 ];
 
-/** Formate un numéro de carte par groupes de 4 chiffres. */
-const formatCard = (v: string) => v.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
-const formatExp = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 4);
-  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-};
 
 export default function Checkout() {
   const { slug = '' } = useParams();
@@ -66,16 +61,12 @@ export default function Checkout() {
   const [seatErr, setSeatErr] = useState('');
 
   const form = useForm(
-    { name: app.user?.name ?? '', email: app.user?.email ?? '', email2: app.user?.email ?? '', phone: app.user?.phone ?? '', card: '', exp: '', cvc: '' },
+    { name: app.user?.name ?? '', email: app.user?.email ?? '', email2: app.user?.email ?? '', phone: app.user?.phone ?? '' },
     {
       name: (v) => (!String(v).trim() ? t('Indiquez le nom qui figurera sur les billets') : undefined),
       email: (v) => (!isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined),
       // Le billet part par email : on demande l'adresse deux fois pour éviter une faute de frappe qui l'enverrait ailleurs
       email2: (v, all) => (String(v).trim().toLowerCase() !== String(all.email).trim().toLowerCase() ? t('Les deux adresses email doivent être identiques') : undefined),
-      phone: (v) => ((method === 'moncash' || method === 'natcash') && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
-      card: (v) => (method === 'card' && String(v).replace(/\D/g, '').length < 15 ? t('Saisissez les 15 ou 16 chiffres de la carte') : undefined),
-      exp: (v) => (method === 'card' && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(String(v)) ? t('Format MM/AA') : undefined),
-      cvc: (v) => (method === 'card' && !/^\d{3,4}$/.test(String(v)) ? t('3 ou 4 chiffres au dos de la carte') : undefined),
     },
   );
 
@@ -135,7 +126,7 @@ export default function Checkout() {
     if (!formOk || !seatsOk) return;
     setPaying(true);
     try {
-      const { order, tickets, accessKey, emailSent } = await createOrder({
+      const { order, tickets, accessKey, emailSent, payUrl } = await createOrder({
         eventId: ev.id,
         items: lines.map((l) => ({ ticketTypeId: l.tt.id, qty: l.qty, seats: ev.seated ? seats[l.tt.id] : undefined })),
         promo,
@@ -148,6 +139,14 @@ export default function Checkout() {
         sessionLabel: occ,
         referral: app.referral?.code,
       });
+      if (payUrl) {
+        // Paiement en ligne : on garde la clé de la commande pour la retrouver au retour, puis on ouvre la page sécurisée.
+        // L'application Android laisse alors toute page de paiement s'ouvrir dans la fenêtre du site.
+        if (accessKey) rememberGuestOrder(order.id, accessKey);
+        window.AppBridge?.postMessage('payment:start');
+        window.location.assign(payUrl);
+        return;
+      }
       app.addOrder(order);
       app.addTickets(tickets);
       app.pushNotification({ title: t('Commande confirmée'), body: `${ev.title} — ${order.id}`, kind: 'sale' });
@@ -227,7 +226,7 @@ export default function Checkout() {
               <Field label={t('Nom complet')} error={form.errors.name} required><Input {...form.bind('name')} autoComplete="name" /></Field>
               <Field label={t('Email')} error={form.errors.email} hint={t('Vos billets avec leur QR code y seront envoyés')} required><Input type="email" inputMode="email" {...form.bind('email')} autoComplete="email" /></Field>
               <Field label={t('Confirmez votre email')} error={form.errors.email2} required><Input type="email" inputMode="email" {...form.bind('email2')} autoComplete="email" onPaste={(e) => e.preventDefault()} /></Field>
-              <Field label={t('Téléphone')} error={form.errors.phone} className="sm:col-span-2" hint={method === 'moncash' || method === 'natcash' ? undefined : t('Facultatif')} required={method === 'moncash' || method === 'natcash'}>
+              <Field label={t('Téléphone')} error={form.errors.phone} className="sm:col-span-2" hint={t('Facultatif')}>
                 <Input type="tel" inputMode="tel" {...form.bind('phone')} placeholder="+509 3712 3456" autoComplete="tel" />
               </Field>
             </div>
@@ -251,7 +250,11 @@ export default function Checkout() {
                     onClick={() => setMethod(m.id)}
                     className={cx('flex items-center gap-3 rounded-2xl border p-3 text-left transition', method === m.id ? 'border-brand bg-brand-50/60 ring-4 ring-brand/10' : 'border-line hover:border-ink/20')}
                   >
-                    <span aria-hidden className={cx('grid h-10 w-10 place-items-center rounded-full', m.color)}><m.icon className="h-[18px] w-[18px]" /></span>
+                    {m.logo ? (
+                      <img src={m.logo} alt="" width={64} height={40} className="h-10 w-16 shrink-0 rounded-xl bg-white object-contain p-1 ring-1 ring-line" />
+                    ) : (
+                      <span aria-hidden className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-full', m.color)}><m.icon className="h-[18px] w-[18px]" /></span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-bold">{t(m.label)}</span>
                       <span className="block truncate text-xs text-ink-muted">{t(m.sub)}</span>
@@ -262,17 +265,11 @@ export default function Checkout() {
               </div>
 
               <div className="mt-5 rounded-2xl bg-canvas p-4" aria-live="polite">
-                {method === 'card' && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label={t('Numéro de carte')} error={form.errors.card} className="col-span-2" required>
-                      <Input inputMode="numeric" autoComplete="cc-number" placeholder="1234 5678 9012 3456" {...form.bind('card')} onChange={(e) => form.set('card', formatCard(e.target.value))} />
-                    </Field>
-                    <Field label={t('Expiration')} error={form.errors.exp} required><Input inputMode="numeric" autoComplete="cc-exp" placeholder={t('MM/AA')} {...form.bind('exp')} onChange={(e) => form.set('exp', formatExp(e.target.value))} /></Field>
-                    <Field label="CVC" error={form.errors.cvc} required><Input inputMode="numeric" autoComplete="cc-csc" placeholder="123" {...form.bind('cvc')} onChange={(e) => form.set('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))} /></Field>
-                  </div>
-                )}
-                {(method === 'moncash' || method === 'natcash') && (
-                  <p className="text-sm text-ink-soft">{t('Une demande de paiement sera envoyée au {phone}. Validez-la avec votre code PIN {name}.', { phone: form.values.phone || t('numéro indiqué'), name: method === 'moncash' ? 'MonCash' : 'NatCash' })}</p>
+                {(method === 'moncash' || method === 'natcash' || method === 'kashpaw' || method === 'card') && (
+                  <p className="flex items-start gap-2 text-sm text-ink-soft">
+                    <Lock className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink" aria-hidden />
+                    {t('Vous serez redirigé vers la page de paiement sécurisée {name}, puis ramené ici automatiquement. Aucune donnée de paiement n’est saisie sur Event509.', { name: methods.find((x) => x.id === method)?.label ? t(methods.find((x) => x.id === method)!.label) : '' })}
+                  </p>
                 )}
                 {method === 'paypal' && <p className="text-sm text-ink-soft">{t('Vous serez redirigé vers PayPal pour confirmer le paiement, puis ramené ici.')}</p>}
                 {method === 'transfer' && (
