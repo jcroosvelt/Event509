@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as db from '@/data/mock';
 import { becomeOrganizer, claimOrder, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
 import { translate, type Vars } from '@/lib/i18n';
+import { registerPush, unregisterPush } from '@/lib/push';
 import type { AppUser, Currency, IssuedTicket, Lang, NotificationItem, Order } from '@/types';
 
 /** Lecture/écriture localStorage tolérante aux erreurs (navigation privée, quota…). */
@@ -222,7 +223,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Application Android : l'appareil rejoint le compte connecté pour recevoir ses notifications push
+  useEffect(() => {
+    if (!DEMO && user) registerPush();
+  }, [user]);
+
   const logout = useCallback(() => {
+    // Avant d'effacer la session : le serveur doit encore reconnaître le compte pour retirer l'appareil
+    void unregisterPush();
     persist('e509.user', null);
     setUser(null);
     if (!DEMO) {

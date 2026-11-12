@@ -184,3 +184,24 @@ alter table orders add column if not exists access_key text;
 create unique index if not exists tickets_seat_once_v2 on tickets(event_id, coalesce(session_label, ''), seat)
   where seat is not null and status in ('pending', 'valid', 'used', 'resale');
 drop index if exists tickets_seat_once;
+
+-- Notifications push (application Android) : jetons d'appareil.
+-- Un appareil peut être lié à un compte (user_id) et/ou à l'email d'un acheteur (participant sans compte,
+-- prouvé par la clé de sa commande). Un même jeton n'est jamais enregistré deux fois pour le même propriétaire.
+create table if not exists device_tokens (
+  token text not null,
+  owner text not null,                       -- 'u:<id utilisateur>' ou 'e:<email en minuscules>'
+  user_id text references users(id) on delete cascade,
+  buyer_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (token, owner)
+);
+create index if not exists device_tokens_user on device_tokens(user_id);
+create index if not exists device_tokens_email on device_tokens(buyer_email);
+
+-- Évite d'envoyer deux fois la même notification (rappels, « presque complet »).
+create table if not exists notification_log (
+  key text primary key,
+  sent_at timestamptz not null default now()
+);

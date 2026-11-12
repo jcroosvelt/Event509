@@ -16,8 +16,11 @@
 | Paiements réels (MonCash, NatCash, carte, PayPal) | **Pas encore branchés** |
 | Envoi des billets par email | Code prêt ; **il faut ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel** pour que les emails partent |
 | SMS et WhatsApp | Pas encore branchés |
+| Notifications push (application Android) | Code prêt, **à activer** : exécuter le SQL `device_tokens` / `notification_log` de `db/schema.sql` dans Neon, puis définir `FIREBASE_SERVICE_ACCOUNT` et `CRON_SECRET` dans Vercel |
 
 ## En cours (cette session)
+
+- [x] Notifications push : `window.onFcmToken` (src/lib/push.ts), `POST /api/devices` (jeton lié au compte et/ou à la commande par sa clé), envoi FCM v1 (api/_lib/push.ts), déclencheurs (nouvelle vente, presque complet, billet reçu, paiement confirmé, événement modifié ou annulé) et rappels par Vercel Cron (`/api/cron/reminders`, une fois par jour)
 
 - [x] Comptes réservés aux organisateurs : l'inscription crée toujours un compte organisateur ; les participants achètent sans compte et retrouvent leurs billets par l'email / le lien de commande (plus d'invitation à créer un compte, plus de « Mes billets » pour les visiteurs)
 - [x] Compte admin : un seul espace à deux facettes (sélecteur « Organisateur | Administration » en haut du menu, sur ordinateur et mobile) ; l'admin arrive sur l'Administration à la connexion
@@ -58,3 +61,4 @@
 - 2026-11-11 : PWA (bandeau d'installation) et suppression d'événements / de commandes ; vérifié en ligne sur event509.vercel.app : le bandeau est dans le code livré, les routes de suppression répondent « connexion requise » sans session.
 - 2026-11-11 : espace unique à deux facettes pour le compte admin (sélecteur Organisateur / Administration).
 - 2026-11-11 : comptes réservés aux organisateurs (inscription = organisateur ; visiteurs sans menu de compte).
+- 2026-11-12 : notifications push (jetons d'appareil, envoi Firebase, déclencheurs, rappels). Rien n'est envoyé tant que `FIREBASE_SERVICE_ACCOUNT` n'est pas défini.

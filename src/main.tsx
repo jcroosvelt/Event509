@@ -7,6 +7,7 @@ import App from './App';
 import { AppProvider } from './store/app';
 import { DEMO, hydrate } from './services/api';
 import { captureInstallPrompt } from './lib/install';
+import { initPush } from './lib/push';
 
 /** Au passage démo → serveur, les données de démonstration gardées sur l'appareil sont effacées. */
 function resetDemoStorage() {
@@ -35,6 +36,7 @@ function render() {
 async function start() {
   resetDemoStorage();
   captureInstallPrompt();
+  initPush();
   // Version de démonstration seulement : la condition est évaluée à la compilation, si bien que le site en ligne
   // (VITE_API_URL défini) ne contient ni ce chargement ni aucune donnée fictive.
   if (!import.meta.env.VITE_API_URL) (await import('./data/demo')).loadDemo();

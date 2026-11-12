@@ -33,8 +33,8 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       const userId = readToken(req.authorization?.replace(/^Bearer\s+/i, ''));
       const user = userId ? await one<UserRow>(`select * from users where id = $1`, [userId]) : null;
       // Jeton présent mais invalide ou compte supprimé : la session est terminée
-      if (req.authorization && !user && !req.path.startsWith('/auth/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
-      const ctx: Ctx = { user, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
+      if (req.authorization && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
+      const ctx: Ctx = { user, authorization: req.authorization, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
       if (out === null || out === undefined) return { status: 204, body: null };
       if (out instanceof Binary) return { status: 200, body: out };

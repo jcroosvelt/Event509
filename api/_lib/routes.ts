@@ -5,6 +5,7 @@ import type {
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
 import { sendTicketsEmail } from './mail.js';
+import { claimOnce, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
@@ -35,6 +36,7 @@ export interface UserRow {
 
 export interface Ctx {
   user: UserRow | null;
+  authorization?: string;
   params: Record<string, string>;
   query: Record<string, string>;
   body: Record<string, unknown>;
@@ -382,6 +384,7 @@ const createOrder: Handler = async (c) => {
     const emailSent = result.order.status === 'paid'
       ? await sendTicketsEmail({ to: buyer.email, name: buyer.name, lang, event: result.event, tickets: result.tickets, orderId: result.order.id, accessKey })
       : false;
+    if (result.order.status === 'paid') await notifySale(result.order, result.event, result.tickets.length, accessKey);
     return { order: result.order, tickets: result.tickets, accessKey, emailSent };
   } catch (e) {
     // Index unique sur les places : quelqu'un vient de prendre la même place
@@ -389,6 +392,47 @@ const createOrder: Handler = async (c) => {
     throw e;
   }
 };
+
+
+// ---------- Notifications push ----------
+// Elles ne bloquent jamais l'action qui les déclenche : une erreur est seulement journalisée.
+
+const eventPath = (e: EventItem) => `/e/${e.slug}`;
+const orderPath = (orderId: string, key: string) => `/commande/${orderId}?k=${encodeURIComponent(key)}`;
+
+async function safely(fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (e) {
+    console.error('[push]', e);
+  }
+}
+
+/** Achat : billet pour l'acheteur (si son appareil est connu), nouvelle vente et « presque complet » pour l'organisation. */
+async function notifySale(order: Order, ev: EventItem, count: number, key: string) {
+  if (!pushConfigured()) return;
+  await safely(async () => {
+    await notifyEmails([order.buyerEmail], { title: 'Billet reçu', body: `${count} billet(s) pour ${ev.title}`, url: orderPath(order.id, key), channel: 'tickets' });
+    const team = await organizerUserIds(ev.organizerId);
+    await notifyUsers(team, { title: 'Nouvelle vente', body: `${count} billet(s) vendu(s) — ${ev.title}`, url: '/organisateur/participants', channel: 'sales' });
+    const capacity = ev.tickets.reduce((s, x) => s + x.quota, 0);
+    const sold = ev.tickets.reduce((s, x) => s + x.sold, 0);
+    if (capacity > 0 && sold / capacity >= 0.9 && (await claimOnce(`almost-full:${ev.id}`)))
+      await notifyUsers(team, { title: 'Presque complet', body: `${ev.title} : ${sold}/${capacity} billets vendus`, url: `/organisateur/evenements/${ev.id}/stats`, channel: 'sales' });
+  });
+}
+
+/** Modification importante ou annulation : tous les détenteurs de billets valables sont prévenus. */
+async function notifyEventChange(before: EventItem | undefined, after: EventItem) {
+  if (!pushConfigured() || !before) return;
+  await safely(async () => {
+    if (after.status === 'cancelled' && before.status !== 'cancelled') {
+      await notifyHolders(after.id, { title: 'Événement annulé', body: `${after.title} a été annulé`, url: eventPath(after), channel: 'tickets' });
+    } else if (after.status === 'published' && (before.start !== after.start || JSON.stringify(before.venue) !== JSON.stringify(after.venue))) {
+      await notifyHolders(after.id, { title: 'Événement modifié', body: `${after.title} : date ou lieu mis à jour`, url: eventPath(after), channel: 'tickets' });
+    }
+  });
+}
 
 /** Retrouver une commande et ses billets : par le lien reçu (clé d'accès) ou, une fois connecté, par son compte. */
 async function orderAccess(c: Ctx, id: string, key: string, q: Q = db()) {
@@ -483,6 +527,7 @@ const transferTicket: Handler = async (c) => {
     return { ticketId: t.id, to, newCode: fresh.code, link: `/commande/${order.id}?k=${key}`, ev, fresh, order, key };
   });
   const emailSent = await sendTicketsEmail({ to, name: to, lang, event: out.ev, tickets: [out.fresh], orderId: out.order.id, accessKey: out.key });
+  await safely(() => notifyEmails([to], { title: 'Billet reçu', body: `On vous a transféré un billet pour ${out.ev.title}`, url: orderPath(out.order.id, out.key), channel: 'tickets' }));
   return { ticketId: out.ticketId, to, newCode: out.newCode, link: out.link, emailSent };
 };
 
@@ -571,6 +616,7 @@ const saveEvent: Handler = async (c) => {
     if (!verified?.v) next.status = 'pending';
   }
   await saveEventRow(next);
+  await notifyEventChange(existing?.data, next);
   return next;
 };
 
@@ -581,6 +627,7 @@ const setEventStatus: Handler = async (c) => {
   const e = await eventById(c.params.id);
   if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
   await saveEventRow({ ...e!, status });
+  await notifyEventChange(e!, { ...e!, status });
   return null;
 };
 
@@ -1152,6 +1199,7 @@ const confirmOrderPayment: Handler = async (c) => {
     return { order: { ...r!.data, status: 'paid' as const }, key: r!.access_key, tickets: await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [c.params.id], q), event: await eventById(r!.data.eventId, q) };
   });
   const emailSent = out.event ? await sendTicketsEmail({ to: out.order.buyerEmail, name: out.order.buyerName, lang: 'fr', event: out.event, tickets: out.tickets, orderId: out.order.id, accessKey: out.key }) : false;
+  if (out.event) await safely(() => notifyEmails([out.order.buyerEmail], { title: 'Paiement confirmé', body: `Vos billets pour ${out.event!.title} sont prêts`, url: orderPath(out.order.id, out.key), channel: 'tickets' }));
   return { emailSent };
 };
 
@@ -1254,6 +1302,72 @@ const setPayoutStatus: Handler = async (c) => {
 
 // ---------- Table de routage ----------
 
+// ---------- Appareils (notifications push) ----------
+
+/**
+ * Enregistre le jeton FCM d'un appareil. Propriétaire : le compte connecté et/ou l'acheteur d'une commande
+ * (clé du lien de commande). Sans l'un des deux, le jeton n'est pas accepté. Idempotent (pas de doublon).
+ */
+const registerDevice: Handler = async (c) => {
+  const token = str(c.body.token, 4096);
+  if (token.length < 20) fail(422, 'Jeton invalide');
+  const owners: { owner: string; userId: string | null; email: string | null }[] = [];
+  if (c.user && c.user.status === 'active') owners.push({ owner: `u:${c.user.id}`, userId: c.user.id, email: null });
+  const orderId = str(c.body.orderId, 60);
+  if (orderId) {
+    const r = await orderAccess(c, orderId, str(c.body.key, 60));
+    const email = String(r.data.buyerEmail ?? '').toLowerCase();
+    if (email) owners.push({ owner: `e:${email}`, userId: null, email });
+  }
+  if (!owners.length) fail(401, 'Connectez-vous ou ouvrez le lien de votre commande');
+  for (const o of owners)
+    await db().query(
+      `insert into device_tokens (token, owner, user_id, buyer_email) values ($1,$2,$3,$4)
+       on conflict (token, owner) do update set updated_at = now()`, [token, o.owner, o.userId, o.email]);
+  return null;
+};
+
+/** Déconnexion : l'appareil ne reçoit plus les notifications du compte (celles des commandes restent). */
+const unregisterDevice: Handler = async (c) => {
+  const u = auth(c);
+  await db().query(`delete from device_tokens where token = $1 and owner = $2`, [str(c.query.token, 4096), `u:${u.id}`]);
+  return null;
+};
+
+/** Début de l'événement sans fuseau (heure locale d'Haïti) lu comme une heure UTC, comme le reste du site. */
+const localMs = (iso: string) => Date.parse(iso.length === 16 ? `${iso}:00Z` : `${iso}Z`.replace('ZZ', 'Z'));
+
+/**
+ * Rappels (appelé par Vercel Cron avec « Authorization: Bearer $CRON_SECRET ») : la veille, le jour même
+ * à partir de 8 h, et dans les 4 heures qui précèdent, pour les détenteurs de billets valables.
+ * Chaque rappel n'est envoyé qu'une fois par événement (table notification_log).
+ */
+const runReminders: Handler = async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || !sameKey(c.authorization?.replace(/^Bearer\s+/i, ''), secret)) fail(401, 'Non autorisé');
+  if (!pushConfigured()) return { sent: 0, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  const now = Date.parse(`${nowLocal}Z`);
+  const today = nowLocal.slice(0, 10);
+  const tomorrow = new Date(now + 86_400_000).toISOString().slice(0, 10);
+  const hour = Number(nowLocal.slice(11, 13));
+  const events = await docs<EventItem>(`select data from events where status = 'published' and start_at > now() - interval '1 day' and start_at < now() + interval '3 days'`);
+  let sent = 0;
+  for (const ev of events) {
+    const start = localMs(ev.start);
+    const diffH = (start - now) / 3_600_000;
+    if (!Number.isFinite(diffH) || diffH <= 0) continue;
+    const day = ev.start.slice(0, 10);
+    const kind = diffH <= 4 ? 'soon' : day === today && hour >= 8 ? 'day' : day === tomorrow ? 'eve' : null;
+    if (!kind) continue;
+    if (!(await claimOnce(`reminder:${kind}:${ev.id}`))) continue;
+    const time = ev.start.slice(11, 16);
+    const body = kind === 'eve' ? `${ev.title} a lieu demain à ${time}` : kind === 'day' ? `${ev.title} a lieu aujourd’hui à ${time}` : `${ev.title} commence bientôt (${time})`;
+    sent += await notifyHolders(ev.id, { title: 'Rappel', body, url: eventPath(ev), channel: 'reminders' });
+  }
+  return { sent };
+};
+
 export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
@@ -1281,6 +1395,9 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/orders', createOrder],
   ['GET', '/orders/:id', getOrder],
   ['POST', '/orders/:id/claim', claimOrder],
+  ['POST', '/devices', registerDevice],
+  ['DELETE', '/devices', unregisterDevice],
+  ['GET', '/cron/reminders', runReminders],
   ['GET', '/me/tickets', myTickets],
   ['GET', '/me/orders', myOrders],
   ['POST', '/orders/:id/refund', requestRefund],

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, Copy, Mail, TriangleAlert } from 'lucide-react';
 import { claimOrder, DEMO, getOrderByKey } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
+import { registerPush } from '@/lib/push';
 import { Button, ButtonLink, Card, Loading } from '@/components/ui';
 import { TicketCard } from '@/components/TicketCard';
 import type { IssuedTicket, Order } from '@/types';
@@ -27,6 +28,10 @@ export default function Confirmation() {
   const tickets = state?.tickets ?? remote.data?.tickets ?? app.tickets.filter((x) => x.orderId === id);
   const pending = order?.status === 'pending';
   const mine = !!user && (!!state || !!remote.data?.claimed || claimed);
+  // Application Android : cet appareil recevra les notifications de cette commande (billet prêt, événement modifié…)
+  useEffect(() => {
+    if (!DEMO && key) registerPush({ orderId: id, key });
+  }, [id, key]);
   useTitle(pending ? t('Commande en attente') : t('Commande confirmée'));
 
   if (remote.loading && !order) return <Loading />;
