@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, MonitorPlay, Plus, Radio, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, MonitorPlay, Plus, Radio, Trash2, X } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
 import { getEvent, rowLetter, saveEvent, seatMapOf, uploadFile } from '@/services/api';
 import { shrinkImage } from '@/lib/image';
@@ -171,18 +171,37 @@ export default function EventEditor() {
     }
   };
 
-  const onFile = async (f?: File) => {
-    if (!f) return;
-    if (!f.type.startsWith('image/')) return toast(t('Choisissez une image JPG, PNG ou WebP'), 'error');
-    if (f.size > 15 * 1024 * 1024) return toast(t('Image trop lourde : 15 Mo maximum'), 'error');
+  const MAX_IMAGES = 5;
+  const isImageUrl = (v: string) => /^(https?:|\/)/.test(v);
+  /** Visuels de l'événement : jusqu'à 5 ; un ancien événement à image unique garde son image comme premier visuel. */
+  const imgs = ev.images?.length ? ev.images : isImageUrl(ev.cover) ? [ev.cover] : [];
+  const setImgs = (next: string[]) => up({ images: next, cover: next[0] ?? (isImageUrl(ev.cover) ? covers[0]! : ev.cover) });
+
+  const onFiles = async (list: FileList | File[] | null | undefined) => {
+    const files = [...(list ?? [])].slice(0, Math.max(0, MAX_IMAGES - imgs.length));
+    if (!files.length) return toast(t('5 visuels au maximum'), 'error');
     setUploading(true);
+    const urls: string[] = [];
     try {
-      // L'image est réduite avant l'envoi : page plus rapide, envoi léger même sur mobile
-      const blob = await shrinkImage(f, { maxSide: 1600, type: 'image/jpeg', quality: 0.82 });
-      const { url } = await uploadFile('event_cover', blob, f.name);
-      up({ cover: url });
-      toast(t('Affiche ajoutée'));
+      for (const f of files) {
+        if (!f.type.startsWith('image/')) {
+          toast(t('Choisissez une image JPG, PNG ou WebP'), 'error');
+          continue;
+        }
+        if (f.size > 15 * 1024 * 1024) {
+          toast(t('Image trop lourde : 15 Mo maximum'), 'error');
+          continue;
+        }
+        // L'image est réduite avant l'envoi : page plus rapide, envoi léger même sur mobile
+        const blob = await shrinkImage(f, { maxSide: 1600, type: 'image/jpeg', quality: 0.82 });
+        urls.push((await uploadFile('event_cover', blob, f.name)).url);
+      }
+      if (urls.length) {
+        setImgs([...imgs, ...urls]);
+        toast(urls.length > 1 ? t('{n} visuels ajoutés', { n: urls.length }) : t('Visuel ajouté'));
+      }
     } catch {
+      if (urls.length) setImgs([...imgs, ...urls]);
       toast(t('L’image n’a pas pu être envoyée. Vérifiez votre connexion et réessayez.'), 'error');
     } finally {
       setUploading(false);
@@ -264,27 +283,52 @@ export default function EventEditor() {
                 </fieldset>
               </Card>
               <Card>
-                <h2 className="mb-3 text-sm font-semibold">{t('Visuel')}</h2>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  aria-busy={uploading}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.preventDefault(); void onFile(e.dataTransfer.files[0]); }}
-                  className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line py-10 text-sm text-ink-soft hover:border-brand hover:bg-brand-50/40 disabled:opacity-60"
-                >
-                  <ImagePlus className="h-7 w-7 text-brand-ink" aria-hidden />
-                  <span className="font-semibold text-ink">{uploading ? t('Envoi de l’image…') : t('Importer une affiche')}</span>
-                  <span className="text-xs">{t('JPG, PNG ou WebP, 1600×1200 recommandé, 15 Mo maximum')}</span>
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
-                <div className="mt-4 text-xs font-semibold text-ink-muted">{t('Ou choisissez un fond')}</div>
-                <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={t('Fond')}>
-                  {covers.map((c, i) => (
-                    <button key={c} type="button" role="radio" aria-checked={ev.cover === c} aria-label={t('Fond {n}', { n: i + 1 })} onClick={() => up({ cover: c })} className={cx('h-12 w-12 rounded-2xl ring-offset-2 ring-offset-surface transition', ev.cover === c && 'ring-2 ring-brand')} style={{ background: c }} />
-                  ))}
-                </div>
+                <h2 className="mb-1 text-sm font-semibold">{t('Visuels de l’événement')}</h2>
+                <p className="mb-3 text-xs text-ink-muted">{t('Jusqu’à 5 images ({n}/5). La première est le visuel principal, affiché sur les cartes et en tête de la page.', { n: imgs.length })}</p>
+                {imgs.length > 0 && (
+                  <ul className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {imgs.map((u, i) => (
+                      <li key={u} className="relative overflow-hidden rounded-2xl bg-canvas ring-1 ring-line">
+                        <img src={u} alt={t('Visuel {n}', { n: i + 1 })} className="aspect-[4/3] w-full object-cover" loading="lazy" decoding="async" />
+                        {i === 0 && <span className="absolute left-2 top-2 rounded-full bg-contrast px-2.5 py-1 text-[11px] font-bold text-on-contrast">{t('Principal')}</span>}
+                        <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-1">
+                          {i > 0 ? (
+                            <button type="button" onClick={() => setImgs([u, ...imgs.filter((x) => x !== u)])} className="rounded-full bg-surface/95 px-2.5 py-1 text-[11px] font-bold text-ink shadow">{t('Définir comme principal')}</button>
+                          ) : <span />}
+                          <button type="button" aria-label={t('Retirer le visuel {n}', { n: i + 1 })} onClick={() => setImgs(imgs.filter((x) => x !== u))} className="grid h-8 w-8 place-items-center rounded-full bg-surface/95 text-red-600 shadow"><X className="h-4 w-4" aria-hidden /></button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {imgs.length < MAX_IMAGES && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={uploading}
+                      aria-busy={uploading}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); void onFiles(e.dataTransfer.files); }}
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line py-8 text-sm text-ink-soft hover:border-brand hover:bg-brand-50/40 disabled:opacity-60"
+                    >
+                      <ImagePlus className="h-7 w-7 text-brand-ink" aria-hidden />
+                      <span className="font-semibold text-ink">{uploading ? t('Envoi de l’image…') : t('Ajouter des visuels')}</span>
+                      <span className="text-xs">{t('JPG, PNG ou WebP, 1600×1200 recommandé, 15 Mo maximum')}</span>
+                    </button>
+                    <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onFiles(e.target.files); e.target.value = ''; }} />
+                  </>
+                )}
+                {imgs.length === 0 && (
+                  <>
+                    <div className="mt-4 text-xs font-semibold text-ink-muted">{t('Ou choisissez un fond')}</div>
+                    <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={t('Fond')}>
+                      {covers.map((c, i) => (
+                        <button key={c} type="button" role="radio" aria-checked={ev.cover === c} aria-label={t('Fond {n}', { n: i + 1 })} onClick={() => up({ cover: c })} className={cx('h-12 w-12 rounded-2xl ring-offset-2 ring-offset-surface transition', ev.cover === c && 'ring-2 ring-brand')} style={{ background: c }} />
+                      ))}
+                    </div>
+                  </>
+                )}
               </Card>
             </>
           )}

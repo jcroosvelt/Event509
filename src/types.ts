@@ -57,7 +57,9 @@ export interface EventItem {
   slug: string;
   title: string;
   description: string;
-  cover: string; // gradient CSS ou URL d'image
+  cover: string; // gradient CSS ou URL d'image (le premier visuel quand il y en a)
+  /** Jusqu'à 5 visuels de l'événement ; le premier est le visuel principal. */
+  images?: string[];
   categories: CategoryId[];
   start: string;
   end: string;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { organizers } from '@/data/mock';
-import { currentFeeSettings, listCustomCommissions, removeCustomCommission, saveCustomCommission, saveFeeSettings } from '@/services/api';
+import { currentExchangeRate, currentFeeSettings, listCustomCommissions, removeCustomCommission, saveCustomCommission, saveExchangeRate, saveFeeSettings } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { moneyRaw } from '@/lib/format';
@@ -21,6 +21,22 @@ export default function Commissions() {
     fee: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
     fixed: (v) => (!(Number(v) >= 0) ? t('Indiquez un montant positif ou 0') : undefined),
   });
+  const rateForm = useForm({ rate: String(currentExchangeRate()) }, {
+    rate: (v) => (!(Number(String(v).replace(',', '.')) >= 10 && Number(String(v).replace(',', '.')) <= 1000) ? t('Entre 10 et 1 000 gourdes') : undefined),
+  });
+  const [savingRate, setSavingRate] = useState(false);
+  const saveRate = async () => {
+    if (!rateForm.validate()) return;
+    setSavingRate(true);
+    try {
+      await saveExchangeRate(Math.round(Number(String(rateForm.values.rate).replace(',', '.')) * 100) / 100);
+      toast(t('Taux de change enregistré'));
+    } catch {
+      toast(t('Le taux n’a pas pu être enregistré.'), 'error');
+    } finally {
+      setSavingRate(false);
+    }
+  };
   const custom = useForm({ organizerId: organizers[0].id, rate: '4', reason: '' }, {
     rate: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
     reason: (v) => (!String(v).trim() ? t('Indiquez le motif') : undefined),
@@ -63,6 +79,16 @@ export default function Commissions() {
   return (
     <div className="max-w-4xl">
       <PageHeader title={t('Commissions de service')} subtitle={t('Frais appliqués à chaque billet payant. Les changements valent pour les nouvelles commandes.')} />
+      <Card className="mb-4">
+        <h2 className="font-bold">{t('Taux de change gourdes / dollar')}</h2>
+        <p className="mt-1 text-sm text-ink-soft">{t('Sert à convertir les prix entre gourdes (HTG) et dollars (USD) sur tout le site : prix affichés, paiement, statistiques. Les commandes déjà passées ne changent pas.')}</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <Field label={t('1 dollar (USD) = … gourdes (HTG)')} error={rateForm.errors.rate} className="w-full sm:w-64">
+            <Input inputMode="decimal" {...rateForm.bind('rate')} onChange={(e) => rateForm.set('rate', cleanNumber(e.target.value, true))} />
+          </Field>
+          <Button onClick={saveRate} loading={savingRate}>{t('Enregistrer le taux')}</Button>
+        </div>
+      </Card>
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card>
           <form noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-5">

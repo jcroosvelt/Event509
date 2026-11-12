@@ -2,7 +2,12 @@
 // Le serveur recalcule toujours les montants : ceux envoyés par le navigateur sont ignorés.
 
 export type Currency = 'HTG' | 'USD';
-export const USD_TO_HTG = 132;
+export const DEFAULT_RATE = 132;
+/** Taux du jour (gourdes pour 1 dollar) : réglé par l'administrateur, relu depuis la base à chaque requête. */
+export let USD_TO_HTG = DEFAULT_RATE;
+export function setRate(n: number) {
+  if (Number.isFinite(n) && n > 0) USD_TO_HTG = n;
+}
 
 export interface FeeSettings {
   percent: number;

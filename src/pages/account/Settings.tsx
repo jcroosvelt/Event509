@@ -6,6 +6,7 @@ import { useTitle } from '@/lib/hooks';
 import { languages } from '@/lib/i18n';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { Button, Card, Field, Input, Modal, PageHeader, Segmented, Toggle } from '@/components/ui';
+import { AppLockCard } from '@/components/AppLockCard';
 import type { Currency, Lang } from '@/types';
 
 const NOTIF_KEY = 'e509.notifPrefs';
@@ -78,6 +79,7 @@ export default function Settings() {
     <div className="mx-auto max-w-2xl px-4 pt-6 sm:px-6 lg:pt-10">
       <PageHeader title={t('Paramètres')} />
       <div className="space-y-4">
+        <AppLockCard />
         <Card>
           <h2 className="mb-4 font-bold">{t('Préférences')}</h2>
           <div className="space-y-4">

@@ -6,6 +6,7 @@ import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
 import { registerPush } from '@/lib/push';
+import { useTicketScreen } from '@/lib/appBridge';
 import { downloadTicketImage } from '@/lib/ticketImage';
 import { ticketImageOpts } from '@/lib/ticketImageOpts';
 import { events } from '@/data/mock';
@@ -59,6 +60,8 @@ export default function Confirmation() {
   useEffect(() => {
     if (!DEMO && key) registerPush({ orderId: id, key });
   }, [id, key]);
+  // Application Android : écran allumé et captures bloquées tant que les billets sont à l'écran
+  useTicketScreen(!pending && tickets.some((k) => k.status === 'valid'));
   useTitle(pending ? t('Commande en attente') : t('Commande confirmée'));
 
   if (remote.loading && !order) return <Loading />;

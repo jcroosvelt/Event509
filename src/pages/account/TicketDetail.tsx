@@ -10,6 +10,7 @@ import { dateLong, money, time } from '@/lib/format';
 import { isEmail, useForm, cleanNumber } from '@/lib/form';
 import { downloadTicketImage } from '@/lib/ticketImage';
 import { ticketImageOpts } from '@/lib/ticketImageOpts';
+import { useTicketScreen } from '@/lib/appBridge';
 import { Badge, Button, Card, Field, Input, Modal, ProgressBar } from '@/components/ui';
 import { EventCover } from '@/components/events';
 import { statusLabel, useSessionLabel } from '@/components/TicketCard';
@@ -29,6 +30,8 @@ function useRotatingToken(seconds = 30) {
 export default function TicketDetail() {
   const { id } = useParams();
   const { tickets, updateTicket, toast, lang, t } = useApp();
+  // Application Android : écran allumé, luminosité maximale et captures bloquées sur la page du billet
+  useTicketScreen();
   const tk = tickets.find((x) => x.id === id);
   const ev = events.find((e) => e.id === tk?.eventId);
   const tt = ev?.tickets.find((x) => x.id === tk?.ticketTypeId);
