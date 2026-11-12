@@ -101,3 +101,19 @@ export async function sendTicketsEmail(opts: { to: string; name: string; lang: '
 </table></td></tr></table></body></html>`;
   return send(to, tx.subject(event.title), html, attachments);
 }
+
+/** Email d'information simple (suppression de commande ou d'événement…). Sans réglage Resend, rien n'est envoyé. */
+export async function sendNoticeEmail(to: string, subject: string, title: string, lines: string[]): Promise<boolean> {
+  if (!mailConfigured()) return false;
+  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
+<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#93B3FF">509</span></td></tr>
+<tr><td style="padding:28px">
+<p style="margin:0 0 14px;font-size:20px;font-weight:bold">${esc(title)}</p>
+${lines.map((l) => `<p style="margin:0 0 10px;line-height:1.5">${esc(l)}</p>`).join('')}
+</td></tr>
+<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
+</table></td></tr></table></body></html>`;
+  return send(to, subject, html);
+}

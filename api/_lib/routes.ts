@@ -4,8 +4,8 @@ import type {
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
-import { sendTicketsEmail } from './mail.js';
-import { claimOnce, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
+import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
+import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
@@ -434,6 +434,28 @@ async function notifyEventChange(before: EventItem | undefined, after: EventItem
   });
 }
 
+
+/** Comptes administrateurs actifs (notifiés des suppressions). */
+async function adminAccounts() {
+  return all<{ id: string; email: string }>(`select id, email from users where role = 'admin' and status = 'active'`);
+}
+
+/**
+ * Suppression de commande ou d'événement par un administrateur : l'acheteur (ou les détenteurs) et les
+ * administrateurs sont prévenus par notification push et par email. Jamais bloquant.
+ */
+async function notifyDeletion(opts: { title: string; body: string; adminBody: string; emails: string[]; userIds: string[]; url: string }) {
+  await safely(async () => {
+    const msg = { url: opts.url, channel: 'tickets' as const };
+    await notifyEmails(opts.emails, { ...msg, title: opts.title, body: opts.body });
+    await notifyUsers(opts.userIds, { ...msg, title: opts.title, body: opts.body });
+    const admins = await adminAccounts();
+    await notifyUsers(admins.map((a) => a.id), { url: '/admin/transactions', channel: 'sales', title: opts.title, body: opts.adminBody });
+    for (const to of [...new Set(opts.emails)].slice(0, 200)) await sendNoticeEmail(to, opts.title, opts.title, [opts.body]);
+    for (const a of admins) await sendNoticeEmail(a.email, opts.title, opts.title, [opts.adminBody]);
+  });
+}
+
 /** Retrouver une commande et ses billets : par le lien reçu (clé d'accès) ou, une fois connecté, par son compte. */
 async function orderAccess(c: Ctx, id: string, key: string, q: Q = db()) {
   const r = await one<{ user_id: string | null; access_key: string | null; data: Order }>(`select user_id, access_key, data from orders where id = $1`, [id], q);
@@ -645,6 +667,7 @@ const deleteEvent: Handler = async (c) => {
   const isAdmin = c.user!.role === 'admin';
   const e = await eventById(c.params.id);
   if (!e || (e.organizerId !== orgId && !isAdmin)) fail(404, 'Événement introuvable');
+  const holders = isAdmin ? { emails: await holderEmails(e!.id), users: await holderUserIds(e!.id) } : null;
   await tx(async (q) => {
     const sold = await one<{ n: string }>(`select count(*) as n from tickets where event_id = $1`, [e!.id], q);
     // Un organisateur ne peut pas effacer un événement qui a déjà des billets : il doit l'annuler (remboursements)
@@ -658,6 +681,13 @@ const deleteEvent: Handler = async (c) => {
     await q.query(`delete from events where id = $1`, [e!.id]);
   });
   if (isAdmin) await audit(c, 'Événement supprimé', e!.title);
+  if (holders && (holders.emails.length || holders.users.length))
+    await notifyDeletion({
+      title: 'Événement supprimé',
+      body: `${e!.title} a été supprimé : vos billets ne sont plus valables.`,
+      adminBody: `Événement « ${e!.title} » supprimé (${holders.emails.length} détenteur(s) prévenu(s))`,
+      emails: holders.emails, userIds: holders.users, url: '/',
+    });
   return null;
 };
 
@@ -665,6 +695,7 @@ const deleteOrder: Handler = async (c) => {
   admin(c);
   const o = (await docs<Order>(`select data from orders where id = $1`, [c.params.id]))[0];
   if (!o) fail(404, 'Commande introuvable');
+  const orderUser = await one<{ user_id: string | null }>(`select user_id from orders where id = $1 and user_id is not null`, [c.params.id]);
   await tx(async (q) => {
     // Les places redeviennent disponibles
     const ev = await eventById(o!.eventId, q);
@@ -675,6 +706,13 @@ const deleteOrder: Handler = async (c) => {
     await purgeOrders(q, 'id = $1', [o!.id]);
   });
   await audit(c, 'Commande supprimée', o!.id);
+  const ev = await eventById(o!.eventId);
+  await notifyDeletion({
+    title: 'Commande supprimée',
+    body: `Votre commande pour ${ev?.title ?? 'un événement'} a été supprimée : vos billets ne sont plus valables.`,
+    adminBody: `Commande ${o!.id} (${o!.buyerName}, ${o!.buyerEmail}) supprimée${ev ? ` — ${ev.title}` : ''}`,
+    emails: [o!.buyerEmail], userIds: orderUser ? [orderUser.user_id as string] : [], url: ev ? eventPath(ev) : '/',
+  });
   return null;
 };
 

@@ -109,12 +109,8 @@ function UserMenu() {
   const { open, setOpen, ref, btn } = useMenu();
   const nav = useNavigate();
   const id = useId();
-  if (!user)
-    return (
-      <Link to="/connexion" className="inline-flex h-11 items-center rounded-full bg-contrast px-5 text-sm font-semibold text-on-contrast">
-        {t('Espace organisateur')}
-      </Link>
-    );
+  // Visiteur : pas de bouton en haut (la connexion organisateur se trouve via « Créer un événement »)
+  if (!user) return null;
   const items = [
     { to: '/compte', icon: User, label: t('Profil') },
     { to: '/billets', icon: Ticket, label: t('Mes billets') },

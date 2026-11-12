@@ -20,6 +20,9 @@
 
 ## En cours (cette session)
 
+- [x] Suppression d'une commande ou d'un événement par l'admin : l'acheteur (ou les détenteurs) et les administrateurs sont prévenus par notification push et par email (l'email part seulement si `RESEND_API_KEY` et `MAIL_FROM` sont définis)
+- [x] Bouton « Espace organisateur » retiré en haut du site pour les visiteurs ; bouton « S’inscrire » ajouté sur la page de connexion organisateur
+
 - [x] Notifications push : `window.onFcmToken` (src/lib/push.ts), `POST /api/devices` (jeton lié au compte et/ou à la commande par sa clé), envoi FCM v1 (api/_lib/push.ts), déclencheurs (nouvelle vente, presque complet, billet reçu, paiement confirmé, événement modifié ou annulé) et rappels par Vercel Cron (`/api/cron/reminders`, une fois par jour)
 
 - [x] Comptes réservés aux organisateurs : l'inscription crée toujours un compte organisateur ; les participants achètent sans compte et retrouvent leurs billets par l'email / le lien de commande (plus d'invitation à créer un compte, plus de « Mes billets » pour les visiteurs)
@@ -62,3 +65,4 @@
 - 2026-11-11 : espace unique à deux facettes pour le compte admin (sélecteur Organisateur / Administration).
 - 2026-11-11 : comptes réservés aux organisateurs (inscription = organisateur ; visiteurs sans menu de compte).
 - 2026-11-12 : notifications push (jetons d'appareil, envoi Firebase, déclencheurs, rappels). Rien n'est envoyé tant que `FIREBASE_SERVICE_ACCOUNT` n'est pas défini.
+- 2026-11-12 : notifications de suppression (commande, événement), bouton d'en-tête retiré, bouton S'inscrire sur la connexion.
