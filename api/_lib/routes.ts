@@ -8,7 +8,7 @@ import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
-import { computeFees, convert, DEFAULT_FEES, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
+import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATE, setRate, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -93,6 +93,14 @@ function org(c: Ctx, perm: string): string {
 async function feeSettings(q: Q = db()): Promise<FeeSettings> {
   const r = await one<{ value: FeeSettings }>(`select value from settings where key = 'fees'`, [], q);
   return { ...DEFAULT_FEES, ...(r?.value ?? {}) };
+}
+let rateLoadedAt = 0;
+/** Relit le taux de change réglé par l'administrateur (au plus une fois toutes les 30 s par instance). */
+export async function refreshRate() {
+  if (Date.now() - rateLoadedAt < 30_000) return;
+  const r = await one<{ value: { usdToHtg?: number } }>(`select value from settings where key = 'rate'`);
+  setRate(r?.value?.usdToHtg ?? DEFAULT_RATE);
+  rateLoadedAt = Date.now();
 }
 async function rateFor(orgId: string, q: Q = db()) {
   const r = await one<{ rate: string }>(`select rate from custom_commissions where organizer_id = $1`, [orgId], q);
@@ -251,6 +259,7 @@ const bootstrap: Handler = async (c) => {
   return {
     events, organizers, ambassadors,
     fees: await feeSettings(),
+    rate: USD_TO_HTG,
     customCommissions: commissions.map((x) => ({ organizerId: x.organizerId, rate: Number(x.rate), reason: '' })),
   };
 };
@@ -647,12 +656,15 @@ const saveEvent: Handler = async (c) => {
   const existing = await one<{ organizer_id: string; data: EventItem }>(`select organizer_id, data from events where id = $1`, [e.id]);
   if (existing && existing.organizer_id !== orgId && c.user!.role !== 'admin') fail(403, 'Cet événement appartient à un autre organisateur');
   const clash = await one(`select 1 from events where slug = $1 and id <> $2`, [e.slug, e.id ?? '']);
+  // Jusqu'à 5 visuels (fichiers du site ou adresses https) ; le premier sert de visuel principal
+  const images = (Array.isArray(e.images) ? e.images : []).filter((v): v is string => validCover(v) && !/gradient\(/.test(v)).slice(0, 5);
   const next: EventItem = {
     ...e,
     id: existing ? e.id : newId('e'),
     slug: clash || !e.slug ? `${slugify(e.title)}-${Math.random().toString(36).slice(2, 6)}` : slugify(e.slug),
     organizerId: existing?.organizer_id ?? orgId,
-    cover: validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
+    cover: images.length ? images[0]! : validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
+    images,
     // Les ventes et les vues sont tenues par le serveur, pas par le formulaire
     views: existing?.data.views ?? 0,
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
@@ -1090,6 +1102,18 @@ const saveAmbassador: Handler = async (c) => {
 };
 
 // ---------- Administration ----------
+
+/** Taux de change du site : combien de gourdes valent 1 dollar. Réservé à l'administrateur. */
+const saveRate: Handler = async (c) => {
+  admin(c);
+  const rate = Math.round(num(c.body.rate) * 100) / 100;
+  if (!Number.isFinite(rate) || rate < 10 || rate > 1000) fail(422, 'Taux invalide : indiquez entre 10 et 1 000 gourdes pour 1 dollar');
+  await upsert('settings', { key: 'rate', value: { usdToHtg: rate } });
+  setRate(rate);
+  rateLoadedAt = Date.now();
+  await audit(c, 'Taux de change modifié', `1 USD = ${rate} HTG`);
+  return { rate };
+};
 
 const saveFees: Handler = async (c) => {
   admin(c);
@@ -1569,6 +1593,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['PUT', '/org/ambassadors', saveAmbassador],
 
   ['PUT', '/admin/fees', saveFees],
+  ['PUT', '/admin/rate', saveRate],
   ['GET', '/admin/commissions', listCommissions],
   ['PUT', '/admin/commissions', saveCommission],
   ['DELETE', '/admin/commissions/:id', removeCommission],

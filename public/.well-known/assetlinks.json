@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.event509.event509_app",
+      "sha256_cert_fingerprints": [
+        "79:70:E0:3C:5B:99:E7:6F:3A:5B:1F:D1:CF:33:39:C9:EE:A7:DB:55:8C:D2:13:2C:4D:79:24:AD:80:BF:2F:D2"
+      ]
+    }
+  }
+]

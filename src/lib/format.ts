@@ -1,7 +1,11 @@
 import type { Currency, Lang } from '@/types';
 
 // Taux de démonstration ; le backend fournira le taux du jour.
-export const USD_TO_HTG = 132;
+/** Taux du jour (gourdes pour 1 dollar) : réglé par l'administrateur, transmis par le serveur. */
+export let USD_TO_HTG = 132;
+export function setUsdToHtg(n: number) {
+  if (Number.isFinite(n) && n > 0) USD_TO_HTG = n;
+}
 
 const locale = (lang: Lang) => (lang === 'en' ? 'en-US' : 'fr-FR');
 

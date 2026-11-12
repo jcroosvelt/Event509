@@ -1,6 +1,6 @@
 import { readToken } from './auth.js';
 import { one } from './db.js';
-import { Binary, HttpError, routes, type Ctx, type UserRow } from './routes.js';
+import { Binary, HttpError, refreshRate, routes, type Ctx, type UserRow } from './routes.js';
 
 export interface ApiRequest {
   method: string;
@@ -23,6 +23,8 @@ const compiled = routes.map(([method, pattern, handler]) => {
 /** Point d'entrée unique de l'API, indépendant de l'hébergeur. */
 export async function handle(req: ApiRequest): Promise<ApiResponse> {
   try {
+    // Taux de change réglé par l'administrateur (la panne de base est gérée plus loin, route par route)
+    await refreshRate().catch(() => {});
     let pathMatched = false;
     for (const r of compiled) {
       const m = r.re.exec(req.path);

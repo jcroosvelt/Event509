@@ -45,6 +45,7 @@ export default function EventDetail() {
   const [qty, setQty] = useState<Record<string, number>>({});
   const [occ, setOcc] = useState<string>('');
   const [shareOpen, setShareOpen] = useState(false);
+  const [pic, setPic] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
   const report = useForm({ reason: 'misleading', details: '' }, { details: (v) => (String(v).trim().length < 10 ? t('Décrivez le problème en quelques mots (10 caractères au moins)') : undefined) });
@@ -60,6 +61,8 @@ export default function EventDetail() {
 
   if (loading) return <Loading />;
   if (!ev) return <NotFound />;
+  // Jusqu'à 5 visuels : le premier en grand, les autres en miniatures cliquables
+  const gallery = ev.images?.length ? ev.images : [];
 
   const org = getOrganizer(ev.organizerId);
   const occs = occurrences(ev);
@@ -98,7 +101,7 @@ export default function EventDetail() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:pt-8">
-      <EventCover event={ev} className="relative -mx-4 h-72 sm:mx-0 sm:h-[420px] sm:rounded-4xl">
+      <EventCover event={gallery.length > 1 ? { ...ev, cover: gallery[Math.min(pic, gallery.length - 1)]! } : ev} className="relative -mx-4 h-72 sm:mx-0 sm:h-[420px] sm:rounded-4xl">
         <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-transparent to-transparent" />
         <div className="absolute inset-x-4 top-4 flex justify-between">
           <IconButton label={t('Retour')} onClick={() => (history.length > 1 ? nav(-1) : nav('/explorer'))} className="border-0 bg-surface/90 backdrop-blur">
@@ -118,6 +121,17 @@ export default function EventDetail() {
           {ev.tags?.map((tg) => <Badge key={tg} className="!bg-navy/70 !text-white backdrop-blur">{tg}</Badge>)}
         </div>
       </EventCover>
+      {gallery.length > 1 && (
+        <ul className="mt-3 flex gap-2 overflow-x-auto" aria-label={t('Visuels de l’événement')}>
+          {gallery.map((u, i) => (
+            <li key={u} className="shrink-0">
+              <button type="button" aria-label={t('Voir le visuel {n}', { n: i + 1 })} aria-current={i === pic} onClick={() => setPic(i)} className={cx('block overflow-hidden rounded-2xl ring-offset-2 ring-offset-canvas transition', i === pic ? 'ring-2 ring-brand' : 'opacity-80 hover:opacity-100')}>
+                <img src={u} alt="" width={96} height={72} className="h-[72px] w-24 object-cover" loading="lazy" decoding="async" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_400px]">
         <div className="min-w-0 space-y-6">

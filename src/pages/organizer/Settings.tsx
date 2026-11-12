@@ -1,3 +1,4 @@
+import { AppLockCard } from '@/components/AppLockCard';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, Globe, ImagePlus } from 'lucide-react';
@@ -110,6 +111,7 @@ export default function OrgSettings() {
     <div className="max-w-3xl">
       <PageHeader title={t('Paramètres')} subtitle={t('Profil public, vérification et outils de suivi.')} />
       <div className="space-y-4">
+        <AppLockCard />
         <Card>
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <Avatar name={org.avatar} src={logo} size={64} />

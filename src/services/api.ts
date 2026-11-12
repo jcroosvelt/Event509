@@ -10,7 +10,7 @@ import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
   PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
-import { ticketCode, uid, USD_TO_HTG } from '@/lib/format';
+import { setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
 import { blobToBase64, blobToDataUrl } from '@/lib/image';
@@ -92,6 +92,8 @@ interface Bootstrap {
   organizers: Organizer[];
   ambassadors: Pick<Ambassador, 'id' | 'name' | 'code' | 'commission'>[];
   fees: FeeSettings;
+  /** Taux de change du jour (gourdes pour 1 dollar). */
+  rate?: number;
   customCommissions: { organizerId: string; rate: number; reason: string }[];
 }
 const BOOT_KEY = 'e509.cache.bootstrap';
@@ -102,6 +104,7 @@ function applyBootstrap(b: Bootstrap) {
   replaceAll(db.ambassadors, b.ambassadors.map((a) => ({ clicks: 0, sales: 0, revenue: 0, ...a })));
   replaceAll(db.customCommissions, b.customCommissions);
   Object.assign(feeSettings, b.fees);
+  if (typeof b.rate === 'number') setUsdToHtg(b.rate);
   // Données propres à la démo : vides tant que le serveur ne les a pas fournies
   for (const list of [db.myTickets, db.myOrders, db.notifications, db.attendees, db.resaleListings, db.promoCodes, db.team, db.refunds, db.payouts, db.campaigns, db.users, db.disputes, db.reports, db.verificationRequests, db.auditLog, db.platformTargets, db.platformOrders] as unknown[][])
     list.length = 0;
@@ -779,6 +782,20 @@ export async function saveFeeSettings(next: FeeSettings) {
   Object.assign(feeSettings, next);
   writeLocal(FEES_KEY, feeSettings);
   audit('Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG`);
+}
+/** Taux de change en vigueur : gourdes pour 1 dollar. */
+export function currentExchangeRate() {
+  return USD_TO_HTG;
+}
+/** Réservé à l'administrateur : fixe le taux de change du site (gourdes pour 1 dollar). */
+export async function saveExchangeRate(rate: number) {
+  if (!DEMO) {
+    const r = await http<{ rate: number }>('/admin/rate', { method: 'PUT', body: JSON.stringify({ rate }) });
+    return void setUsdToHtg(r.rate);
+  }
+  await wait(200);
+  setUsdToHtg(rate);
+  audit('Taux de change modifié', `1 USD = ${rate} HTG`);
 }
 export async function listCustomCommissions() {
   if (!DEMO) return http<typeof db.customCommissions>('/admin/commissions');
