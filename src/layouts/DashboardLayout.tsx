@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ArrowLeft, CalendarPlus, Menu, X, type LucideIcon } from 'lucide-react';
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, CalendarPlus, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar, Badge, Button, EmptyState, IconButton } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -33,7 +33,12 @@ export default function DashboardLayout({
   bottom: NavItem[];
   center: NavItem;
 }) {
-  const { user, t, updateUser, toast } = useApp();
+  const { user, t, updateUser, toast, logout } = useApp();
+  const nav = useNavigate();
+  const signOut = () => {
+    logout();
+    nav('/');
+  };
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => {
@@ -144,6 +149,9 @@ export default function DashboardLayout({
             </div>
           </Link>
         )}
+        <button type="button" onClick={signOut} className="mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+          <LogOut className="h-4 w-4" aria-hidden /> {t('Déconnexion')}
+        </button>
       </aside>
 
       <OfflineBanner />
@@ -170,6 +178,9 @@ export default function DashboardLayout({
             <Link to="/" className="mt-6 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-ink-soft">
               <ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour au site')}
             </Link>
+            <button type="button" onClick={signOut} className="mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+          <LogOut className="h-4 w-4" aria-hidden /> {t('Déconnexion')}
+        </button>
           </div>
         </div>
       )}
