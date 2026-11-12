@@ -5,7 +5,7 @@ import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { hasOrganizerAccess } from '@/lib/permissions';
-import { Button, Card, Field, Input, Segmented } from '@/components/ui';
+import { Button, ButtonLink, Card, Field, Input, Segmented } from '@/components/ui';
 import type { AppUser } from '@/types';
 import { DEMO, signIn, signUp } from '@/services/api';
 import { ApiError } from '@/lib/errors';
@@ -177,6 +177,12 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
             {via === 'phone' && !otpSent ? t('Recevoir un code') : signup ? t('Créer mon compte') : t('Se connecter')}
           </Button>
         </form>
+
+        {!signup && (
+          <ButtonLink to={`/inscription${next ? `?next=${encodeURIComponent(next)}` : ''}`} variant="outline" size="lg" className="mt-3 w-full">
+            {t('S’inscrire')}
+          </ButtonLink>
+        )}
 
         {!signup && DEMO && (
           <details className="mt-6 rounded-2xl bg-canvas p-4 text-sm">
