@@ -20,6 +20,8 @@
 
 ## En cours (cette session)
 
+- [x] Bouton « Déconnexion » dans l'espace organisateur et l'administration (menu du téléphone et barre latérale) : il n'existait que dans le menu du site public, absent sur mobile
+
 - [x] Suppression d'une commande ou d'un événement par l'admin : l'acheteur (ou les détenteurs) et les administrateurs sont prévenus par notification push et par email (l'email part seulement si `RESEND_API_KEY` et `MAIL_FROM` sont définis)
 - [x] Bouton « Espace organisateur » retiré en haut du site pour les visiteurs ; bouton « S’inscrire » ajouté sur la page de connexion organisateur
 
@@ -66,3 +68,4 @@
 - 2026-11-11 : comptes réservés aux organisateurs (inscription = organisateur ; visiteurs sans menu de compte).
 - 2026-11-12 : notifications push (jetons d'appareil, envoi Firebase, déclencheurs, rappels). Rien n'est envoyé tant que `FIREBASE_SERVICE_ACCOUNT` n'est pas défini.
 - 2026-11-12 : notifications de suppression (commande, événement), bouton d'en-tête retiré, bouton S'inscrire sur la connexion.
+- 2026-11-12 : bouton Déconnexion dans les espaces organisateur et administration.
