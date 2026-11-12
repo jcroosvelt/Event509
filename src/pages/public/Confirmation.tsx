@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, Copy, Mail, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Clock, Copy, Download, Mail, TriangleAlert } from 'lucide-react';
 import { claimOrder, DEMO, getOrderByKey } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
 import { registerPush } from '@/lib/push';
+import { downloadTicketImage } from '@/lib/ticketImage';
+import { ticketImageOpts } from '@/lib/ticketImageOpts';
+import { events } from '@/data/mock';
+import { useSessionLabel } from '@/components/TicketCard';
 import { Button, ButtonLink, Card, Loading } from '@/components/ui';
 import { TicketCard } from '@/components/TicketCard';
 import type { IssuedTicket, Order } from '@/types';
@@ -22,6 +26,8 @@ export default function Confirmation() {
   const app = useApp();
   const { t, user, refresh } = app;
   const [claimed, setClaimed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const sessionLabel = useSessionLabel();
   // Page ouverte depuis l'email, ou rechargée : on relit la commande sur le serveur avec la clé du lien
   const remote = useAsync(() => (state?.order || DEMO || !key ? Promise.resolve(null) : getOrderByKey(id, key)), [id, key]);
   const order = state?.order ?? remote.data?.order ?? app.orders.find((o) => o.id === id);
@@ -53,6 +59,23 @@ export default function Confirmation() {
       app.toast(t('Lien copié'));
     } catch {
       app.toast(t('Copiez l’adresse de la page depuis la barre du navigateur.'), 'info');
+    }
+  };
+  /** Télécharge chaque billet en image ultra HD (recommandé : le billet reste disponible sans réseau). */
+  const saveTickets = async () => {
+    setSaving(true);
+    try {
+      for (const x of tickets.filter((k) => k.status === 'valid')) {
+        const ev = events.find((e) => e.id === x.eventId);
+        if (!ev) continue;
+        await downloadTicketImage(ticketImageOpts(ev, x, t, app.lang, x.sessionLabel ? sessionLabel(x.sessionLabel) : undefined));
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      app.toast(t('Billets enregistrés dans vos images'));
+    } catch {
+      app.toast(t('Les billets n’ont pas pu être enregistrés.'), 'error');
+    } finally {
+      setSaving(false);
     }
   };
   const addToAccount = async () => {
@@ -100,6 +123,18 @@ export default function Confirmation() {
               </div>
             </div>
           )}
+        </Card>
+      )}
+
+      {!pending && tickets.some((k) => k.status === 'valid') && (
+        <Card className="mb-6 border-2 border-brand-200 bg-brand-50/60">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-bold">{t('Téléchargez vos billets (recommandé)')}</p>
+              <p className="mt-1 text-sm text-ink-soft">{t('Gardez-les sur votre téléphone : vous les présenterez à l’entrée même sans connexion Internet.')}</p>
+            </div>
+            <Button size="lg" onClick={saveTickets} loading={saving}><Download className="h-5 w-5" aria-hidden /> {t('Télécharger mes billets')}</Button>
+          </div>
         </Card>
       )}
 

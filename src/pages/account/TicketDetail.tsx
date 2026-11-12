@@ -9,6 +9,7 @@ import { useTitle } from '@/lib/hooks';
 import { dateLong, money, time } from '@/lib/format';
 import { isEmail, useForm, cleanNumber } from '@/lib/form';
 import { downloadTicketImage } from '@/lib/ticketImage';
+import { ticketImageOpts } from '@/lib/ticketImageOpts';
 import { Badge, Button, Card, Field, Input, Modal, ProgressBar } from '@/components/ui';
 import { EventCover } from '@/components/events';
 import { statusLabel, useSessionLabel } from '@/components/TicketCard';
@@ -99,18 +100,9 @@ export default function TicketDetail() {
   };
 
   const saveImage = () => {
-    const svg = qrRef.current?.querySelector('svg');
-    if (!svg) return;
-    downloadTicketImage({
-      svg,
-      title: ev.title,
-      ticketName: tt.name,
-      when: tk.sessionLabel ? session(tk.sessionLabel) ?? '' : `${dateLong(ev.start, lang)} · ${time(ev.start, lang)}`,
-      where: ev.venue ? `${ev.venue.name}, ${ev.venue.city}` : ev.online?.platform ?? '',
-      holder: tk.holderName,
-      seat: tk.seat ? t('Place {seat}', { seat: tk.seat }) : undefined,
-      code: tk.code,
-    }).then(() => toast(t('Billet enregistré dans vos images')));
+    downloadTicketImage(ticketImageOpts(ev, tk, t, lang, tk.sessionLabel ? session(tk.sessionLabel) : undefined))
+      .then(() => toast(t('Billet enregistré dans vos images')))
+      .catch(() => toast(t('Le billet n’a pas pu être enregistré.'), 'error'));
   };
 
   return (
