@@ -1256,5 +1256,14 @@
   "Connexion organisateur": "Organizer sign in",
   "Les comptes sont réservés aux organisateurs. Pour acheter un billet, aucun compte n’est nécessaire.": "Accounts are for organizers only. You don’t need an account to buy a ticket.",
   "Pas encore de compte organisateur ?": "No organizer account yet?",
-  "Pas besoin de compte : gardez l’email de confirmation ou cette page, elle rouvre vos billets à tout moment.": "No account needed: keep the confirmation email or this page, it reopens your tickets at any time."
+  "Pas besoin de compte : gardez l’email de confirmation ou cette page, elle rouvre vos billets à tout moment.": "No account needed: keep the confirmation email or this page, it reopens your tickets at any time.",
+  "Heure": "Time",
+  "Séance": "Session",
+  "Présentez ce QR code à l’entrée": "Show this QR code at the entrance",
+  "Le billet n’a pas pu être enregistré.": "The ticket could not be saved.",
+  "Billets enregistrés dans vos images": "Tickets saved to your images",
+  "Les billets n’ont pas pu être enregistrés.": "The tickets could not be saved.",
+  "Téléchargez vos billets (recommandé)": "Download your tickets (recommended)",
+  "Gardez-les sur votre téléphone : vous les présenterez à l’entrée même sans connexion Internet.": "Keep them on your phone: you can show them at the entrance even without an Internet connection.",
+  "Télécharger mes billets": "Download my tickets"
 }

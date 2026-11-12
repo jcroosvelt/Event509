@@ -159,6 +159,9 @@ export default function DashboardLayout({
         <Logo to={base} />
         <div className="flex items-center gap-2">
           {user && <NotificationsMenu />}
+          <IconButton label={t('Déconnexion')} tone="soft" onClick={signOut}>
+            <LogOut className="h-5 w-5 text-red-600" aria-hidden />
+          </IconButton>
           <IconButton label={t('Ouvrir le menu')} onClick={() => setOpen(true)} aria-expanded={open}>
             <Menu className="h-5 w-5" aria-hidden />
           </IconButton>

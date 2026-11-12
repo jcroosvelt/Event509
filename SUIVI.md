@@ -20,6 +20,9 @@
 
 ## En cours (cette session)
 
+- [x] Billet refait dans le style d'un billet de spectacle (bloc coloré avec titre, zone centrale, souche avec QR code) et téléchargeable en ultra HD (3840 × 1400 px, QR net) ; page de confirmation : « Téléchargez vos billets (recommandé) »
+- [x] Déconnexion plus visible sur téléphone (icône rouge dans la barre du haut des espaces organisateur et administration)
+
 - [x] Bouton « Déconnexion » dans l'espace organisateur et l'administration (menu du téléphone et barre latérale) : il n'existait que dans le menu du site public, absent sur mobile
 
 - [x] Suppression d'une commande ou d'un événement par l'admin : l'acheteur (ou les détenteurs) et les administrateurs sont prévenus par notification push et par email (l'email part seulement si `RESEND_API_KEY` et `MAIL_FROM` sont définis)
@@ -69,3 +72,4 @@
 - 2026-11-12 : notifications push (jetons d'appareil, envoi Firebase, déclencheurs, rappels). Rien n'est envoyé tant que `FIREBASE_SERVICE_ACCOUNT` n'est pas défini.
 - 2026-11-12 : notifications de suppression (commande, événement), bouton d'en-tête retiré, bouton S'inscrire sur la connexion.
 - 2026-11-12 : bouton Déconnexion dans les espaces organisateur et administration.
+- 2026-11-12 : nouveau billet ultra HD, téléchargement recommandé à la confirmation, déconnexion visible.
