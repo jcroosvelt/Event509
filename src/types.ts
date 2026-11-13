@@ -96,6 +96,12 @@ export interface Organizer {
   followers: number;
   eventsCount: number;
   city: string;
+  /** Réservés aux organisateurs vérifiés (avantage « page professionnelle ») : fixés par le serveur. */
+  brandColor?: string;
+  socials?: { facebook?: string; tiktok?: string; youtube?: string; linkedin?: string; x?: string };
+  /** Date de certification (calculée par le serveur) ; ancien(s) lien(s) de la page, qui redirigent encore. */
+  verifiedSince?: string;
+  oldSlugs?: string[];
 }
 
 export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'kashpaw' | 'paypal' | 'transfer';

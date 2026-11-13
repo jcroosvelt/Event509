@@ -215,7 +215,8 @@ export async function getEvent(idOrSlug: string) {
 }
 
 export function getOrganizer(idOrSlug: string) {
-  return db.organizers.find((o) => o.id === idOrSlug || o.slug === idOrSlug) ?? null;
+  // Les anciennes adresses d'une page (changées par l'organisateur) continuent de fonctionner
+  return db.organizers.find((o) => o.id === idOrSlug || o.slug === idOrSlug) ?? db.organizers.find((o) => o.oldSlugs?.includes(idOrSlug)) ?? null;
 }
 
 export async function getOrganizerPage(slug: string) {
