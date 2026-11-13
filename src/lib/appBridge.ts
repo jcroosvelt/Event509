@@ -13,6 +13,9 @@ interface LockState {
 declare global {
   interface Window {
     onLockState?: (state: LockState) => void;
+    /** Résultat du scanner natif de l'application (message « scan:start »). */
+    onQrScanned?: (code: string) => void;
+    onQrScanCancelled?: () => void;
   }
 }
 
