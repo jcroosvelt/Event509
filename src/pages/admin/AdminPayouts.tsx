@@ -50,7 +50,7 @@ export default function AdminPayouts() {
               return (
                 <tr key={p.id}>
                   <Td className="font-semibold">{orgName(p.organizerId)}</Td>
-                  <Td className="font-mono text-xs">{p.reference}</Td>
+                  <Td className="font-mono text-xs">{p.reference}{p.priority && <Badge tone="violet" className="ml-2">{t('Prioritaire')}</Badge>}</Td>
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
                   <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="select-all text-xs text-ink-soft">{destinationText(p)}</span></span></span></Td>
                   <Td className="font-bold">{moneyRaw(p.amount, p.currency, lang)}</Td>

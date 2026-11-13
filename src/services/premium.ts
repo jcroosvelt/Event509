@@ -108,3 +108,15 @@ export const getAudience = (eventId: string) => http<{ consenting: number; buyer
 export const sendCampaign = (i: { name: string; subject: string; body: string; eventId: string; channels: string[] }) =>
   http<{ recipients: number; sentEmail: number; sentPush: number }>('/org/campaigns/send', { method: 'POST', body: JSON.stringify(i) });
 export const unsubscribeMarketing = (o: string, e: string, token: string) => http<{ organization: string }>('/unsubscribe', { method: 'POST', body: JSON.stringify({ o, e, t: token }) });
+
+// Gestion financière avancée
+export interface FinanceData {
+  range: { from: string; to: string };
+  summary: { gross: number; fees: number; refunds: number; net: number; pendingAmount: number; pendingOrders: number; orders: number };
+  balance: { HTG: number; USD: number; passToBuyer: boolean };
+  payoutTotals: Record<string, number>;
+  monthly: { month: string; gross: number; fees: number; orders: number }[];
+  transactions: { id: string; date: string; event: string; method: string; status: string; currency: 'HTG' | 'USD'; amount: number; fee: number; total: number; tickets: number }[];
+  payouts: { id: string; reference: string; date: string; amount: number; currency: 'HTG' | 'USD'; method: string; status: string; priority: boolean }[];
+}
+export const getFinance = (from: string, to: string) => http<FinanceData>(`/org/finance?from=${from}&to=${to}`);
