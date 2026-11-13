@@ -260,3 +260,23 @@ test.describe('widget de billetterie (démonstration)', () => {
     await expect(page.getByText('Ce widget de billetterie n’est pas disponible.')).toBeVisible();
   });
 });
+
+test.describe('pages légales', () => {
+  test('les trois documents sont en ligne et l’administrateur peut modifier un texte', async ({ page }) => {
+    await fresh(page, '/cgu');
+    await expect(page.getByRole('heading', { level: 1, name: /Conditions d’utilisation|Terms of use/ })).toBeVisible();
+    await expect(page.getByText(/intermédiaire technique|technical intermediary/)).toBeVisible();
+    await page.goto('/confidentialite');
+    await expect(page.getByRole('heading', { level: 1, name: /Politique de confidentialité|Privacy policy/ })).toBeVisible();
+    await page.goto('/remboursement');
+    await expect(page.getByRole('heading', { level: 1, name: /Politique de remboursement|Refund policy/ })).toBeVisible();
+
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin/contenu');
+    await expect(page.getByRole('heading', { name: /Contenu et réglages|Content and settings/ })).toBeVisible();
+    const box = page.getByRole('textbox', { name: /Texte d’origine|Original text/ });
+    await box.fill('# Remboursements de test\n> Mise à jour\n\n## 1. Principe\n\nTexte modifié par l’administrateur.');
+    await page.getByRole('button', { name: /Enregistrer le texte|Save the text/ }).click();
+    await expect(page.getByText(/la page est à jour|the page is up to date/)).toBeVisible();
+  });
+});

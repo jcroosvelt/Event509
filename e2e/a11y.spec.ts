@@ -7,7 +7,7 @@ import { loginAs } from './helpers';
  * principales, en thème clair et sombre. Échoue sur toute violation sérieuse ou critique.
  */
 const publicPages = ['/', '/explorer', '/e/festival-kompa-live-2026', '/e/ayiti-tech-summit/achat?t=t2b:1', '/billets', '/billets/it3', '/connexion', '/organisateur-verifie', '/desinscription', '/revente', '/o/lakay-productions', '/organisateur/lakay-productions', '/compte/parametres'];
-const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/calendrier', '/organisateur/activite', '/organisateur/support', '/organisateur/liens', '/organisateur/api', '/organisateur/boosts', '/organisateur/finances', '/organisateur/marketing', '/organisateur/codes-promo', '/organisateur/equipe', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal', '/admin/support', '/admin/boosts', '/admin/programme-verifie'];
+const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/calendrier', '/organisateur/activite', '/organisateur/support', '/organisateur/liens', '/organisateur/api', '/organisateur/boosts', '/organisateur/finances', '/organisateur/marketing', '/organisateur/codes-promo', '/organisateur/equipe', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/contenu', '/admin/journal', '/admin/support', '/admin/boosts', '/admin/programme-verifie'];
 
 async function audit(page: import('@playwright/test').Page, path: string) {
   await page.goto(path);
@@ -39,7 +39,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 /** Aucune page ne doit déborder horizontalement sur mobile (gouttière de 16 px respectée). */
-const allPages = [...publicPages, '/notifications', '/compte', '/compte/achats', '/favoris', '/ambassadeurs', '/cgu'];
+const allPages = [...publicPages, '/notifications', '/compte', '/compte/achats', '/favoris', '/ambassadeurs', '/cgu', '/confidentialite', '/remboursement'];
 test('aucun débordement horizontal sur petit écran (375 px)', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'vérifié sur le projet mobile');
   await page.setViewportSize({ width: 375, height: 812 });
