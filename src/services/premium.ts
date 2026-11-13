@@ -86,3 +86,15 @@ export interface TeamActivity {
   logs: { id: string; at: string; userId: string | null; user: string; action: string; target: string }[];
 }
 export const getTeamActivity = (user = '') => http<TeamActivity>(`/org/activity${user ? `?user=${encodeURIComponent(user)}` : ''}`);
+
+// Support prioritaire
+export interface SupportTicket { id: string; subject: string; category: 'technical' | 'billing' | 'event' | 'other'; priority: 'normal' | 'priority' | 'urgent'; status: 'open' | 'pending' | 'resolved'; createdAt: string; updatedAt: string; resolvedAt: string | null; organization?: string; last?: string }
+export interface SupportMessage { id: string; from: 'organizer' | 'admin'; author: string; body: string; at: string }
+export const getSupport = () => http<{ canCreate: boolean; tickets: SupportTicket[] }>('/org/support');
+export const createSupportTicket = (i: { subject: string; body: string; category: string; eventDay: boolean }) => http<{ id: string }>('/org/support', { method: 'POST', body: JSON.stringify(i) });
+export const getSupportTicket = (id: string, admin = false) => http<{ ticket: SupportTicket; messages: SupportMessage[] }>(`/${admin ? 'admin' : 'org'}/support/${encodeURIComponent(id)}`);
+export const replySupport = (id: string, body: string) => http<null>(`/org/support/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ body }) });
+export const resolveSupport = (id: string) => http<null>(`/org/support/${encodeURIComponent(id)}/resolve`, { method: 'POST' });
+export const getSupportInbox = (status = '') => http<SupportTicket[]>(`/admin/support${status ? `?status=${status}` : ''}`);
+export const adminReplySupport = (id: string, body: string, resolve: boolean) => http<null>(`/admin/support/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ body, resolve }) });
+export const adminSupportStatus = (id: string, status: string) => http<null>(`/admin/support/${encodeURIComponent(id)}/status`, { method: 'POST', body: JSON.stringify({ status }) });
