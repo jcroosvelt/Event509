@@ -1,6 +1,7 @@
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, Download, Search } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { listUsers, setUserStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
@@ -60,7 +61,7 @@ export default function Users() {
               <Td>
                 <Link to={`/admin/utilisateurs/${u.id}`} className="group flex items-center gap-3">
                   <Avatar name={u.name} size={36} />
-                  <span><b className="flex items-center gap-1 group-hover:text-brand-ink">{u.name} {u.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Vérifié')} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span>
+                  <span><b className="flex items-center gap-1 group-hover:text-brand-ink">{u.name} {u.verified && <VerifiedBadge size={16} />}</b><span className="text-xs text-ink-muted">{u.email}</span></span>
                 </Link>
               </Td>
               <Td><Badge tone={roleLabel[u.role].tone}>{t(roleLabel[u.role].l)}</Badge></Td>

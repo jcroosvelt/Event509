@@ -140,39 +140,50 @@ export default function OrgSettings() {
           </form>
         </Card>
 
-        <Card>
-          <div className="mb-3 flex items-center gap-3">
-            <IconBadge tone="green"><BadgeCheck className="h-[18px] w-[18px]" /></IconBadge>
-            <div className="flex-1"><h2 className="font-bold">{t('Vérification de l’organisateur')}</h2><p className="text-sm text-ink-muted">{t('Badge vérifié, publication instantanée, versements plus rapides')}</p></div>
-            <Badge tone={verified ? 'green' : reviewStatus === 'rejected' ? 'red' : reviewStatus === 'pending' ? 'green' : 'amber'}>
-              {verified ? t('Vérifié') : reviewStatus === 'rejected' ? t('Refusé') : reviewStatus === 'docs_requested' ? t('Documents demandés') : reviewStatus === 'pending' ? t('En cours d’examen') : t('À compléter')}
-            </Badge>
-          </div>
-          {!verified && ver.data?.note && (reviewStatus === 'docs_requested' || reviewStatus === 'rejected') && (
-            <p role="status" className="mb-3 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">{t('Message de l’équipe Event509 :')} {ver.data.note}</p>
-          )}
-          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onDoc(e.target.files?.[0]); e.target.value = ''; }} />
-          <ul className="grid gap-2 sm:grid-cols-3">
-            {DOCS.map((d) => {
-              const ok = docs.includes(d);
-              return (
-                <li key={d}>
-                  <button
-                    type="button"
-                    onClick={() => { uploadFor.current = d; fileRef.current?.click(); }}
-                    disabled={!!uploadingDoc}
-                    aria-busy={uploadingDoc === d}
-                    className={`flex w-full items-center gap-2 rounded-2xl p-3 text-left text-sm font-semibold disabled:opacity-60 ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-soft hover:bg-brand-50'}`}
-                  >
-                    {uploadingDoc === d ? <Spinner className="h-4 w-4" /> : ok ? <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> : <FileUp className="h-4 w-4 shrink-0" aria-hidden />}
-                    <span className="flex-1">{t(d)}</span>
-                    <span className="sr-only">{ok ? t('envoyé, remplacer') : t('envoyer')}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+        {DEMO ? (
+          <Card>
+            <div className="mb-3 flex items-center gap-3">
+              <IconBadge tone="green"><BadgeCheck className="h-[18px] w-[18px]" /></IconBadge>
+              <div className="flex-1"><h2 className="font-bold">{t('Vérification de l’organisateur')}</h2><p className="text-sm text-ink-muted">{t('Badge vérifié, publication instantanée, versements plus rapides')}</p></div>
+              <Badge tone={verified ? 'green' : reviewStatus === 'rejected' ? 'red' : reviewStatus === 'pending' ? 'green' : 'amber'}>
+                {verified ? t('Vérifié') : reviewStatus === 'rejected' ? t('Refusé') : reviewStatus === 'docs_requested' ? t('Documents demandés') : reviewStatus === 'pending' ? t('En cours d’examen') : t('À compléter')}
+              </Badge>
+            </div>
+            {!verified && ver.data?.note && (reviewStatus === 'docs_requested' || reviewStatus === 'rejected') && (
+              <p role="status" className="mb-3 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">{t('Message de l’équipe Event509 :')} {ver.data.note}</p>
+            )}
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { void onDoc(e.target.files?.[0]); e.target.value = ''; }} />
+            <ul className="grid gap-2 sm:grid-cols-3">
+              {DOCS.map((d) => {
+                const ok = docs.includes(d);
+                return (
+                  <li key={d}>
+                    <button
+                      type="button"
+                      onClick={() => { uploadFor.current = d; fileRef.current?.click(); }}
+                      disabled={!!uploadingDoc}
+                      aria-busy={uploadingDoc === d}
+                      className={`flex w-full items-center gap-2 rounded-2xl p-3 text-left text-sm font-semibold disabled:opacity-60 ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-soft hover:bg-brand-50'}`}
+                    >
+                      {uploadingDoc === d ? <Spinner className="h-4 w-4" /> : ok ? <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> : <FileUp className="h-4 w-4 shrink-0" aria-hidden />}
+                      <span className="flex-1">{t(d)}</span>
+                      <span className="sr-only">{ok ? t('envoyé, remplacer') : t('envoyer')}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        ) : (
+          <Card>
+            <div className="flex flex-wrap items-center gap-3">
+              <IconBadge tone="green"><BadgeCheck className="h-[18px] w-[18px]" /></IconBadge>
+              <div className="min-w-0 flex-1"><h2 className="font-bold">{t('Organisateur vérifié')}</h2><p className="text-sm text-ink-muted">{t('Coche bleue officielle, outils professionnels et support prioritaire')}</p></div>
+              <Badge tone={verified ? 'green' : 'gray'}>{verified ? t('Vérifié') : t('Non vérifié')}</Badge>
+              <Link to="/organisateur/verification" className="text-sm font-semibold text-brand-ink">{verified ? t('Gérer') : t('Demander la vérification')}</Link>
+            </div>
+          </Card>
+        )}
 
         <Card>
           <div className="mb-4 flex items-center gap-3">

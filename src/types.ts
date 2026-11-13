@@ -275,6 +275,29 @@ export interface Report {
 }
 
 /** Demande de vérification d'un organisateur et ses pièces justificatives. */
+export type VerificationStatus = 'draft' | 'pending' | 'in_review' | 'docs_requested' | 'approved' | 'rejected' | 'suspended' | 'expired';
+export type VerificationDocType = 'id' | 'license' | 'bank' | 'selfie' | 'registration' | 'representation';
+
+/** Formulaire de demande « Organisateur vérifié » (enregistré automatiquement au fil de la saisie). */
+export interface VerificationApplication {
+  fullName: string;
+  birthDate: string; // AAAA-MM-JJ
+  email: string;
+  phone: string;
+  country: string;
+  orgName: string;
+  orgType: 'company' | 'association' | 'institution' | 'agency' | 'independent' | '';
+  activity: string;
+  address?: string;
+  website?: string;
+  socials?: string;
+  /** Mineur représenté légalement : le justificatif de représentation est alors obligatoire. */
+  legalRep?: boolean;
+  acceptedTerms?: boolean;
+  confirmedAccurate?: boolean;
+}
+
+/** Demande de vérification d'un organisateur et ses pièces justificatives. */
 export interface VerificationRequest {
   id: string;
   organizerId?: string;
@@ -282,10 +305,65 @@ export interface VerificationRequest {
   owner: string;
   email: string;
   city: string;
-  docs: { type: 'id' | 'license' | 'bank'; file: string; uploadedAt: string; /** Fichier envoyé (mode serveur). */ fileId?: string }[];
-  status: 'pending' | 'approved' | 'rejected' | 'docs_requested';
+  docs: { type: VerificationDocType; file: string; uploadedAt: string; /** Fichier envoyé (mode serveur). */ fileId?: string }[];
+  status: VerificationStatus;
   submittedAt: string;
   note?: string;
+  application?: Partial<VerificationApplication>;
+  approvedAt?: string;
+  /** Recours de l'organisateur après un refus. */
+  appeal?: { message: string; at: string };
+  /** Contrôles faits par l'administration au moment de la décision. */
+  checklist?: { identity?: boolean; email?: boolean; phone?: boolean; presence?: boolean };
+}
+
+export type PremiumBenefit = 'profile' | 'visibility' | 'analytics' | 'multiEvents' | 'team' | 'support' | 'marketing' | 'page' | 'finance' | 'api';
+
+/** Réglages du programme, modifiables par l'administration (aucun prix n'est fixé dans le code). */
+export interface PremiumConfig {
+  enabled: boolean;
+  monthlyPrice: number; // HTG
+  yearlyPrice: number; // HTG
+  validityDays: number; // durée de validité de la certification
+  requiredDocs: VerificationDocType[];
+  processingDays: number;
+  minAge: number;
+  eligibility: string[];
+  refund: { onRejection: 'full' | 'partial' | 'none'; percent: number };
+  renewal: { remindDays: number[]; graceDays: number };
+  benefits: Record<PremiumBenefit, boolean>;
+  notify: { onDecision: boolean; onExpiry: boolean };
+  apiLimits: { perMinute: number; maxKeys: number };
+}
+
+export interface PremiumPayment {
+  id: string;
+  plan: 'monthly' | 'yearly';
+  amount: number;
+  status: 'pending' | 'paid' | 'failed' | 'refund_due' | 'refunded';
+  method: 'online' | 'transfer';
+  createdAt: string;
+  paidAt?: string;
+  refundAmount?: number;
+}
+
+export interface PremiumSubscription {
+  id: string;
+  organizerId: string;
+  plan: 'monthly' | 'yearly';
+  status: 'pending_payment' | 'active' | 'canceled' | 'expired' | 'suspended';
+  startedAt?: string;
+  expiresAt?: string;
+  cancelAtPeriodEnd?: boolean;
+}
+
+export interface VerificationLogEntry {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  note?: string;
+  internal?: boolean;
 }
 
 /** Entrée du journal des actions de l'administration. */

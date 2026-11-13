@@ -1,7 +1,8 @@
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, BadgeCheck, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
+  ArrowLeft, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
 } from 'lucide-react';
 import { getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
 import { useForm } from '@/lib/form';
@@ -143,7 +144,7 @@ export default function EventDetail() {
                 <Avatar name={org.avatar} src={org.logo} size={40} />
                 <div className="min-w-0">
                   <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm font-bold hover:text-brand-ink">
-                    {org.name} {org.verified && <BadgeCheck className="h-4 w-4 text-brand-ink" aria-label={t('Organisateur vérifié')} />}
+                    {org.name} {org.verified && <VerifiedBadge size={18} />}
                   </Link>
                   <div className="text-xs text-ink-muted">{t('{n} abonnés', { n: num(org.followers + (following ? 1 : 0), lang) })} · {t('{n} événements', { n: org.eventsCount })}</div>
                 </div>

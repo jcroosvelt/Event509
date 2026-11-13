@@ -226,3 +226,19 @@ test.describe('administration', () => {
     await expect(page.getByRole('button', { name: /Objectif « 2 000 billets en décembre »/ })).toBeVisible();
   });
 });
+
+test.describe('programme Organisateur vérifié (démonstration)', () => {
+  test('la page de présentation s’affiche et renvoie vers la demande', async ({ page }) => {
+    await fresh(page, '/organisateur-verifie');
+    await expect(page.getByRole('heading', { name: 'Devenez un organisateur vérifié' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Demander la vérification' }).first()).toHaveAttribute('href', '/organisateur/verification');
+  });
+
+  test('la demande et l’abonnement sont réservés au site en ligne', async ({ page }) => {
+    await loginAs(page, /Organisateur \(admin\)/);
+    await page.goto('/organisateur/verification');
+    await expect(page.getByRole('heading', { name: 'Programme disponible sur le site en ligne' })).toBeVisible();
+    await page.goto('/organisateur/abonnement');
+    await expect(page.getByRole('heading', { name: 'Programme disponible sur le site en ligne' })).toBeVisible();
+  });
+});

@@ -1,5 +1,6 @@
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useParams } from 'react-router-dom';
-import { BadgeCheck, CalendarX, Check, Globe, Instagram, MapPin, Share2 } from 'lucide-react';
+import { CalendarX, Check, Globe, Instagram, MapPin, Share2 } from 'lucide-react';
 import { getOrganizerPage } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
@@ -34,7 +35,7 @@ export default function OrganizerPage() {
           <Avatar name={org.avatar} src={org.logo} size={88} className="-mt-14 ring-4 ring-surface" />
           <div className="min-w-0 flex-1">
             <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
-              {org.name} {org.verified && <BadgeCheck className="h-6 w-6 text-brand-ink" aria-label={t('Organisateur vérifié')} />}
+              {org.name} {org.verified && <VerifiedBadge size={26} />}
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
               <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden /> {org.city}</span>
