@@ -7,6 +7,7 @@ import { listEvents } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort } from '@/lib/format';
+import { isBoosted } from '@/lib/boost';
 import { Avatar, Card, Chip, IconBadge, ProgressRing, SectionHeader, Skeleton, StatCard } from '@/components/ui';
 import { CategoryIcon, EventCard, EventRow } from '@/components/events';
 import { WeekStrip } from '@/components/WeekStrip';
@@ -38,7 +39,8 @@ export default function Home() {
   }, [events, valid]);
   const daysLeft = nextTicket ? Math.max(0, Math.ceil((new Date(nextTicket.start).getTime() - now.getTime()) / 86400000)) : 0;
 
-  const featured = (events ?? []).filter((e) => e.featured);
+  // « À la une » : événements mis en vedette et événements sponsorisés (étiquetés), les sponsorisés d'abord
+  const featured = (events ?? []).filter((e) => e.featured || isBoosted(e)).sort((a, b) => Number(isBoosted(b)) - Number(isBoosted(a)));
   const online = (events ?? []).filter((e) => e.online);
   // Section réservée aux organisateurs vérifiés : elle s'ajoute au reste, elle ne remplace ni ne masque personne
   const verifiedOrgs = organizers

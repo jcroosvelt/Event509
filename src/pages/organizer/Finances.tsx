@@ -77,7 +77,7 @@ export default function Finances() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t('Chiffre d’affaires')} value={moneyRaw(d.summary.gross, 'HTG', lang)} tone="green" />
-        <StatCard label={t('Commissions de la plateforme')} value={moneyRaw(d.summary.fees, 'HTG', lang)} tone="violet" hint={d.balance.passToBuyer ? t('Payées par les acheteurs') : t('Déduites de vos revenus')} />
+        <StatCard label={t('Commissions de la plateforme')} value={moneyRaw(d.summary.fees, 'HTG', lang)} tone="violet" hint={t('Dont {a} payés par les acheteurs et {b} par vous', { a: moneyRaw(d.summary.buyerFees, 'HTG', lang), b: moneyRaw(d.summary.organizerFees, 'HTG', lang) })} />
         <StatCard label={t('Paiements en attente')} value={moneyRaw(d.summary.pendingAmount, 'HTG', lang)} tone="amber" hint={t('{n} commande(s)', { n: d.summary.pendingOrders })} />
         <StatCard label={t('Solde disponible')} value={moneyRaw(d.balance.HTG, 'HTG', lang)} hint={d.balance.USD > 0 ? moneyRaw(d.balance.USD, 'USD', lang) : undefined} />
       </div>

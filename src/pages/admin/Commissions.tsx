@@ -14,6 +14,8 @@ export default function Commissions() {
   useTitle(t('Commissions'));
   const { data, loading, reload } = useAsync(() => listCustomCommissions(), []);
   const [rules, setRules] = useState<FeeSettings>(currentFeeSettings);
+  const [share, setShare] = useState(() => String(currentFeeSettings().buyerShare));
+  const [shareErr, setShareErr] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,6 +59,11 @@ export default function Commissions() {
     setSaving(false);
     toast(t('Commission mise à jour : elle s’applique aux nouvelles commandes'));
   };
+  const saveShare = async () => {
+    const v = Number(share);
+    if (share === '' || !(v >= 0 && v <= 100)) return setShareErr(t('Indiquez un pourcentage entre 0 et 100'));
+    await setRule({ buyerShare: v });
+  };
   const setRule = async (patch: Partial<FeeSettings>) => {
     const next = { ...rules, ...patch };
     setRules(next);
@@ -99,7 +106,12 @@ export default function Commissions() {
             <Button type="submit" loading={saving}>{t('Enregistrer')}</Button>
           </form>
           <div className="mt-6 space-y-4 border-t border-line pt-5">
-            <Toggle checked={rules.passToBuyer} onChange={(v) => setRule({ passToBuyer: v })} label={t('Frais payés par l’acheteur')} description={t('Sinon, déduits du revenu de l’organisateur')} />
+            <Field label={t('Part de la commission payée par l’acheteur (%)')} error={shareErr} hint={t('Le reste est déduit du revenu de l’organisateur. 50 : sur {rate} % de commission, {half} % pour l’acheteur et {half} % pour l’organisateur.', { rate: preview.percent, half: Math.round(preview.percent * 50) / 100 })}>
+              <div className="flex gap-2">
+                <Input type="text" inputMode="numeric" autoComplete="off" value={share} onChange={(e) => { setShare(cleanNumber(e.target.value, false)); setShareErr(''); }} className="w-28" />
+                <Button type="button" variant="outline" onClick={saveShare}>{t('Enregistrer')}</Button>
+              </div>
+            </Field>
             <Toggle checked={rules.freeNoFee} onChange={(v) => setRule({ freeNoFee: v })} label={t('Aucun frais sur les billets gratuits')} />
           </div>
         </Card>

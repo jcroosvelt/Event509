@@ -3,6 +3,7 @@ import { Briefcase, Drama, GraduationCap, Heart, HandHeart, MapPin, Mic, Monitor
 import { categories, organizers } from '@/data/mock';
 import { minPrice } from '@/services/api';
 import { useApp } from '@/store/app';
+import { isBoosted } from '@/lib/boost';
 import { convert, cx, dayParts, money, time } from '@/lib/format';
 import type { EventItem } from '@/types';
 import { Badge, IconBadge } from './ui';
@@ -103,6 +104,7 @@ export function EventCard({ event, className }: { event: EventItem; className?: 
               <Repeat className="h-3 w-3" aria-hidden /> {t('Récurrent')}
             </Badge>
           )}
+          {isBoosted(event) && <Badge tone="violet" className="!bg-surface/90">{t('Sponsorisé')}</Badge>}
           {left === 0 && <Badge tone="red" className="!bg-surface">{t('Complet')}</Badge>}
         </div>
       </EventCover>

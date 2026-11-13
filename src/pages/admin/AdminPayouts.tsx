@@ -46,7 +46,8 @@ export default function AdminPayouts() {
         <Card>
           <Table caption={t('Versements aux organisateurs')} head={[t('Organisateur'), t('Référence'), t('Date'), t('Envoyer à'), t('Montant'), t('Statut'), '']}>
             {list.map((p) => {
-              const M = method[p.method];
+              const M = method[p.method] ?? { l: String(p.method ?? '—'), i: Wallet };
+              const st = status[p.status] ?? { l: String(p.status ?? '—'), tone: 'gray' as Tone };
               return (
                 <tr key={p.id}>
                   <Td className="font-semibold">{orgName(p.organizerId)}</Td>
@@ -54,7 +55,7 @@ export default function AdminPayouts() {
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
                   <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="select-all text-xs text-ink-soft">{destinationText(p)}</span></span></span></Td>
                   <Td className="font-bold">{moneyRaw(p.amount, p.currency, lang)}</Td>
-                  <Td><Badge tone={status[p.status].tone}>{t(status[p.status].l)}</Badge></Td>
+                  <Td><Badge tone={st.tone}>{t(st.l)}</Badge></Td>
                   <Td>
                     <div className="flex gap-1">
                       {p.status === 'requested' && (

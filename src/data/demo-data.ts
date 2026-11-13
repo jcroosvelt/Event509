@@ -336,7 +336,7 @@ export const platformTargets: PlatformTarget[] = [
 ];
 
 /** Paramètres de commission de la plateforme (voir src/lib/fees.ts). */
-export const platformSettings = { fees: { percent: 5, fixedHTG: 25, passToBuyer: true, freeNoFee: true } };
+export const platformSettings = { fees: { percent: 5, fixedHTG: 0, buyerShare: 50, freeNoFee: true } };
 
 // --- Commandes de toute la plateforme (6 mois), générées de façon déterministe ---
 function prng(seed: number) {

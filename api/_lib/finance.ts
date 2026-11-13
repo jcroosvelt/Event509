@@ -5,7 +5,7 @@ import { benefitsFor, type PremiumDeps } from './premium.js';
 import type { Ctx } from './routes.js';
 
 type Handler = (c: Ctx) => Promise<unknown>;
-type Balance = Record<'HTG' | 'USD', { gross: number; fees: number; rate: number; refunded: number; paid: number; balance: number }> & { passToBuyer: boolean };
+type Balance = Record<'HTG' | 'USD', { gross: number; fees: number; rate: number; refunded: number; paid: number; balance: number }> & { buyerShare: number };
 
 /**
  * Gestion financière avancée (avantage « finance ») : tableau de bord des revenus, commissions, paiements en attente,
@@ -34,13 +34,15 @@ export function financeRoutes(h: PremiumDeps & { balanceOf: (orgId: string) => P
     const htg = (o: Order, v: number) => Math.round(convert(v, o.currency as Currency, 'HTG'));
     const net = (o: Order) => htg(o, o.subtotal - o.discount);
 
-    let gross = 0, fees = 0, pendingAmount = 0, pendingOrders = 0, orders = 0;
+    let gross = 0, fees = 0, organizerFees = 0, pendingAmount = 0, pendingOrders = 0, orders = 0;
     const monthly = new Map<string, { gross: number; fees: number; orders: number }>();
     for (const r of rows) {
       const o = r.data;
       if (r.status === 'pending') { pendingAmount += htg(o, o.total); pendingOrders++; continue; }
       if (r.status === 'refunded') continue;
       gross += net(o); fees += htg(o, o.fees); orders++;
+      // Part payée par l'acheteur = total payé − prix des billets ; le reste de la commission est déduit de l'organisateur
+      organizerFees += htg(o, Math.max(0, o.fees - (o.total - (o.subtotal - o.discount))));
       const m = r.created_at.toLocaleDateString('en-CA', { timeZone: 'America/Port-au-Prince' }).slice(0, 7);
       const cur = monthly.get(m) ?? { gross: 0, fees: 0, orders: 0 };
       cur.gross += net(o); cur.fees += htg(o, o.fees); cur.orders++; monthly.set(m, cur);
@@ -53,8 +55,8 @@ export function financeRoutes(h: PremiumDeps & { balanceOf: (orgId: string) => P
 
     return {
       range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
-      summary: { gross, fees, refunds, net: Math.max(0, gross - (bal.passToBuyer ? 0 : fees) - refunds), pendingAmount, pendingOrders, orders },
-      balance: { HTG: bal.HTG.balance, USD: bal.USD.balance, passToBuyer: bal.passToBuyer },
+      summary: { gross, fees, buyerFees: Math.max(0, fees - organizerFees), organizerFees, refunds, net: Math.max(0, gross - organizerFees - refunds), pendingAmount, pendingOrders, orders },
+      balance: { HTG: bal.HTG.balance, USD: bal.USD.balance, buyerShare: bal.buyerShare },
       payoutTotals,
       monthly: [...monthly].map(([month, v]) => ({ month, ...v })).sort((a, b) => a.month.localeCompare(b.month)),
       transactions: rows.slice(0, 500).map((r) => ({

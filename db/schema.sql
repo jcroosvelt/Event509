@@ -339,3 +339,21 @@ create table if not exists marketing_optouts (
   at timestamptz not null default now(),
   primary key (organizer_id, email)
 );
+
+-- Boost par événement : mise en avant payante pour une durée donnée (visible comme « Sponsorisé »).
+create table if not exists event_boosts (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  event_id text not null references events(id) on delete cascade,
+  days integer not null check (days between 1 and 90),
+  amount numeric not null,
+  status text not null check (status in ('pending', 'active', 'canceled', 'failed')),
+  method text not null,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  views_at_start integer not null default 0
+);
+create index if not exists event_boosts_org on event_boosts(organizer_id, created_at desc);
+create index if not exists event_boosts_event on event_boosts(event_id, status);

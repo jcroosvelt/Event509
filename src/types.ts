@@ -78,6 +78,8 @@ export interface EventItem {
   maxPerPerson: number;
   views: number;
   featured?: boolean;
+  /** Fin du boost payant (fixée par le serveur) : tant qu'elle n'est pas passée, l'événement est « Sponsorisé ». */
+  boostedUntil?: string;
   tags?: string[];
 }
 
@@ -346,8 +348,8 @@ export type PremiumBenefit = 'profile' | 'visibility' | 'analytics' | 'multiEven
 /** Réglages du programme, modifiables par l'administration (aucun prix n'est fixé dans le code). */
 export interface PremiumConfig {
   enabled: boolean;
-  monthlyPrice: number; // HTG
-  yearlyPrice: number; // HTG
+  /** Prix unique du programme, payé en une seule fois pour une année (HTG). */
+  yearlyPrice: number;
   validityDays: number; // durée de validité de la certification
   requiredDocs: VerificationDocType[];
   processingDays: number;
