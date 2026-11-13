@@ -1,5 +1,5 @@
-import { convert } from './format';
-import type { Currency } from '@/types';
+import { convert, zeroDecimal } from './format';
+import type { DisplayCurrency } from '@/types';
 
 /** Réglages de commission de la plateforme (définis par l'administration). */
 export interface FeeSettings {
@@ -33,7 +33,7 @@ export interface FeeBreakdown {
   organizerNet: number;
 }
 
-const round = (v: number, currency: Currency) => (currency === 'HTG' ? Math.round(v) : Math.round(v * 100) / 100);
+const round = (v: number, currency: DisplayCurrency) => (zeroDecimal(currency) ? Math.round(v) : Math.round(v * 100) / 100);
 
 /**
  * Calcule la commission d'une commande.
@@ -41,7 +41,7 @@ const round = (v: number, currency: Currency) => (currency === 'HTG' ? Math.roun
  * @param paidTickets nombre de billets payants (pour les frais fixes)
  * @param customRate taux négocié pour l'organisateur, s'il existe
  */
-export function computeFees(s: FeeSettings, amount: number, paidTickets: number, currency: Currency, customRate?: number): FeeBreakdown {
+export function computeFees(s: FeeSettings, amount: number, paidTickets: number, currency: DisplayCurrency, customRate?: number): FeeBreakdown {
   const rate = customRate ?? s.percent;
   if (amount <= 0 && s.freeNoFee) return { rate, fee: 0, buyerFee: 0, organizerFee: 0, total: 0, organizerNet: 0 };
   const fixed = convert(s.fixedHTG, 'HTG', currency) * paidTickets;

@@ -6,15 +6,15 @@ import { computeFees } from '@/lib/fees';
 import { ambassadors, organizers } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { rememberGuestOrder, useApp } from '@/store/app';
-import { convert, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
+import { convert, currencyName, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
 import { isEmail, useForm } from '@/lib/form';
 import { trackPixel } from '@/lib/pixels';
-import { Button, Card, Field, IconBadge, Input, Loading, Segmented, Toggle } from '@/components/ui';
+import { Button, Card, Field, IconBadge, Input, Loading, Segmented, Select, Toggle } from '@/components/ui';
 import { trackingCode } from '@/lib/tracking';
 import { EventCover } from '@/components/events';
 import { SeatMap } from '@/components/SeatMap';
 import { useSessionLabel } from '@/components/TicketCard';
-import type { Currency, PaymentMethod, PromoCode } from '@/types';
+import { DISPLAY_CURRENCIES, type DisplayCurrency, type PaymentMethod, type PromoCode } from '@/types';
 
 const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string; logo?: string }[] = [
   { id: 'moncash', label: 'MonCash', sub: 'Paiement mobile Digicel', icon: Smartphone, color: 'bg-red-50 text-red-600', logo: '/pay/moncash.png' },
@@ -50,7 +50,7 @@ export default function Checkout() {
     [params],
   );
 
-  const [currency, setCurrency] = useState<Currency>(app.currency);
+  const [currency, setCurrency] = useState<DisplayCurrency>(app.currency);
   const [seats, setSeats] = useState<Record<string, string[]>>({});
   const [activeLine, setActiveLine] = useState<string>('');
   const [method, setMethod] = useState<PaymentMethod>('moncash');
@@ -251,7 +251,9 @@ export default function Checkout() {
               {step(t('Paiement'))}
               <div className="mb-4 flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold">{t('Devise')}</span>
-                <Segmented label={t('Devise')} value={currency} onChange={setCurrency} options={[{ value: 'HTG', label: 'HTG' }, { value: 'USD', label: 'USD' }]} size="sm" />
+                <Select aria-label={t('Devise')} value={currency} onChange={(e) => setCurrency(e.target.value as DisplayCurrency)} className="!h-10 w-auto min-w-[9rem] !rounded-full !py-0 text-sm font-semibold">
+                  {DISPLAY_CURRENCIES.map((c) => <option key={c} value={c}>{c} — {currencyName(c, lang)}</option>)}
+                </Select>
               </div>
               <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t('Moyen de paiement')}>
                 {methods.map((m) => (
@@ -354,6 +356,9 @@ export default function Checkout() {
                 <dt className="font-bold">{t('Total')}</dt>
                 <dd className="text-2xl font-extrabold">{isFree ? t('Gratuit') : fmt(total)}</dd>
               </div>
+              {!isFree && currency !== 'HTG' && currency !== 'USD' && (
+                <p className="text-xs text-ink-muted">{t('Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.', { htg: moneyRaw(Math.round(convert(total, currency, 'HTG')), 'HTG', lang) })}</p>
+              )}
             </dl>
             <Button type="submit" size="lg" className="mt-5 w-full" loading={paying}>
               {!paying && <Lock className="h-4 w-4" aria-hidden />}

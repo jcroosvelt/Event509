@@ -13,7 +13,7 @@ import { captureTrackingCode } from '@/lib/tracking';
 import { cx, relative } from '@/lib/format';
 import { languages } from '@/lib/i18n';
 import { can, hasOrganizerAccess } from '@/lib/permissions';
-import type { Currency, Lang } from '@/types';
+import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
 /** Ferme un menu au clic extérieur et à Échap, puis rend le focus au bouton. */
 function useMenu() {
@@ -51,9 +51,8 @@ function Prefs() {
         {languages.map((l) => <option key={l.id} value={l.id}>{l.short}</option>)}
       </select>
       <label className="sr-only" htmlFor="pref-cur">{t('Devise')}</label>
-      <select id="pref-cur" value={currency} onChange={(e) => setCurrency(e.target.value as Currency)} className="cursor-pointer rounded-full bg-transparent px-2 py-1 text-xs font-bold text-ink outline-none">
-        <option value="HTG">HTG</option>
-        <option value="USD">USD</option>
+      <select id="pref-cur" value={currency} onChange={(e) => setCurrency(e.target.value as DisplayCurrency)} className="cursor-pointer rounded-full bg-transparent px-2 py-1 text-xs font-bold text-ink outline-none">
+        {DISPLAY_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
       <button type="button" onClick={() => setTheme(dark ? 'light' : 'dark')} aria-label={dark ? t('Passer en mode clair') : t('Passer en mode sombre')} className="grid h-7 w-7 place-items-center rounded-full text-ink-soft hover:text-ink">
         {dark ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}

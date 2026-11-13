@@ -7,10 +7,10 @@
  */
 import * as db from '@/data/mock';
 import type {
-  Ambassador, AppUser, Lang, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
+  Ambassador, AppUser, DisplayCurrency, Lang, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
   PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, Review, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
-import { setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
+import { convert, RATES, setRates, setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { defaultSiteInfo, type SiteInfo } from '@/lib/legalDoc';
 import type { LegalDoc } from '@/data/legalDefaults';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
@@ -97,6 +97,8 @@ interface Bootstrap {
   fees: FeeSettings;
   /** Taux de change du jour (gourdes pour 1 dollar). */
   rate?: number;
+  /** Taux de toutes les devises : gourdes pour 1 unité. */
+  rates?: Partial<Record<DisplayCurrency, number>>;
   site?: Partial<SiteInfo>;
   customCommissions: { organizerId: string; rate: number; reason: string }[];
 }
@@ -109,6 +111,7 @@ function applyBootstrap(b: Bootstrap) {
   replaceAll(db.customCommissions, b.customCommissions);
   Object.assign(feeSettings, b.fees);
   if (typeof b.rate === 'number') setUsdToHtg(b.rate);
+  if (b.rates) setRates(b.rates);
   if (b.site) Object.assign(siteInfo, b.site);
   // Données propres à la démo : vides tant que le serveur ne les a pas fournies
   for (const list of [db.myTickets, db.myOrders, db.notifications, db.attendees, db.resaleListings, db.promoCodes, db.team, db.refunds, db.payouts, db.campaigns, db.users, db.disputes, db.reports, db.verificationRequests, db.auditLog, db.platformTargets, db.platformOrders] as unknown[][])
@@ -305,7 +308,8 @@ export interface CheckoutInput {
   items: { ticketTypeId: string; qty: number; seats?: string[] }[];
   promo?: PromoCode | null;
   method: PaymentMethod;
-  currency: Currency;
+  /** Devise choisie par l'acheteur ; les prix sont fixés en gourdes. */
+  currency: DisplayCurrency;
   buyer: { name: string; email: string; phone?: string };
   feePercent: number;
   totals: { subtotal: number; discount: number; fees: number; total: number };
@@ -336,6 +340,18 @@ export async function verifyOrderPayment(orderId: string): Promise<'paid' | 'pen
   return r.status === 'paid' || r.status === 'failed' || r.status === 'cancelled' ? r.status : 'pending';
 }
 
+/** Démonstration : comme sur le serveur, la commande est comptée en gourdes (ou en dollars) ; la devise choisie est indicative. */
+function demoTotals(input: CheckoutInput) {
+  const acc: Currency = input.currency === 'USD' ? 'USD' : 'HTG';
+  const k = convert(1, input.currency, acc);
+  const r = (v: number) => (acc === 'HTG' ? Math.round(v * k) : Math.round(v * k * 100) / 100);
+  const t = input.totals;
+  return {
+    subtotal: r(t.subtotal), discount: r(t.discount), fees: r(t.fees), total: r(t.total), currency: acc,
+    ...(input.currency !== acc ? { displayCurrency: input.currency, displayTotal: t.total } : {}),
+  };
+}
+
 export async function createOrder(input: CheckoutInput): Promise<OrderResult> {
   if (!DEMO)
     return http('/orders', {
@@ -352,8 +368,7 @@ export async function createOrder(input: CheckoutInput): Promise<OrderResult> {
       ticketTypeId: it.ticketTypeId, qty: it.qty, seats: it.seats,
       unitPrice: ev.tickets.find((t) => t.id === it.ticketTypeId)!.price,
     })),
-    ...input.totals,
-    currency: input.currency,
+    ...demoTotals(input),
     method: input.method,
     status: input.method === 'transfer' ? 'pending' : 'paid',
     buyerName: input.buyer.name,
@@ -838,19 +853,19 @@ export async function saveSiteInfo(next: SiteInfo) {
   audit('Réglages des documents légaux modifiés', Object.keys(next).join(', '));
 }
 
-/** Taux de change en vigueur : gourdes pour 1 dollar. */
-export function currentExchangeRate() {
-  return USD_TO_HTG;
+/** Taux de change en vigueur : gourdes pour 1 unité de chaque devise. */
+export function currentExchangeRates(): Record<DisplayCurrency, number> {
+  return { ...RATES };
 }
-/** Réservé à l'administrateur : fixe le taux de change du site (gourdes pour 1 dollar). */
-export async function saveExchangeRate(rate: number) {
+/** Réservé à l'administrateur : fixe les taux de change du site (gourdes pour 1 unité de chaque devise). */
+export async function saveExchangeRates(rates: Partial<Record<DisplayCurrency, number>>) {
   if (!DEMO) {
-    const r = await http<{ rate: number }>('/admin/rate', { method: 'PUT', body: JSON.stringify({ rate }) });
-    return void setUsdToHtg(r.rate);
+    const r = await http<{ rates: Partial<Record<DisplayCurrency, number>> }>('/admin/rate', { method: 'PUT', body: JSON.stringify({ rates }) });
+    return void setRates(r.rates);
   }
   await wait(200);
-  setUsdToHtg(rate);
-  audit('Taux de change modifié', `1 USD = ${rate} HTG`);
+  setRates(rates);
+  audit('Taux de change modifiés', Object.entries(rates).map(([k, v]) => `1 ${k} = ${v} HTG`).join(', '));
 }
 export async function listCustomCommissions() {
   if (!DEMO) return http<typeof db.customCommissions>('/admin/commissions');

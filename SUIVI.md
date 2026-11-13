@@ -21,6 +21,8 @@
 
 ## En cours (cette session)
 
+- [x] Principales devises du monde : l'acheteur choisit HTG, USD, EUR, GBP, CAD, CHF, JPY, CNY, AUD, MXN, BRL ou DOP (sélecteur de l'en-tête, des paramètres du compte et de la caisse). **Les prix restent fixés en gourdes** : la commande est comptée en gourdes (ou en dollars si l'acheteur choisit le dollar), garde la devise choisie à titre indicatif (`displayCurrency`, `displayTotal`) et le paiement en ligne est toujours prélevé en gourdes (note à la caisse). L'administrateur règle le taux de chaque devise en gourdes dans Administration > Commissions (`PUT /api/admin/rate`, valeurs de départ approximatives à vérifier). Les finances organisateur et admin restent en gourdes et en dollars.
+
 - [x] Contrôle d'entrée : dans l'application Android, « Activer la caméra » ouvre le scanner de QR codes natif (message `scan:start`, résultat par `window.onQrScanned`) ; il se relance après chaque validation. Dans un navigateur, la caméra de la page reste utilisée.
 
 - [x] Pages légales mises à jour avec le document « Event509 – Documents légaux » (15 novembre 2026) : conditions d'utilisation, politique de confidentialité et nouvelle politique de remboursement (`/remboursement`, lien dans le pied de page), en français et en anglais. L'administrateur les modifie dans Administration > **Contenu et réglages** (texte libre par document et par langue, « rétablir le texte d'origine ») et règle les valeurs insérées (adresse, email, délais, moyens de paiement…). La commission vient de la page Commissions. **À renseigner :** l'adresse de JC Multimedia, la durée de conservation des données et le nombre de jours de la politique d'un organisateur : tant qu'ils sont vides, les pages affichent « [à renseigner] ».
@@ -117,3 +119,4 @@
 - 2026-11-13 : avantage « API et intégrations » du programme vérifié (clés, API /v1, webhooks signés, widget, documentation).
 - 2026-11-13 : pages légales mises à jour (3 documents FR/EN) et modifiables par l'administrateur (Contenu et réglages).
 - 2026-11-13 : contrôle d'entrée branché sur le scanner natif de l'application.
+- 2026-11-13 : devises du monde pour l'acheteur, taux réglables en gourdes par l'admin, paiement toujours en gourdes.

@@ -280,3 +280,20 @@ test.describe('pages légales', () => {
     await expect(page.getByText(/la page est à jour|the page is up to date/)).toBeVisible();
   });
 });
+
+test.describe('devises', () => {
+  test('l’acheteur choisit une devise du monde ; les prix suivent, et le paiement reste en gourdes', async ({ page }) => {
+    await fresh(page, '/compte/parametres');
+    await page.locator('#contenu').getByLabel(/^(Devise|Currency)$/).selectOption('EUR');
+    await page.goto('/explorer');
+    await expect(page.getByText(/€\s?\d|\d\s?€/).first()).toBeVisible();
+
+    // À la caisse, la devise se change aussi et une note rappelle que le prélèvement se fait en gourdes
+    await page.goto('/e/festival-kompa-live-2026/achat?t=t1b:1');
+    const caisse = page.locator('#contenu').getByLabel(/^(Devise|Currency)$/);
+    await expect(caisse).toHaveValue('EUR');
+    await expect(page.getByText(/débité de|charged/)).toBeVisible();
+    await caisse.selectOption('HTG');
+    await expect(page.getByText(/débité de|charged/)).toHaveCount(0);
+  });
+});

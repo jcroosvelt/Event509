@@ -3,7 +3,7 @@ import * as db from '@/data/mock';
 import { becomeOrganizer, claimOrder, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
-import type { AppUser, Currency, IssuedTicket, Lang, NotificationItem, Order } from '@/types';
+import { isDisplayCurrency, type AppUser, type DisplayCurrency, type IssuedTicket, type Lang, type NotificationItem, type Order } from '@/types';
 
 /** Lecture/écriture localStorage tolérante aux erreurs (navigation privée, quota…). */
 export function load<T>(key: string, fallback: T): T {
@@ -70,8 +70,8 @@ interface AppState {
   setLang: (l: Lang) => void;
   /** Traduit une phrase française (voir src/lib/i18n.ts). */
   t: (fr: string, vars?: Vars) => string;
-  currency: Currency;
-  setCurrency: (c: Currency) => void;
+  currency: DisplayCurrency;
+  setCurrency: (c: DisplayCurrency) => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
 
@@ -118,7 +118,9 @@ const Ctx = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = usePersisted<Lang>('e509.lang', navigator.language?.startsWith('en') ? 'en' : 'fr');
-  const [currency, setCurrency] = usePersisted<Currency>('e509.currency', 'HTG');
+  const [storedCurrency, setCurrency] = usePersisted<DisplayCurrency>('e509.currency', 'HTG');
+  // Une valeur inconnue (ancienne version, stockage modifié) retombe sur les gourdes
+  const currency: DisplayCurrency = isDisplayCurrency(storedCurrency) ? storedCurrency : 'HTG';
   const [theme, setTheme] = usePersisted<Theme>('e509.theme', 'system');
   const [user, setUser] = usePersisted<AppUser | null>('e509.user', DEMO ? db.users[0] : null);
   const [favorites, setFavorites] = usePersisted<string[]>('e509.favs', DEMO ? ['e2', 'e4'] : []);
