@@ -316,3 +316,14 @@ export interface NotificationItem {
   read: boolean;
   kind: 'reminder' | 'update' | 'sale' | 'system';
 }
+
+/** Avis laissé par un acheteur après l'événement (un seul par commande). */
+export interface Review {
+  id: string;
+  eventId: string;
+  rating: number; // 1 à 5
+  comment: string;
+  author: string; // prénom et initiale du nom
+  createdAt: string;
+  reply?: { body: string; at: string };
+}

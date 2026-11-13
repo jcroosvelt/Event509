@@ -205,3 +205,14 @@ create table if not exists notification_log (
   key text primary key,
   sent_at timestamptz not null default now()
 );
+
+-- Avis et notes : un seul avis par commande payée (achat vérifié), après la fin de l'événement.
+create table if not exists reviews (
+  id text primary key,
+  event_id text not null references events(id) on delete cascade,
+  order_id text not null unique,
+  rating integer not null check (rating between 1 and 5),
+  created_at timestamptz not null default now(),
+  data jsonb not null
+);
+create index if not exists reviews_event on reviews(event_id, created_at desc);

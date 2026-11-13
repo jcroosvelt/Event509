@@ -8,7 +8,7 @@
 import * as db from '@/data/mock';
 import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
-  PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, SeatMapConfig, TeamMember, VerificationRequest,
+  PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, Review, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
 import { setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
@@ -1007,6 +1007,31 @@ export async function listReports() {
   if (!DEMO) return http<Report[]>('/admin/reports');
   await wait(); return clone(db.reports);
 }
+// ---------- Avis et notes (mode serveur seulement) ----------
+
+export interface ReviewList { average: number; count: number; items: Review[] }
+export async function listReviews(eventId: string): Promise<ReviewList> {
+  if (DEMO) return { average: 0, count: 0, items: [] };
+  return http<ReviewList>(`/events/${encodeURIComponent(eventId)}/reviews`);
+}
+export async function reviewState(orderId: string, key: string) {
+  if (DEMO) return { canReview: false, over: false, review: null as Review | null };
+  return http<{ canReview: boolean; over: boolean; review: Review | null }>(`/reviews/state?order=${encodeURIComponent(orderId)}&k=${encodeURIComponent(key)}`);
+}
+export async function createReview(input: { orderId: string; key: string; rating: number; comment: string }) {
+  return http<Review>('/reviews', { method: 'POST', body: JSON.stringify(input) });
+}
+export async function listOrgReviews(): Promise<(Review & { eventTitle: string })[]> {
+  if (DEMO) return [];
+  return http('/org/reviews');
+}
+export async function replyToReview(id: string, body: string) {
+  await http(`/org/reviews/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ body }) });
+}
+export async function deleteReview(id: string) {
+  await http(`/admin/reviews/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 export async function reportEvent(eventId: string, reason: Report['reason'], details: string, reporter: string) {
   if (!DEMO) return void (await http('/reports', { method: 'POST', body: JSON.stringify({ eventId, reason, details, reporter }) }));
   await wait(400);

@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgePercent, BarChart3, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  ScanLine, Settings, Share2, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  ScanLine, Settings, Share2, Star, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -46,6 +46,7 @@ const CheckIn = lazy(() => import('@/pages/organizer/CheckIn'));
 const Promos = lazy(() => import('@/pages/organizer/Promos'));
 const Refunds = lazy(() => import('@/pages/organizer/Refunds'));
 const Marketing = lazy(() => import('@/pages/organizer/Marketing'));
+const Reviews = lazy(() => import('@/pages/organizer/Reviews'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
 const Team = lazy(() => import('@/pages/organizer/Team'));
@@ -136,6 +137,7 @@ export default function App() {
                     { to: `${O}/marketing`, label: t('Campagnes'), icon: Megaphone, perm: 'marketing' },
                     { to: `${O}/emails`, label: t('Emails automatiques'), icon: Mail, perm: 'marketing' },
                     { to: `${O}/ambassadeurs`, label: t('Ambassadeurs'), icon: Share2, perm: 'marketing' },
+                    { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
                   ] },
                   { title: t('Organisation'), items: [
                     { to: `${O}/equipe`, label: t('Équipe & rôles'), icon: UserCog, perm: 'team' },
@@ -164,6 +166,7 @@ export default function App() {
             <Route path="remboursements" element={<Refunds />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="emails" element={<Automations />} />
+            <Route path="avis" element={<Reviews />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />
