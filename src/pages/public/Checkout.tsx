@@ -3,13 +3,14 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Building2, CalendarDays, CreditCard, Gift, Lock, Mail, Smartphone, Tag, Wallet, X } from 'lucide-react';
 import { createOrder, currentFeeSettings, feeRateFor, getEvent, seatMapOf, takenSeats, validatePromo, DEMO } from '@/services/api';
 import { computeFees } from '@/lib/fees';
-import { ambassadors } from '@/data/mock';
+import { ambassadors, organizers } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { rememberGuestOrder, useApp } from '@/store/app';
 import { convert, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
 import { isEmail, useForm } from '@/lib/form';
 import { trackPixel } from '@/lib/pixels';
-import { Button, Card, Field, IconBadge, Input, Loading, Segmented } from '@/components/ui';
+import { Button, Card, Field, IconBadge, Input, Loading, Segmented, Toggle } from '@/components/ui';
+import { trackingCode } from '@/lib/tracking';
 import { EventCover } from '@/components/events';
 import { SeatMap } from '@/components/SeatMap';
 import { useSessionLabel } from '@/components/TicketCard';
@@ -56,6 +57,7 @@ export default function Checkout() {
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<PromoCode | null>(null);
   const [promoErr, setPromoErr] = useState('');
+  const [optIn, setOptIn] = useState(false);
   const [checking, setChecking] = useState(false);
   const [paying, setPaying] = useState(false);
   const [seatErr, setSeatErr] = useState('');
@@ -92,7 +94,10 @@ export default function Checkout() {
 
   const c = (v: number) => Math.round(convert(v, ev.currency, currency) * 100) / 100;
   const subtotal = c(lines.reduce((a, l) => a + l.qty * l.tt.price, 0));
-  const discount = promo ? Math.min(subtotal, promo.type === 'percent' ? Math.round(subtotal * promo.value) / 100 : c(promo.value)) : 0;
+  // Même règle que le serveur : seuls les billets visés par le code comptent
+  const promoLines = promo?.ticketTypeId ? lines.filter((l) => l.tt.id === promo.ticketTypeId) : lines;
+  const promoBase = c(promoLines.reduce((a, l) => a + l.qty * l.tt.price, 0));
+  const discount = promo ? Math.min(promoBase, promo.type === 'percent' ? Math.round(promoBase * promo.value) / 100 : c(promo.value)) : 0;
   const isFree = subtotal === 0;
   // Commission : taux de l'organisateur (négocié ou par défaut) + frais fixes par billet payant
   const paidTickets = lines.filter((l) => l.tt.price > 0).reduce((a, l) => a + l.qty, 0);
@@ -138,6 +143,8 @@ export default function Checkout() {
         totals: { subtotal, discount, fees: fb.fee, total },
         sessionLabel: occ,
         referral: app.referral?.code,
+        src: trackingCode(),
+        marketingOptIn: optIn || undefined,
       });
       if (payUrl) {
         // Paiement en ligne : on garde la clé de la commande pour la retrouver au retour, puis on ouvre la page sécurisée.
@@ -231,6 +238,12 @@ export default function Checkout() {
               </Field>
             </div>
             <p className="mt-4 flex items-start gap-2 rounded-2xl bg-canvas p-3 text-sm text-ink-soft"><Mail className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink" aria-hidden /> {t('Aucun compte n’est nécessaire : chaque billet, avec son QR code unique, arrive par email.')}</p>
+            {!DEMO && (
+              <div className="mt-3">
+                <Toggle checked={optIn} onChange={setOptIn} label={t('Recevoir les actualités de {name}', { name: organizers.find((o) => o.id === ev.organizerId)?.name ?? '' })}
+                  description={t('Facultatif. Vous pouvez vous désinscrire à tout moment depuis chaque message.')} />
+              </div>
+            )}
           </Card>
 
           {!isFree && (

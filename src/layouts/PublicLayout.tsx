@@ -9,6 +9,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ambassadors } from '@/data/mock';
 import { useApp } from '@/store/app';
 import { useOnline } from '@/lib/hooks';
+import { captureTrackingCode } from '@/lib/tracking';
 import { cx, relative } from '@/lib/format';
 import { languages } from '@/lib/i18n';
 import { can, hasOrganizerAccess } from '@/lib/permissions';
@@ -222,6 +223,19 @@ export function SkipLink() {
   );
 }
 
+/** Mémorise un lien de suivi d'organisateur (?src=CODE) puis nettoie l'adresse. */
+function useTrackingCapture() {
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const code = params.get('src');
+    if (!code) return;
+    captureTrackingCode(code);
+    const p = new URLSearchParams(params);
+    p.delete('src');
+    setParams(p, { replace: true });
+  }, [params, setParams]);
+}
+
 /** Mémorise un lien de parrainage (?ref=CODE) pendant 30 jours. */
 function useReferralCapture() {
   const [params, setParams] = useSearchParams();
@@ -248,6 +262,7 @@ export default function PublicLayout() {
   const nav = useNavigate();
   const [q, setQ] = useState('');
   useReferralCapture();
+  useTrackingCapture();
 
   useEffect(() => {
     window.scrollTo(0, 0);

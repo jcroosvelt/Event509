@@ -69,3 +69,9 @@ export function sameKey(a: string | null | undefined, b: string | null | undefin
   const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
+
+/** Code court lisible (sans caractères ambigus : pas de 0/O ni 1/I), pour les liens de suivi. */
+export function randomCode(n: number) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(randomBytes(n), (b) => alphabet[b % alphabet.length]).join('');
+}

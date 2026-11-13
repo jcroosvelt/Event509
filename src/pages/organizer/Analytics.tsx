@@ -73,7 +73,7 @@ export default function AnalyticsPage() {
   if (!q.data) return q.error ? <EmptyState icon={<Lock className="h-5 w-5" />} title={t('Chargement impossible')} body={t('Vérifiez votre connexion puis rechargez la page.')} /> : <Loading />;
   const a = q.data;
   const label = (id: string) => t(categories.find((c) => c.id === id)?.label ?? 'Autre');
-  const srcLabel = (k: string) => (k === 'ambassador' ? t('Ambassadeurs') : k === 'promo' ? t('Codes promo') : t('Direct'));
+  const srcLabel = (k: string) => (k === 'ambassador' ? t('Ambassadeurs') : k === 'promo' ? t('Codes promo') : k === 'link' ? t('Liens de suivi') : t('Direct'));
   const compared = a.events.filter((e) => picked.includes(e.id));
   const setPresetDays = (v: string) => { setPreset(v); if (v !== 'custom') { setFrom(ago(Number(v) - 1)); setTo(iso(new Date())); } };
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < 4 ? [...p, id] : p));

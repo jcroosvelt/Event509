@@ -5,6 +5,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { cx, dateShort, num, uid } from '@/lib/format';
 import { orgOf } from '@/lib/permissions';
+import { CampaignSend } from './CampaignSend';
 import { useForm } from '@/lib/form';
 import { Badge, Button, Card, EmptyState, Field, IconBadge, Input, Loading, Modal, PageHeader, Select, Table, Td, Textarea, type Tone } from '@/components/ui';
 import type { Campaign } from '@/types';
@@ -87,6 +88,7 @@ export default function Marketing() {
   return (
     <div>
       <PageHeader title={t('Marketing intégré')} subtitle={t('Préparez des messages pour vos participants.')} actions={<Button onClick={start}><Plus className="h-4 w-4" aria-hidden /> {t('Nouvelle campagne')}</Button>} />
+      <CampaignSend />
       {notice}
       {!list.length ? (
         <EmptyState icon={<Send className="h-5 w-5" />} title={t('Aucune campagne')} action={<Button onClick={start}>{t('Nouvelle campagne')}</Button>} />
