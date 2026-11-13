@@ -225,6 +225,8 @@ export interface Payout {
   status: 'requested' | 'processing' | 'scheduled' | 'paid' | 'rejected';
   date: string;
   reference: string;
+  /** Demande prioritaire (avantage « finance ») : traitée en premier, mais soumise aux mêmes contrôles financiers. */
+  priority?: boolean;
 }
 
 export interface Campaign {

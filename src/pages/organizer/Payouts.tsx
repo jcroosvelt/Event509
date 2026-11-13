@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, Smartphone, Wallet } from 'lucide-react';
-import { getBalance, listPayouts, requestPayout } from '@/services/api';
+import { DEMO, getBalance, listPayouts, requestPayout } from '@/services/api';
+import { organizers } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { load, persist, useApp } from '@/store/app';
 import { dateNumeric, moneyRaw } from '@/lib/format';
@@ -8,7 +9,7 @@ import { exportCSV } from '@/lib/export';
 import { destinationText } from '@/lib/labels';
 import { orgOf } from '@/lib/permissions';
 import { cleanNumber, isEmail, isPhone, useForm } from '@/lib/form';
-import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, Segmented, Table, Td, type Tone } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, Segmented, Table, Td, Toggle, type Tone } from '@/components/ui';
 import type { Currency, Payout } from '@/types';
 
 const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = {
@@ -35,6 +36,9 @@ export default function Payouts() {
   const [cur, setCur] = useState<Currency>('HTG');
   const [reqOpen, setReqOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Avantage « finance » : demande prioritaire (traitée en premier, toujours validée par l'administration)
+  const canPriority = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.perks?.includes('finance');
+  const [priority, setPriority] = useState(false);
   const empty: Last = { method: 'moncash', name: '', phone: '', email: '' };
   // La dernière destination utilisée est proposée de nouveau, mais reste modifiable
   const last = load<Last>(lastKey(orgId), empty);
@@ -60,7 +64,7 @@ export default function Payouts() {
     const destination = m === 'paypal' ? { email: req.values.email.trim() } : { name: req.values.name.trim(), phone: req.values.phone.trim() };
     setBusy(true);
     try {
-      await requestPayout(orgId, amount, cur, m, destination);
+      await requestPayout(orgId, amount, cur, m, destination, priority);
       persist(lastKey(orgId), { method: m, name: req.values.name, phone: req.values.phone, email: req.values.email });
       setReqOpen(false);
       toast(t('Demande envoyée : Event509 la valide sous 24 h, puis envoie l’argent à la destination indiquée'));
@@ -153,6 +157,7 @@ export default function Payouts() {
               </Field>
             </>
           )}
+          {canPriority && <Toggle checked={priority} onChange={setPriority} label={t('Demande prioritaire')} description={t('Traitée en premier, mais soumise aux mêmes contrôles financiers et délais de traitement.')} />}
         </form>
       </Modal>
     </div>

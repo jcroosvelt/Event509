@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, Link2, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, LineChart, Link2, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -57,6 +57,7 @@ const OrgSupport = lazy(() => import('@/pages/organizer/Support'));
 const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'));
 const Links = lazy(() => import('@/pages/organizer/Links'));
 const Unsubscribe = lazy(() => import('@/pages/public/Unsubscribe'));
+const Finances = lazy(() => import('@/pages/organizer/Finances'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -147,6 +148,7 @@ export default function App() {
                     { to: `${O}/codes-promo`, label: t('Codes promo'), icon: BadgePercent, perm: 'promos' },
                     { to: `${O}/remboursements`, label: t('Remboursements'), icon: Undo2, perm: 'refunds' },
                     { to: `${O}/versements`, label: t('Versements'), icon: Wallet, perm: 'payouts' },
+                    { to: `${O}/finances`, label: t('Finances'), icon: LineChart, perm: 'payouts' },
                   ] },
                   { title: t('Croissance'), items: [
                     { to: `${O}/marketing`, label: t('Campagnes'), icon: Megaphone, perm: 'marketing' },
@@ -193,6 +195,7 @@ export default function App() {
             <Route path="activite" element={<Activity />} />
             <Route path="support" element={<OrgSupport />} />
             <Route path="liens" element={<Links />} />
+            <Route path="finances" element={<Finances />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />

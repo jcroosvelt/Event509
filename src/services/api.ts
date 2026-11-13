@@ -582,8 +582,8 @@ export async function getBalance(orgId: string) {
   return { HTG: by('HTG'), USD: by('USD'), passToBuyer: feeSettings.passToBuyer };
 }
 
-export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination']) {
-  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination }) });
+export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination'], priority = false) {
+  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination, priority }) });
   await wait(500);
   // La demande attend la validation de l'administration
   const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };

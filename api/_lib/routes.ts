@@ -10,6 +10,7 @@ import { analyticsRoutes } from './analytics.js';
 import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
+import { financeRoutes } from './finance.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
@@ -1219,7 +1220,10 @@ const requestPayout: Handler = async (c) => {
   const destination = checkDestination(method, c.body.destination);
   const bal = (await balanceOf(orgId))[currency];
   if (!(amount > 0) || amount > bal.balance) fail(422, 'Le montant dépasse le solde disponible');
-  const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
+  // « Prioritaire » : traitée en premier par l'administration (avantage « finance »), mais toujours validée par elle
+  const priority = c.body.priority === true;
+  if (priority && !(await benefitsFor(orgId)).includes('finance')) fail(403, 'Les retraits prioritaires sont réservés aux organisateurs vérifiés');
+  const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}`, ...(priority ? { priority: true } : {}) };
   await upsert('payouts', { id: p.id, organizer_id: orgId, status: p.status, created_at: new Date().toISOString(), data: p });
   return p;
 };
@@ -1573,7 +1577,7 @@ const disputeMessage: Handler = async (c) => {
 
 const adminPayouts: Handler = async (c) => {
   admin(c);
-  return docs<Payout>(`select data from payouts order by created_at desc`);
+  return docs<Payout>(`select data from payouts order by (coalesce(data->>'priority', '') = 'true' and status = 'requested') desc, created_at desc`);
 };
 const setPayoutStatus: Handler = async (c) => {
   admin(c);
@@ -1745,6 +1749,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
   ...supportRoutes({ fail, str, auth, admin, org, audit }),
   ...marketingRoutes({ fail, str, auth, admin, org, audit }),
+  ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };
