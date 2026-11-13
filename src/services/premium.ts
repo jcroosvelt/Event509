@@ -78,3 +78,11 @@ export interface EventTemplate { id: string; name: string; createdAt: string; ev
 export const listTemplates = () => http<EventTemplate[]>('/org/templates');
 export const saveTemplate = (eventId: string, name: string) => http<{ id: string; name: string }>('/org/templates', { method: 'POST', body: JSON.stringify({ eventId, name }) });
 export const deleteTemplate = (id: string) => http<null>(`/org/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// Équipes avancées : entrées par agent et journal d'activité
+export interface TeamActivity {
+  members: { id: string; name: string; role: string | null }[];
+  agents: { id: string | null; name: string; scans: number; last: string | null; eventId: string; event: string }[];
+  logs: { id: string; at: string; userId: string | null; user: string; action: string; target: string }[];
+}
+export const getTeamActivity = (user = '') => http<TeamActivity>(`/org/activity${user ? `?user=${encodeURIComponent(user)}` : ''}`);

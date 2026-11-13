@@ -34,6 +34,7 @@ export interface UserRow {
   password_hash: string | null;
   role: AppUser['role'];
   team_role: TeamRole | null;
+  team_perms?: string[] | null;
   organizer_id: string | null;
   status: AppUser['status'];
   data: Partial<AppUser>;
@@ -58,6 +59,7 @@ export const toAppUser = (u: UserRow): AppUser & { organizerId?: string } => ({
   email: u.email,
   role: u.role,
   teamRole: u.team_role ?? undefined,
+  teamPerms: u.team_perms ?? undefined,
   status: u.status,
   organizerId: u.organizer_id ?? undefined,
 });
@@ -69,11 +71,22 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 const slugify = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'evenement';
 
+/** Permissions attribuables à un membre (« équipe » reste réservée à l'administrateur de l'organisation). */
+const MEMBER_PERMS = ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'payouts', 'marketing', 'settings'] as const;
+
 const teamPerms: Record<TeamRole, string[]> = {
   admin: ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'payouts', 'marketing', 'team', 'settings'],
+  manager: ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'marketing'],
+  lead: ['attendees', 'checkin'],
   staff: ['checkin'],
   accountant: ['dashboard', 'attendees', 'refunds', 'payouts'],
 };
+
+/** Permissions d'un membre : celles de son rôle, ou la liste personnalisée fixée par l'administrateur de l'organisation. */
+function effectivePerms(u: UserRow): string[] {
+  const base = teamPerms[u.team_role ?? 'admin'];
+  return u.team_perms ? u.team_perms.filter((p) => base.includes(p) || (MEMBER_PERMS as readonly string[]).includes(p)) : base;
+}
 
 function auth(c: Ctx): UserRow {
   if (!c.user) fail(401, 'Connectez-vous pour continuer');
@@ -90,7 +103,7 @@ function org(c: Ctx, perm: string): string {
   const u = auth(c);
   if (u.role === 'admin') return c.query.org || u.organizer_id || fail(400, 'Aucune organisation');
   if (u.role !== 'organizer' || !u.organizer_id) fail(403, 'Accès réservé aux organisateurs');
-  if (!teamPerms[u.team_role ?? 'admin'].includes(perm)) fail(403, 'Votre rôle ne permet pas cette action');
+  if (!effectivePerms(u).includes(perm)) fail(403, 'Votre rôle ne permet pas cette action');
   return u.organizer_id!;
 }
 
@@ -113,6 +126,16 @@ async function rateFor(orgId: string, q: Q = db()) {
 async function audit(c: Ctx, action: string, target: string, q: Q = db()) {
   const e: AuditEntry = { id: newId('al'), at: new Date().toISOString(), actor: (c.user?.data.name as string) ?? 'Admin', action, target };
   await upsert('audit_log', { id: e.id, at: e.at, data: e }, q);
+}
+/** Journal d'activité de l'organisation (qui a fait quoi) : toujours enregistré, consultable avec l'avantage « équipes avancées ». */
+async function act(c: Ctx, orgId: string, action: string, target = '', q: Q = db()) {
+  try {
+    const u = c.user;
+    await q.query(`insert into activity_log (id, organizer_id, user_id, user_name, action, target) values ($1,$2,$3,$4,$5,$6)`,
+      [newId('ac'), orgId, u?.id ?? null, (u?.data.name as string) ?? u?.email ?? 'Système', action, target.slice(0, 200)]);
+  } catch (e) {
+    console.error('[activité]', e);
+  }
 }
 async function eventById(id: string, q: Q = db()) {
   return (await docs<EventItem>(`select data from events where id = $1 or slug = $1`, [id], q))[0] ?? null;
@@ -163,12 +186,14 @@ const signup: Handler = async (c) => {
     let role: AppUser['role'] = 'participant';
     let teamRole: TeamRole | null = null;
     let organizerId: string | null = null;
+    let invitePerms: string[] | null = null;
     // Invitation d'équipe en attente : le compte rejoint l'organisation avec son rôle
     const invite = await one<{ organizer_id: string; data: TeamMember }>(`select organizer_id, data from team_members where lower(email) = $1`, [email], q);
     if (invite) {
       role = 'organizer';
       teamRole = invite.data.role;
       organizerId = invite.organizer_id;
+      invitePerms = invite.data.perms ?? null;
       await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [email]);
     } else {
       // Les comptes sont réservés aux organisateurs : les participants achètent sans compte
@@ -184,8 +209,8 @@ const signup: Handler = async (c) => {
     }
     const data = { name, avatar: initials(name), city: '', joinedAt: new Date().toISOString().slice(0, 10) };
     await q.query(
-      `insert into users (id, email, password_hash, role, team_role, organizer_id, data) values ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, email, await hashPassword(password), role, teamRole, organizerId, JSON.stringify(data)],
+      `insert into users (id, email, password_hash, role, team_role, organizer_id, data, team_perms) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+      [id, email, await hashPassword(password), role, teamRole, organizerId, JSON.stringify(data), invitePerms ? JSON.stringify(invitePerms) : null],
     );
     const u = (await one<UserRow>(`select * from users where id = $1`, [id], q))!;
     return session(u);
@@ -681,6 +706,7 @@ const saveEvent: Handler = async (c) => {
     if (!verified?.v) next.status = 'pending';
   }
   await saveEventRow(next);
+  await act(c, orgId, existing ? 'Événement modifié' : 'Événement créé', next.title);
   await notifyEventChange(existing?.data, next);
   return next;
 };
@@ -692,6 +718,7 @@ const setEventStatus: Handler = async (c) => {
   const e = await eventById(c.params.id);
   if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
   await saveEventRow({ ...e!, status });
+  await act(c, orgId, 'Statut d’événement modifié', `${e!.title} → ${status}`);
   await notifyEventChange(e!, { ...e!, status });
   return null;
 };
@@ -723,6 +750,7 @@ const deleteEvent: Handler = async (c) => {
     await q.query(`delete from reports where event_id = $1`, [e!.id]);
     await q.query(`delete from events where id = $1`, [e!.id]);
   });
+  await act(c, orgId, 'Événement supprimé', e!.title);
   if (isAdmin) await audit(c, 'Événement supprimé', e!.title);
   if (holders && (holders.emails.length || holders.users.length))
     await notifyDeletion({
@@ -825,7 +853,7 @@ async function orgTickets(orgId: string, eventId?: string) {
 const attendees: Handler = async (c) => {
   // Le check-in hors ligne télécharge aussi cette liste
   const u = auth(c);
-  const orgId = org(c, u.team_role === 'staff' ? 'checkin' : 'attendees');
+  const orgId = org(c, effectivePerms(u).includes('attendees') ? 'attendees' : 'checkin');
   const evs = await docs<EventItem>(`select data from events where organizer_id = $1`, [orgId]);
   const byId = new Map(evs.map((e) => [e.id, e]));
   return (await orgTickets(orgId, c.query.eventId)).map((t) => toAttendee(t, byId.get(t.eventId)));
@@ -838,11 +866,14 @@ const checkin: Handler = async (c) => {
   // Mise à jour atomique : un billet ne peut être validé qu'une seule fois, même avec deux scanners
   const done = await one<{ data: IssuedTicket }>(
     `update tickets t set status = 'used', checked_in_at = now(),
-       data = t.data || jsonb_build_object('status', 'used', 'checkedInAt', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+       data = t.data || jsonb_build_object('status', 'used', 'checkedInAt', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'checkedInBy', $4::text, 'checkedInByName', $5::text)
      from events e where e.id = t.event_id and e.organizer_id = $1 and t.code = $2 and t.status = 'valid' and ($3 = '' or t.event_id = $3)
-     returning t.data`, [orgId, code, eventId]);
+     returning t.data`, [orgId, code, eventId, c.user!.id, ((c.user!.data.name as string) ?? c.user!.email).slice(0, 80)]);
   const ev = async (id: string) => (await eventById(id)) ?? undefined;
-  if (done) return { ok: true, attendee: toAttendee(done.data, await ev(done.data.eventId)) };
+  if (done) {
+    await act(c, orgId, 'Entrée validée', done.data.code);
+    return { ok: true, attendee: toAttendee(done.data, await ev(done.data.eventId)) };
+  }
   const t = (await docs<IssuedTicket>(
     `select t.data from tickets t join events e on e.id = t.event_id where e.organizer_id = $1 and t.code = $2`, [orgId, code]))[0];
   if (!t) return { ok: false, reason: 'unknown' };
@@ -850,6 +881,24 @@ const checkin: Handler = async (c) => {
   if (eventId && t.eventId !== eventId) return { ok: false, reason: 'wrong_event', attendee: a };
   if (t.status === 'used') return { ok: false, reason: 'used', attendee: a };
   return { ok: false, reason: 'inactive', attendee: a };
+};
+
+/** Suivi des équipes (avantage « équipes avancées ») : entrées par agent et journal d'activité. */
+const teamActivity: Handler = async (c) => {
+  const orgId = org(c, 'team');
+  await needTeamPerk(orgId);
+  const agents = await all<{ id: string | null; name: string; scans: string; last: Date; event_id: string }>(
+    `select t.data->>'checkedInBy' as id, coalesce(t.data->>'checkedInByName', 'Inconnu') as name, count(*) as scans, max(t.checked_in_at) as last, t.event_id
+     from tickets t join events e on e.id = t.event_id where e.organizer_id = $1 and t.status = 'used' group by 1, 2, t.event_id order by scans desc limit 500`, [orgId]);
+  const events = new Map((await docs<EventItem>(`select data from events where organizer_id = $1`, [orgId])).map((e) => [e.id, e.title]));
+  const logs = await all<{ id: string; at: Date; user_id: string | null; user_name: string; action: string; target: string | null }>(
+    `select id, at, user_id, user_name, action, target from activity_log where organizer_id = $1 and ($2 = '' or user_id = $2) order by at desc limit 200`, [orgId, str(c.query.user, 60)]);
+  const members = await all<{ id: string; email: string; team_role: TeamRole | null; data: { name?: string } }>(`select id, email, team_role, data from users where organizer_id = $1`, [orgId]);
+  return {
+    members: members.map((m) => ({ id: m.id, name: m.data.name ?? m.email, role: m.team_role })),
+    agents: agents.map((a) => ({ id: a.id, name: a.name, scans: Number(a.scans), last: a.last?.toISOString() ?? null, eventId: a.event_id, event: events.get(a.event_id) ?? '' })),
+    logs: logs.map((l) => ({ id: l.id, at: l.at.toISOString(), userId: l.user_id, user: l.user_name, action: l.action, target: l.target ?? '' })),
+  };
 };
 
 /** Recherche d'un billet à l'entrée, sans rien modifier : l'organisateur vérifie qui entre, puis valide. */
@@ -980,7 +1029,7 @@ const readFile: Handler = async (c) => {
   if (f!.visibility === 'public') return new Binary(f!.mime, f!.data, 'public, max-age=31536000, immutable', f!.name);
   // Document privé : l'administration, ou l'équipe de l'organisation qui l'a envoyé. Même réponse si le fichier n'existe pas.
   const u = auth(c);
-  const allowed = u.role === 'admin' || (u.organizer_id === f!.organizer_id && teamPerms[u.team_role ?? 'admin'].includes('settings'));
+  const allowed = u.role === 'admin' || (u.organizer_id === f!.organizer_id && effectivePerms(u).includes('settings'));
   if (!allowed) fail(404, 'Fichier introuvable');
   // Chaque consultation d'un document d'identité par l'administration est enregistrée (date, heure, administrateur)
   if (u.role === 'admin' && f!.kind === 'verification')
@@ -1018,19 +1067,29 @@ const savePromo: Handler = async (c) => {
   return null;
 };
 
+/** Liste de permissions personnalisées reçue : seules les permissions connues, et jamais « équipe ». */
+const cleanPerms = (v: unknown): string[] | null =>
+  Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && (MEMBER_PERMS as readonly string[]).includes(x)))] : null;
+const needTeamPerk = async (orgId: string) => {
+  if (!(await benefitsFor(orgId)).includes('team')) fail(403, 'Les rôles avancés et les permissions personnalisées sont réservés aux organisateurs vérifiés');
+};
+
 const listTeam: Handler = async (c) => docs<TeamMember>(`select data from team_members where organizer_id = $1`, [org(c, 'team')]);
 const inviteMember: Handler = async (c) => {
   const orgId = org(c, 'team');
   const email = str(c.body.email, 160).toLowerCase();
   const role = str(c.body.role, 20) as TeamRole;
   if (!isEmail(email) || !teamPerms[role]) fail(422, 'Invitation invalide');
+  const perms = c.body.perms === undefined ? null : cleanPerms(c.body.perms);
+  if (role === 'manager' || role === 'lead' || perms) await needTeamPerk(orgId);
   if (await one(`select 1 from team_members where organizer_id = $1 and lower(email) = $2`, [orgId, email])) fail(409, 'Déjà membre');
   const existing = await one<UserRow>(`select * from users where email = $1`, [email]);
-  const m: TeamMember = { id: newId('m'), name: str(c.body.name, 80) || email, email, role, status: existing ? 'active' : 'invited' };
+  const m: TeamMember = { id: newId('m'), name: str(c.body.name, 80) || email, email, role, status: existing ? 'active' : 'invited', ...(perms ? { perms } : {}) };
   await upsert('team_members', { id: m.id, organizer_id: orgId, email, data: m });
   // Un compte existant rejoint l'équipe tout de suite
   if (existing && existing.role === 'participant')
-    await db().query(`update users set role = 'organizer', team_role = $2, organizer_id = $3 where id = $1`, [existing.id, role, orgId]);
+    await db().query(`update users set role = 'organizer', team_role = $2, organizer_id = $3, team_perms = $4::jsonb where id = $1`, [existing.id, role, orgId, perms ? JSON.stringify(perms) : null]);
+  await act(c, orgId, 'Membre invité', `${email} (${role})`);
   return m;
 };
 const updateMember: Handler = async (c) => {
@@ -1038,9 +1097,22 @@ const updateMember: Handler = async (c) => {
   const role = c.body.role as TeamRole | undefined;
   const m = await one<{ email: string; data: TeamMember }>(`select email, data from team_members where id = $1 and organizer_id = $2`, [c.params.id, orgId]);
   if (!m) fail(404, 'Membre introuvable');
+  const hasPerms = c.body.perms !== undefined;
+  const perms = c.body.perms === null ? null : cleanPerms(c.body.perms);
+  // Garder un rôle avancé ou personnaliser les permissions demande l'avantage ; revenir aux rôles de base reste toujours possible
+  if ((role === 'manager' || role === 'lead') && role !== m!.data.role) await needTeamPerk(orgId);
+  if (hasPerms && perms) await needTeamPerk(orgId);
   if (role && teamPerms[role]) {
     await db().query(`update team_members set data = data || $2::jsonb where id = $1`, [c.params.id, JSON.stringify({ role })]);
     await db().query(`update users set team_role = $2 where email = $1 and organizer_id = $3 and role = 'organizer'`, [m!.email, role, orgId]);
+    await act(c, orgId, 'Rôle modifié', `${m!.email} → ${role}`);
+  }
+  if (hasPerms) {
+    // Liste vide ou null : retour aux permissions du rôle
+    const value = perms && perms.length ? perms : null;
+    await db().query(`update team_members set data = case when $2::jsonb is null then data - 'perms' else data || jsonb_build_object('perms', $2::jsonb) end where id = $1`, [c.params.id, value ? JSON.stringify(value) : null]);
+    await db().query(`update users set team_perms = $2::jsonb where email = $1 and organizer_id = $3 and role = 'organizer'`, [m!.email, value ? JSON.stringify(value) : null, orgId]);
+    await act(c, orgId, 'Permissions modifiées', `${m!.email}: ${value ? value.join(', ') : 'celles du rôle'}`);
   }
   return null;
 };
@@ -1050,7 +1122,8 @@ const removeMember: Handler = async (c) => {
   if (!m) return null;
   if (m.email === c.user!.email) fail(409, 'Vous ne pouvez pas vous retirer vous-même');
   await db().query(`delete from team_members where id = $1`, [c.params.id]);
-  await db().query(`update users set role = 'participant', team_role = null, organizer_id = null where email = $1 and organizer_id = $2 and role = 'organizer'`, [m.email, orgId]);
+  await db().query(`update users set role = 'participant', team_role = null, team_perms = null, organizer_id = null where email = $1 and organizer_id = $2 and role = 'organizer'`, [m.email, orgId]);
+  await act(c, orgId, 'Membre retiré', m.email);
   return null;
 };
 
@@ -1071,6 +1144,7 @@ const decideRefund: Handler = async (c) => {
     if (status === 'approved')
       await q.query(`update tickets set status = 'refunded', seat = null, data = data || '{"status":"refunded"}'::jsonb where order_id = $1 and status in ('valid','resale')`, [r!.order_id]);
   });
+  await act(c, orgId, status === 'approved' ? 'Remboursement accepté' : 'Remboursement refusé', c.params.id);
   return null;
 };
 
@@ -1700,6 +1774,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['PUT', '/org/promos', savePromo],
   ['GET', '/org/team', listTeam],
   ['POST', '/org/team', inviteMember],
+  ['GET', '/org/activity', teamActivity],
   ['PATCH', '/org/team/:id', updateMember],
   ['DELETE', '/org/team/:id', removeMember],
   ['GET', '/org/refunds', listRefunds],

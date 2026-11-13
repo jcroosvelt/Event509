@@ -275,3 +275,21 @@ create table if not exists event_templates (
   data jsonb not null
 );
 create index if not exists event_templates_org on event_templates(organizer_id, created_at desc);
+
+-- Équipes avancées : nouveaux rôles (gestionnaire, responsable de contrôle), permissions personnalisées par membre
+-- et journal d'activité. Migration additive ; retour arrière : réajouter l'ancienne contrainte (admin, staff, accountant).
+alter table users drop constraint if exists users_team_role_check;
+alter table users add constraint users_team_role_check check (team_role in ('admin', 'manager', 'lead', 'staff', 'accountant'));
+alter table users add column if not exists team_perms jsonb;
+
+create table if not exists activity_log (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  at timestamptz not null default now(),
+  user_id text,
+  user_name text not null,
+  action text not null,
+  target text,
+  meta jsonb
+);
+create index if not exists activity_log_org on activity_log(organizer_id, at desc);
