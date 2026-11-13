@@ -124,7 +124,7 @@ export default function Confirmation() {
         <p className="mt-2 text-ink-soft">
           {pending
             ? online ? t('Cette page se met à jour toute seule dès que le paiement est confirmé, puis vos billets s’affichent ici et arrivent par email.') : t('Vos billets seront émis dès réception du virement.')
-            : `${t('Commande {id}', { id: order.id })} · ${order.total ? moneyRaw(order.total, order.currency, app.lang) : t('Gratuit')}`}
+            : `${t('Commande {id}', { id: order.id })} · ${order.total ? moneyRaw(order.total, order.currency, app.lang) : t('Gratuit')}${order.displayCurrency && order.displayTotal ? ` (≈ ${moneyRaw(order.displayTotal, order.displayCurrency, app.lang)})` : ''}`}
         </p>
       </div>
 

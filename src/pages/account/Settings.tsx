@@ -5,9 +5,10 @@ import { load, persist, useApp, type Theme } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { languages } from '@/lib/i18n';
 import { isEmail, isPhone, useForm } from '@/lib/form';
-import { Button, Card, Field, Input, Modal, PageHeader, Segmented, Toggle } from '@/components/ui';
+import { Button, Card, Field, Input, Modal, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
+import { currencyName } from '@/lib/format';
 import { AppLockCard } from '@/components/AppLockCard';
-import type { Currency, Lang } from '@/types';
+import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
 const NOTIF_KEY = 'e509.notifPrefs';
 const defaultPrefs = { reminders: true, updates: true, reco: true, sms: false, whatsapp: true, marketing: false };
@@ -89,7 +90,9 @@ export default function Settings() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm font-semibold">{t('Devise')}</span>
-              <Segmented label={t('Devise')} value={currency} onChange={(v) => setCurrency(v as Currency)} options={[{ value: 'HTG', label: t('HTG — Gourde') }, { value: 'USD', label: t('USD — Dollar') }]} size="sm" />
+              <Select aria-label={t('Devise')} value={currency} onChange={(e) => setCurrency(e.target.value as DisplayCurrency)} className="!h-10 w-auto min-w-[11rem] !py-0 text-sm font-semibold">
+                {DISPLAY_CURRENCIES.map((c) => <option key={c} value={c}>{c} — {currencyName(c, lang)}</option>)}
+              </Select>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm font-semibold">{t('Thème')}</span>

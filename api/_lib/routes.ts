@@ -17,7 +17,7 @@ import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, pre
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
-import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATE, setRate, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
+import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATES, isDisplayCurrency, RATES, round as roundCur, setRates, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -124,8 +124,9 @@ let rateLoadedAt = 0;
 /** Relit le taux de change réglé par l'administrateur (au plus une fois toutes les 30 s par instance). */
 export async function refreshRate() {
   if (Date.now() - rateLoadedAt < 30_000) return;
-  const r = await one<{ value: { usdToHtg?: number } }>(`select value from settings where key = 'rate'`);
-  setRate(r?.value?.usdToHtg ?? DEFAULT_RATE);
+  const r = await one<{ value: { usdToHtg?: number; rates?: Record<string, number> } }>(`select value from settings where key = 'rate'`);
+  // Départ : taux par défaut, puis ceux réglés par l'administrateur (l'ancien réglage ne contenait que le dollar)
+  setRates({ ...DEFAULT_RATES, ...(r?.value?.usdToHtg ? { USD: r.value.usdToHtg } : {}), ...(r?.value?.rates ?? {}) });
   rateLoadedAt = Date.now();
 }
 async function rateFor(orgId: string, q: Q = db()) {
@@ -298,6 +299,7 @@ const bootstrap: Handler = async (c) => {
     events, organizers, ambassadors,
     fees: await feeSettings(),
     rate: USD_TO_HTG,
+    rates: { ...RATES },
     site: await siteInfo(),
     customCommissions: commissions.map((x) => ({ organizerId: x.organizerId, rate: Number(x.rate), reason: '' })),
   };
@@ -347,7 +349,7 @@ const createOrder: Handler = async (c) => {
   };
   const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'kashpaw', 'paypal', 'transfer'];
   if (!methods.includes(b.method)) fail(422, 'Moyen de paiement invalide');
-  if (b.currency !== 'HTG' && b.currency !== 'USD') fail(422, 'Devise invalide');
+  if (!isDisplayCurrency(b.currency)) fail(422, 'Devise invalide');
   const buyer = { name: str(b.buyer?.name, 80), email: str(b.buyer?.email, 160).toLowerCase(), phone: str(b.buyer?.phone, 30) || undefined };
   if (!buyer.name || !isEmail(buyer.email)) fail(422, 'Nom et email de l’acheteur requis');
   if (!Array.isArray(b.items) || !b.items.length) fail(422, 'Panier vide');
@@ -377,7 +379,10 @@ const createOrder: Handler = async (c) => {
       if (count > ev!.maxPerPerson) fail(422, `Maximum ${ev!.maxPerPerson} billets par personne`);
 
       const srcCode = b.src ? ((await one<{ code: string }>(`select code from tracking_links where code = $1 and organizer_id = $2 and (event_id is null or event_id = $3)`, [str(b.src, 20), ev!.organizerId, ev!.id], q))?.code ?? '') : '';
-      const cur = b.currency;
+      // Les prix sont fixés en gourdes : toute devise autre que le dollar est un affichage, la commande est comptée en
+      // gourdes (la plateforme de paiement prélève de toute façon des gourdes) et garde la devise choisie à titre indicatif
+      const display = b.currency;
+      const cur: Currency = display === 'USD' ? 'USD' : 'HTG';
       const c2 = (v: number) => Math.round(convert(v, ev!.currency, cur) * 100) / 100;
       const subtotal = c2(lines.reduce((a, l) => a + l.qty * l.tt.price, 0));
       let promo: PromoCode | undefined;
@@ -408,6 +413,7 @@ const createOrder: Handler = async (c) => {
         id: newId('o'), eventId: ev!.id, createdAt: now.toISOString(),
         items: lines.map((l) => ({ ticketTypeId: l.tt.id, qty: l.qty, unitPrice: l.tt.price, seats: l.seats })),
         subtotal, discount, fees: fb.fee, total: fb.total, currency: cur,
+        ...(display !== cur ? { displayCurrency: display, displayTotal: roundCur(convert(fb.total, cur, display), display) } : {}),
         // Le virement attend la réception des fonds ; les autres moyens seront confirmés par la passerelle de paiement
         method: subtotal === 0 ? 'card' : b.method,
         // Virement et paiement en ligne (MonCash, NatCash, KashPaw, carte) : en attente jusqu'à la confirmation du paiement
@@ -1328,16 +1334,30 @@ const saveSite: Handler = async (c) => {
   return merged;
 };
 
-/** Taux de change du site : combien de gourdes valent 1 dollar. Réservé à l'administrateur. */
+/**
+ * Taux de change du site : combien de gourdes valent 1 unité de chaque devise (dollar, euro, livre…). Les prix restent
+ * fixés en gourdes. Réservé à l'administrateur.
+ */
 const saveRate: Handler = async (c) => {
   admin(c);
-  const rate = Math.round(num(c.body.rate) * 100) / 100;
-  if (!Number.isFinite(rate) || rate < 10 || rate > 1000) fail(422, 'Taux invalide : indiquez entre 10 et 1 000 gourdes pour 1 dollar');
-  await upsert('settings', { key: 'rate', value: { usdToHtg: rate } });
-  setRate(rate);
+  const given = (typeof c.body.rates === 'object' && c.body.rates ? c.body.rates : {}) as Record<string, unknown>;
+  // Ancienne forme : { rate } = gourdes pour 1 dollar
+  if (c.body.rate !== undefined) given.USD = c.body.rate;
+  const next: Record<string, number> = {};
+  for (const [code, raw] of Object.entries(given)) {
+    if (code === 'HTG') continue;
+    if (!isDisplayCurrency(code)) fail(422, `Devise inconnue : ${code}`);
+    const v = Math.round(num(raw) * 10000) / 10000;
+    if (!Number.isFinite(v) || v < 0.001 || v > 100000) fail(422, `Taux invalide pour ${code} : indiquez le nombre de gourdes pour 1 ${code}`);
+    next[code] = v;
+  }
+  if (!Object.keys(next).length) fail(422, 'Aucun taux à enregistrer');
+  const rates = { ...RATES, ...next };
+  await upsert('settings', { key: 'rate', value: { usdToHtg: rates.USD, rates } });
+  setRates(rates);
   rateLoadedAt = Date.now();
-  await audit(c, 'Taux de change modifié', `1 USD = ${rate} HTG`);
-  return { rate };
+  await audit(c, 'Taux de change modifiés', Object.entries(next).map(([k, v]) => `1 ${k} = ${v} HTG`).join(', '));
+  return { rates: { ...RATES } };
 };
 
 const saveFees: Handler = async (c) => {

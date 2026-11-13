@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { organizers } from '@/data/mock';
-import { currentExchangeRate, currentFeeSettings, listCustomCommissions, removeCustomCommission, saveCustomCommission, saveExchangeRate, saveFeeSettings } from '@/services/api';
+import { currentExchangeRates, currentFeeSettings, listCustomCommissions, removeCustomCommission, saveCustomCommission, saveExchangeRates, saveFeeSettings } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
-import { moneyRaw } from '@/lib/format';
+import { currencyName, moneyRaw } from '@/lib/format';
+import { DISPLAY_CURRENCIES, type DisplayCurrency } from '@/types';
 import { computeFees, type FeeSettings } from '@/lib/fees';
 import { useForm, cleanNumber } from '@/lib/form';
 import { Button, Card, Field, Input, Loading, Modal, PageHeader, Select, Table, Td, Toggle } from '@/components/ui';
@@ -23,18 +24,24 @@ export default function Commissions() {
     fee: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
     fixed: (v) => (!(Number(v) >= 0) ? t('Indiquez un montant positif ou 0') : undefined),
   });
-  const rateForm = useForm({ rate: String(currentExchangeRate()) }, {
-    rate: (v) => (!(Number(String(v).replace(',', '.')) >= 10 && Number(String(v).replace(',', '.')) <= 1000) ? t('Entre 10 et 1 000 gourdes') : undefined),
-  });
+  const OTHER = DISPLAY_CURRENCIES.filter((x) => x !== 'HTG');
+  const [rates, setRatesState] = useState<Record<string, string>>(() => Object.fromEntries(OTHER.map((x) => [x, String(currentExchangeRates()[x])])));
+  const [ratesErr, setRatesErr] = useState('');
   const [savingRate, setSavingRate] = useState(false);
-  const saveRate = async () => {
-    if (!rateForm.validate()) return;
+  const saveRates = async () => {
+    const parsed: Partial<Record<DisplayCurrency, number>> = {};
+    for (const code of OTHER) {
+      const v = Number(String(rates[code]).replace(',', '.'));
+      if (!(v >= 0.001 && v <= 100000)) return setRatesErr(t('Taux invalide pour {code}', { code }));
+      parsed[code] = Math.round(v * 10000) / 10000;
+    }
+    setRatesErr('');
     setSavingRate(true);
     try {
-      await saveExchangeRate(Math.round(Number(String(rateForm.values.rate).replace(',', '.')) * 100) / 100);
-      toast(t('Taux de change enregistré'));
+      await saveExchangeRates(parsed);
+      toast(t('Taux de change enregistrés'));
     } catch {
-      toast(t('Le taux n’a pas pu être enregistré.'), 'error');
+      toast(t('Les taux n’ont pas pu être enregistrés.'), 'error');
     } finally {
       setSavingRate(false);
     }
@@ -87,14 +94,17 @@ export default function Commissions() {
     <div className="max-w-4xl">
       <PageHeader title={t('Commissions de service')} subtitle={t('Frais appliqués à chaque billet payant. Les changements valent pour les nouvelles commandes.')} />
       <Card className="mb-4">
-        <h2 className="font-bold">{t('Taux de change gourdes / dollar')}</h2>
-        <p className="mt-1 text-sm text-ink-soft">{t('Sert à convertir les prix entre gourdes (HTG) et dollars (USD) sur tout le site : prix affichés, paiement, statistiques. Les commandes déjà passées ne changent pas.')}</p>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <Field label={t('1 dollar (USD) = … gourdes (HTG)')} error={rateForm.errors.rate} className="w-full sm:w-64">
-            <Input inputMode="decimal" {...rateForm.bind('rate')} onChange={(e) => rateForm.set('rate', cleanNumber(e.target.value, true))} />
-          </Field>
-          <Button onClick={saveRate} loading={savingRate}>{t('Enregistrer le taux')}</Button>
+        <h2 className="font-bold">{t('Taux de change (en gourdes)')}</h2>
+        <p className="mt-1 text-sm text-ink-soft">{t('Les prix sont fixés en gourdes (HTG). Indiquez ce que vaut 1 unité de chaque devise en gourdes : l’application s’en sert pour afficher les prix dans la devise choisie par l’acheteur. Le paiement est toujours prélevé en gourdes. Les commandes déjà passées ne changent pas.')}</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {OTHER.map((code) => (
+            <Field key={code} label={t('1 {code} = … gourdes', { code })} hint={currencyName(code, lang)}>
+              <Input inputMode="decimal" value={rates[code]} onChange={(e) => setRatesState({ ...rates, [code]: cleanNumber(e.target.value, true) })} />
+            </Field>
+          ))}
         </div>
+        {ratesErr && <p role="alert" className="mt-2 text-sm font-medium text-red-600">{ratesErr}</p>}
+        <Button className="mt-4" onClick={saveRates} loading={savingRate}>{t('Enregistrer les taux')}</Button>
       </Card>
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card>

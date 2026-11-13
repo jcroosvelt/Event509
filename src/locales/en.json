@@ -1250,13 +1250,6 @@
   "Vous n’avez pas été débité et vos places ont été libérées. Vous pouvez réessayer.": "You have not been charged and your seats were released. You can try again.",
   "Dès que le paiement est confirmé, vos billets vous sont envoyés par email. Vous pouvez fermer cette page.": "As soon as the payment is confirmed, your tickets are sent to you by email. You can close this page.",
   "Voir ma commande": "View my order",
-  "Entre 10 et 1 000 gourdes": "Between 10 and 1,000 gourdes",
-  "Taux de change enregistré": "Exchange rate saved",
-  "Le taux n’a pas pu être enregistré.": "The rate could not be saved.",
-  "Taux de change gourdes / dollar": "Gourde / dollar exchange rate",
-  "Sert à convertir les prix entre gourdes (HTG) et dollars (USD) sur tout le site : prix affichés, paiement, statistiques. Les commandes déjà passées ne changent pas.": "Used to convert prices between gourdes (HTG) and dollars (USD) across the site: displayed prices, payment, statistics. Orders already placed do not change.",
-  "1 dollar (USD) = … gourdes (HTG)": "1 dollar (USD) = … gourdes (HTG)",
-  "Enregistrer le taux": "Save the rate",
   "5 visuels au maximum": "5 visuals maximum",
   "{n} visuels ajoutés": "{n} visuals added",
   "Visuel ajouté": "Visual added",
@@ -1896,5 +1889,13 @@
   "Politique d’un organisateur : jours avant l’événement": "Organizer policy: days before the event",
   "Exemple donné dans le texte": "Example given in the text",
   "Signalement d’un double paiement (heures)": "Reporting a double payment (hours)",
-  "Réponse du support à une demande (jours ouvrables)": "Support reply to a request (business days)"
+  "Réponse du support à une demande (jours ouvrables)": "Support reply to a request (business days)",
+  "Taux de change enregistrés": "Exchange rates saved",
+  "Les taux n’ont pas pu être enregistrés.": "The rates could not be saved.",
+  "Taux invalide pour {code}": "Invalid rate for {code}",
+  "Taux de change (en gourdes)": "Exchange rates (in gourdes)",
+  "Les prix sont fixés en gourdes (HTG). Indiquez ce que vaut 1 unité de chaque devise en gourdes : l’application s’en sert pour afficher les prix dans la devise choisie par l’acheteur. Le paiement est toujours prélevé en gourdes. Les commandes déjà passées ne changent pas.": "Prices are set in gourdes (HTG). Enter what 1 unit of each currency is worth in gourdes: the app uses it to show prices in the currency chosen by the buyer. Payment is always charged in gourdes. Orders already placed do not change.",
+  "1 {code} = … gourdes": "1 {code} = … gourdes",
+  "Enregistrer les taux": "Save the rates",
+  "Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.": "Prices are set in gourdes: you will be charged {htg}, at today's rate."
 }

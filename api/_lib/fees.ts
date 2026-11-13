@@ -1,13 +1,29 @@
 // Copie serveur de src/lib/fees.ts (même calcul ; un test vérifie qu'ils concordent).
 // Le serveur recalcule toujours les montants : ceux envoyés par le navigateur sont ignorés.
 
+/** Monnaie de comptabilité : les prix et les finances restent en gourdes (HTG) ou en dollars (USD). */
 export type Currency = 'HTG' | 'USD';
-export const DEFAULT_RATE = 132;
-/** Taux du jour (gourdes pour 1 dollar) : réglé par l'administrateur, relu depuis la base à chaque requête. */
-export let USD_TO_HTG = DEFAULT_RATE;
-export function setRate(n: number) {
-  if (Number.isFinite(n) && n > 0) USD_TO_HTG = n;
+/** Principales devises proposées à l'acheteur (copie de src/types.ts ; un test vérifie qu'elles concordent). */
+export const DISPLAY_CURRENCIES = ['HTG', 'USD', 'EUR', 'GBP', 'CAD', 'CHF', 'JPY', 'CNY', 'AUD', 'MXN', 'BRL', 'DOP'] as const;
+export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
+export const isDisplayCurrency = (v: unknown): v is DisplayCurrency => typeof v === 'string' && (DISPLAY_CURRENCIES as readonly string[]).includes(v);
+
+/** Taux de départ : gourdes (HTG) pour 1 unité. L'administrateur les règle, ils sont relus depuis la base. */
+export const DEFAULT_RATES: Record<DisplayCurrency, number> = {
+  HTG: 1, USD: 132, EUR: 145, GBP: 168, CAD: 96, CHF: 150, JPY: 0.88, CNY: 18.2, AUD: 86, MXN: 7.2, BRL: 24, DOP: 2.2,
+};
+export const RATES: Record<DisplayCurrency, number> = { ...DEFAULT_RATES };
+/** Taux du dollar (gourdes pour 1 dollar), gardé pour les calculs de finances. */
+export let USD_TO_HTG = RATES.USD;
+export function setRates(next: Record<string, unknown>) {
+  for (const c of DISPLAY_CURRENCIES) {
+    const v = next[c];
+    if (c !== 'HTG' && typeof v === 'number' && Number.isFinite(v) && v > 0) RATES[c] = v;
+  }
+  USD_TO_HTG = RATES.USD;
 }
+/** Devises sans centimes. */
+export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG' || c === 'JPY';
 
 export interface FeeSettings {
   percent: number;
@@ -17,14 +33,14 @@ export interface FeeSettings {
 }
 export const DEFAULT_FEES: FeeSettings = { percent: 5, fixedHTG: 0, buyerShare: 50, freeNoFee: true };
 
-export function convert(amount: number, from: Currency, to: Currency) {
+export function convert(amount: number, from: DisplayCurrency, to: DisplayCurrency) {
   if (from === to) return amount;
-  return from === 'USD' ? amount * USD_TO_HTG : amount / USD_TO_HTG;
+  return (amount * RATES[from]) / RATES[to];
 }
 
-const round = (v: number, currency: Currency) => (currency === 'HTG' ? Math.round(v) : Math.round(v * 100) / 100);
+export const round = (v: number, currency: DisplayCurrency) => (zeroDecimal(currency) ? Math.round(v) : Math.round(v * 100) / 100);
 
-export function computeFees(s: FeeSettings, amount: number, paidTickets: number, currency: Currency, customRate?: number) {
+export function computeFees(s: FeeSettings, amount: number, paidTickets: number, currency: DisplayCurrency, customRate?: number) {
   const rate = customRate ?? s.percent;
   if (amount <= 0 && s.freeNoFee) return { rate, fee: 0, buyerFee: 0, organizerFee: 0, total: 0, organizerNet: 0 };
   const fixed = convert(s.fixedHTG, 'HTG', currency) * paidTickets;

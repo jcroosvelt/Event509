@@ -1,28 +1,54 @@
-import type { Currency, Lang } from '@/types';
+import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
-// Taux de démonstration ; le backend fournira le taux du jour.
-/** Taux du jour (gourdes pour 1 dollar) : réglé par l'administrateur, transmis par le serveur. */
-export let USD_TO_HTG = 132;
-export function setUsdToHtg(n: number) {
-  if (Number.isFinite(n) && n > 0) USD_TO_HTG = n;
+/**
+ * Taux de change : gourdes (HTG) pour 1 unité de chaque devise. Les prix sont fixés en gourdes ; l'administrateur règle
+ * ces taux (Administration > Commissions) et le serveur les transmet. Les valeurs ci-dessous servent de départ.
+ */
+export const DEFAULT_RATES: Record<DisplayCurrency, number> = {
+  HTG: 1, USD: 132, EUR: 145, GBP: 168, CAD: 96, CHF: 150, JPY: 0.88, CNY: 18.2, AUD: 86, MXN: 7.2, BRL: 24, DOP: 2.2,
+};
+export const RATES: Record<DisplayCurrency, number> = { ...DEFAULT_RATES };
+/** Taux du dollar (gourdes pour 1 dollar), gardé pour les calculs de finances. */
+export let USD_TO_HTG = RATES.USD;
+export function setRates(next: Partial<Record<DisplayCurrency, number>>) {
+  for (const c of DISPLAY_CURRENCIES) {
+    const v = next[c];
+    if (c !== 'HTG' && typeof v === 'number' && Number.isFinite(v) && v > 0) RATES[c] = v;
+  }
+  USD_TO_HTG = RATES.USD;
 }
+export function setUsdToHtg(n: number) {
+  setRates({ USD: n });
+}
+/** Devises sans centimes. */
+export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG' || c === 'JPY';
 
 const locale = (lang: Lang) => (lang === 'en' ? 'en-US' : 'fr-FR');
 
-export function convert(amount: number, from: Currency, to: Currency) {
+export function convert(amount: number, from: DisplayCurrency, to: DisplayCurrency) {
   if (from === to) return amount;
-  return from === 'USD' ? amount * USD_TO_HTG : amount / USD_TO_HTG;
+  return (amount * RATES[from]) / RATES[to];
 }
 
-export function money(amount: number, currency: Currency, lang: Lang = 'fr') {
+export function money(amount: number, currency: DisplayCurrency, lang: Lang = 'fr') {
   if (amount === 0) return lang === 'en' ? 'Free' : 'Gratuit';
   return moneyRaw(amount, currency, lang);
 }
 
-export function moneyRaw(amount: number, currency: Currency, lang: Lang = 'fr') {
-  const digits = currency === 'USD' && Math.round(amount * 100) % 100 !== 0 ? 2 : 0;
-  const n = new Intl.NumberFormat(locale(lang), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
-  return currency === 'USD' ? `$${n}` : `${n} HTG`;
+export function moneyRaw(amount: number, currency: DisplayCurrency, lang: Lang = 'fr') {
+  const digits = !zeroDecimal(currency) && Math.round(amount * 100) % 100 !== 0 ? 2 : 0;
+  if (currency === 'HTG') return `${new Intl.NumberFormat(locale(lang), { maximumFractionDigits: 0 }).format(amount)} HTG`;
+  if (currency === 'USD') return `$${new Intl.NumberFormat(locale(lang), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount)}`;
+  return new Intl.NumberFormat(locale(lang), { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+}
+
+/** Nom d'une devise dans la langue de l'interface (« euro », « Euro »…). */
+export function currencyName(code: DisplayCurrency, lang: Lang = 'fr') {
+  try {
+    return new Intl.DisplayNames(locale(lang), { type: 'currency' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
 }
 
 export function num(n: number, lang: Lang = 'fr') {
