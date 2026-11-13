@@ -69,3 +69,12 @@ export interface Analytics {
   campaigns: { id: string; name: string; channel: string; status: string; sent: number; opened: number; clicks: number; date: string }[];
 }
 export const getAnalytics = (from: string, to: string) => http<Analytics>(`/org/analytics?from=${from}&to=${to}`);
+
+// Gestionnaire multi-événements
+export interface CalendarEvent { id: string; title: string; start: string; end: string; status: string; city: string; recurring: string | null; sold: number; quota: number }
+export interface CalendarData { month: string; events: CalendarEvent[]; counts: { upcoming: number; past: number; cancelled: number; draft: number; total: number }; next: CalendarEvent[] }
+export const getCalendar = (month: string) => http<CalendarData>(`/org/calendar?month=${month}`);
+export interface EventTemplate { id: string; name: string; createdAt: string; event: Partial<import('@/types').EventItem> }
+export const listTemplates = () => http<EventTemplate[]>('/org/templates');
+export const saveTemplate = (eventId: string, name: string) => http<{ id: string; name: string }>('/org/templates', { method: 'POST', body: JSON.stringify({ eventId, name }) });
+export const deleteTemplate = (id: string) => http<null>(`/org/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });

@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -51,6 +51,7 @@ const VerifiedProgram = lazy(() => import('@/pages/public/VerifiedProgram'));
 const OrgVerification = lazy(() => import('@/pages/organizer/Verification'));
 const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
 const PremiumSettings = lazy(() => import('@/pages/admin/PremiumSettings'));
+const Calendar = lazy(() => import('@/pages/organizer/Calendar'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -132,6 +133,7 @@ export default function App() {
                   { items: [
                     { to: O, label: t('Tableau de bord'), icon: LayoutDashboard, end: true, perm: 'dashboard' },
                     { to: `${O}/evenements`, label: t('Événements'), icon: CalendarDays, perm: 'events' },
+                    { to: `${O}/calendrier`, label: t('Calendrier'), icon: CalendarRange, perm: 'events' },
                     { to: `${O}/participants`, label: t('Participants'), icon: Users, perm: 'attendees' },
                     { to: `${O}/checkin`, label: t('Check-in QR'), icon: ScanLine, perm: 'checkin' },
                   ] },
@@ -178,6 +180,7 @@ export default function App() {
             <Route path="emails" element={<Automations />} />
             <Route path="avis" element={<Reviews />} />
             <Route path="analyses" element={<Analytics />} />
+            <Route path="calendrier" element={<Calendar />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />

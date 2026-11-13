@@ -132,6 +132,9 @@ export async function recompute(orgId: string, q: Q = db()) {
   // Visibilité : un coup de pouce transparent, seulement tant que le badge est actif et que l'avantage est offert
   if (verified && cfg.benefits.visibility && cfg.visibilityBoost > 0) await q.query(`update organizers set data = data || jsonb_build_object('priority', $2::int) where id = $1`, [orgId, cfg.visibilityBoost]);
   else await q.query(`update organizers set data = data - 'priority' where id = $1`, [orgId]);
+  // Avantages actifs, exposés au site pour n'afficher que les outils auxquels l'organisateur a droit (le serveur les contrôle de toute façon)
+  const perks = verified ? (Object.keys(cfg.benefits) as PremiumBenefit[]).filter((k) => cfg.benefits[k]) : [];
+  await q.query(`update organizers set data = data || jsonb_build_object('perks', $2::jsonb) where id = $1`, [orgId, JSON.stringify(perks)]);
   return verified;
 }
 
