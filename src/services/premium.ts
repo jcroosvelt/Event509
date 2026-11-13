@@ -5,7 +5,7 @@ import type {
 
 /** Programme « Organisateur vérifié » : appels au serveur. Il n'existe pas en démonstration (aucun serveur, aucun paiement). */
 
-export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'monthlyPrice' | 'yearlyPrice' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits'> & { onlinePayment: boolean };
+export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'monthlyPrice' | 'yearlyPrice' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits' | 'visibilityBoost' | 'featuredPerOrganizer'> & { onlinePayment: boolean };
 
 export interface PremiumOverview {
   config: PublicPremiumConfig;

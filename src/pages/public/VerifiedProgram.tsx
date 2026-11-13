@@ -81,6 +81,7 @@ export default function VerifiedProgram() {
             </li>
           ))}
         </ol>
+        {c && c.benefits.visibility && c.visibilityBoost > 0 && <p className="mt-3 text-sm text-ink-muted">{t('Visibilité transparente : les événements des organisateurs vérifiés reçoivent un coup de pouce de {n} % dans le tri « Populaires ». Les tris par date et par prix ne sont jamais modifiés, et aucun organisateur n’est masqué.', { n: c.visibilityBoost })}</p>}
         {c && <p className="mt-3 text-sm text-ink-muted">{t('Délai de traitement habituel : {n} jour(s) ouvrés après le dépôt de la demande complète.', { n: c.processingDays })}</p>}
       </section>
 

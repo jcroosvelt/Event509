@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Heart, MapPin, Search, Sparkles, Ticket, Zap } from 'lucide-react';
-import { categories } from '@/data/mock';
+import { categories, organizers } from '@/data/mock';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { listEvents } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
@@ -39,6 +40,13 @@ export default function Home() {
 
   const featured = (events ?? []).filter((e) => e.featured);
   const online = (events ?? []).filter((e) => e.online);
+  // Section réservée aux organisateurs vérifiés : elle s'ajoute au reste, elle ne remplace ni ne masque personne
+  const verifiedOrgs = organizers
+    .filter((o) => o.verified)
+    .map((o) => ({ ...o, upcoming: (events ?? []).filter((e) => e.organizerId === o.id).length }))
+    .filter((o) => o.upcoming > 0)
+    .sort((a, b) => b.upcoming - a.upcoming || a.name.localeCompare(b.name))
+    .slice(0, 12);
   const popular = [...(events ?? [])].sort((a, b) => b.views - a.views).slice(0, 4);
   const greeting = now.getHours() < 18 ? t('Bonjour') : t('Bonsoir');
 
@@ -138,6 +146,25 @@ export default function Home() {
                 : featured.map((e) => <EventCard key={e.id} event={e} className="w-72 shrink-0 snap-start sm:w-auto" />)}
             </div>
           </section>
+
+          {verifiedOrgs.length > 0 && (
+            <section aria-labelledby="h-vo">
+              <SectionHeader id="h-vo" title={t('Organisateurs vérifiés')} />
+              <ul className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:flex-wrap sm:px-0">
+                {verifiedOrgs.map((o) => (
+                  <li key={o.id} className="shrink-0 snap-start">
+                    <Link to={`/o/${o.slug}`} className="flex w-56 items-center gap-3 rounded-3xl bg-surface p-3 shadow-card ring-1 ring-line transition hover:ring-brand-200">
+                      <Avatar name={o.avatar} src={o.logo} size={44} />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1 truncate text-sm font-bold">{o.name} <VerifiedBadge size={14} /></span>
+                        <span className="block truncate text-xs text-ink-muted">{t('{n} à venir', { n: o.upcoming })}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
         <aside aria-label={t('Agenda')} className="space-y-4">

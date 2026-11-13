@@ -124,6 +124,8 @@ function Content() {
           {BENEFITS.map((b) => <Toggle key={b.k} checked={c.benefits[b.k]} onChange={(v) => up({ benefits: { ...c.benefits, [b.k]: v } })} label={t(b.l)} />)}
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:max-w-lg">
+          <Field label={t('Visibilité : coup de pouce dans « Populaires » (%)')} hint={t('Les tris par date et par prix ne sont jamais modifiés')}><Input type="number" inputMode="numeric" min={0} max={100} value={String(c.visibilityBoost)} onChange={(e) => up({ visibilityBoost: num(e.target.value) })} /></Field>
+          <Field label={t('Événements en vedette par organisateur')}><Input type="number" inputMode="numeric" min={0} max={10} value={String(c.featuredPerOrganizer)} onChange={(e) => up({ featuredPerOrganizer: num(e.target.value) })} /></Field>
           <Field label={t('API : requêtes par minute')}><Input type="number" inputMode="numeric" min={1} value={String(c.apiLimits.perMinute)} onChange={(e) => up({ apiLimits: { ...c.apiLimits, perMinute: num(e.target.value) } })} /></Field>
           <Field label={t('API : clés par organisation')}><Input type="number" inputMode="numeric" min={1} value={String(c.apiLimits.maxKeys)} onChange={(e) => up({ apiLimits: { ...c.apiLimits, maxKeys: num(e.target.value) } })} /></Field>
         </div>
