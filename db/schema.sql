@@ -293,3 +293,29 @@ create table if not exists activity_log (
   meta jsonb
 );
 create index if not exists activity_log_org on activity_log(organizer_id, at desc);
+
+-- Support prioritaire (avantage des organisateurs vérifiés) : tickets et conversations.
+create table if not exists support_tickets (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  user_id text,
+  subject text not null,
+  category text not null check (category in ('technical', 'billing', 'event', 'other')),
+  priority text not null check (priority in ('normal', 'priority', 'urgent')),
+  status text not null check (status in ('open', 'pending', 'resolved')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  resolved_at timestamptz
+);
+create index if not exists support_tickets_org on support_tickets(organizer_id, updated_at desc);
+create index if not exists support_tickets_inbox on support_tickets(status, priority, updated_at desc);
+
+create table if not exists support_messages (
+  id text primary key,
+  ticket_id text not null references support_tickets(id) on delete cascade,
+  from_role text not null check (from_role in ('organizer', 'admin')),
+  author text not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists support_messages_ticket on support_messages(ticket_id, created_at);

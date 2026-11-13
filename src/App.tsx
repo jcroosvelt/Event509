@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -53,6 +53,8 @@ const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
 const PremiumSettings = lazy(() => import('@/pages/admin/PremiumSettings'));
 const Calendar = lazy(() => import('@/pages/organizer/Calendar'));
 const Activity = lazy(() => import('@/pages/organizer/Activity'));
+const OrgSupport = lazy(() => import('@/pages/organizer/Support'));
+const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -155,6 +157,7 @@ export default function App() {
                     { to: `${O}/activite`, label: t('Activité de l’équipe'), icon: ClipboardList, perm: 'team' },
                     { to: `${O}/verification`, label: t('Organisateur vérifié'), icon: BadgeCheck, perm: 'settings' },
                     { to: `${O}/abonnement`, label: t('Mon abonnement'), icon: CreditCard, perm: 'settings' },
+                    { to: `${O}/support`, label: t('Support prioritaire'), icon: Headphones, perm: 'settings' },
                     { to: `${O}/parametres`, label: t('Paramètres'), icon: Settings, perm: 'settings' },
                   ] },
                 ]}
@@ -184,6 +187,7 @@ export default function App() {
             <Route path="analyses" element={<Analytics />} />
             <Route path="calendrier" element={<Calendar />} />
             <Route path="activite" element={<Activity />} />
+            <Route path="support" element={<OrgSupport />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />
@@ -205,6 +209,7 @@ export default function App() {
                     { to: `${A}/utilisateurs`, label: t('Utilisateurs'), icon: Users, perm: 'admin' },
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
                     { to: `${A}/programme-verifie`, label: t('Programme vérifié'), icon: BadgeCheck, perm: 'admin' },
+                    { to: `${A}/support`, label: t('Support'), icon: Headphones, perm: 'admin' },
                   ] },
                   { title: t('Finances'), items: [
                     { to: `${A}/transactions`, label: t('Transactions'), icon: Receipt, perm: 'admin' },
@@ -231,6 +236,7 @@ export default function App() {
             <Route path="utilisateurs" element={<AdminUsers />} />
             <Route path="verification" element={<Verification />} />
             <Route path="programme-verifie" element={<PremiumSettings />} />
+            <Route path="support" element={<AdminSupport />} />
             <Route path="litiges" element={<Disputes />} />
             <Route path="commissions" element={<Commissions />} />
             <Route path="utilisateurs/:id" element={<UserDetail />} />

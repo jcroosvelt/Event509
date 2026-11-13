@@ -8,6 +8,7 @@ import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { analyticsRoutes } from './analytics.js';
 import { multiEventRoutes } from './multi.js';
+import { supportRoutes } from './support.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
@@ -1714,6 +1715,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...premiumRoutes({ fail, str, auth, admin, org, audit }),
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
+  ...supportRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };
