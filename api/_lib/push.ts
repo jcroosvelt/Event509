@@ -8,7 +8,7 @@ import { all, db, one } from './db.js';
  * Tant qu'il n'est pas défini, rien n'est envoyé : le reste du site fonctionne normalement.
  */
 
-export type PushChannel = 'tickets' | 'sales' | 'reminders';
+export type PushChannel = 'tickets' | 'sales' | 'reminders' | 'updates';
 export interface PushMessage {
   title: string;
   body: string;
@@ -148,4 +148,11 @@ export async function notifyHolders(eventId: string, m: PushMessage) {
   const [emails, users] = await Promise.all([holderEmails(eventId), holderUserIds(eventId)]);
   const [a, b] = await Promise.all([notifyEmails(emails, m), notifyUsers(users, m)]);
   return a + b;
+}
+
+/** Notifie tous les appareils où l'application est installée (un jeton existe dès qu'elle y a été ouverte). */
+export async function notifyAllDevices(m: PushMessage) {
+  if (!pushConfigured()) return 0;
+  const rows = await all<{ token: string }>(`select distinct token from device_tokens`);
+  return sendPush(rows.map((r) => r.token), m);
 }

@@ -16,6 +16,8 @@ declare global {
     /** Résultat du scanner natif de l'application (message « scan:start »). */
     onQrScanned?: (code: string) => void;
     onQrScanCancelled?: () => void;
+    /** Réponse de l'application à « app:version » : numéro de version installé. */
+    onAppVersion?: (v: { build: number; name: string }) => void;
   }
 }
 
@@ -58,4 +60,21 @@ export function useAppLock() {
     state,
     set: (on: boolean) => postApp(on ? 'lock:on' : 'lock:off'),
   };
+}
+
+/**
+ * Version de l'application installée (numéro de build) : null hors application ou avec une ancienne version qui ne répond pas.
+ * Sert à proposer la mise à jour quand une version plus récente est publiée.
+ */
+export function useAppBuild() {
+  const [v, setV] = useState<{ build: number; name: string } | null>(null);
+  useEffect(() => {
+    if (!inApp()) return;
+    window.onAppVersion = (x) => setV(x);
+    postApp('app:version');
+    return () => {
+      window.onAppVersion = undefined;
+    };
+  }, []);
+  return v;
 }

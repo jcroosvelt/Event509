@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type BrowserContextOptions } from '@playwright/test';
 import { fresh, isMobile, loginAs } from './helpers';
 
 test.describe('participant', () => {
@@ -320,5 +320,113 @@ test.describe('événements près de l’utilisateur', () => {
     await dialog.getByRole('button', { name: /Musique|Music/ }).click();
     await dialog.getByRole('button', { name: /^(Enregistrer|Save)$/ }).click();
     await expect(page.getByRole('heading', { name: /Jacmel/ })).toBeVisible();
+  });
+});
+
+test.describe('installation de l’application Android (APK)', () => {
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  // Fiche de version simulée : ces tests ne dépendent pas du vrai fichier APK
+  const RELEASE = { versionCode: 20, versionName: '1.0.20', size: 24848818, sha256: 'ab12cd34ef56', date: '2026-11-13', minAndroid: '7.0', file: '/app/event509.apk' };
+  const withRelease = async (context: BrowserContext) => {
+    await context.route(/\/app\/version\.json/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(RELEASE) }));
+    return context;
+  };
+  // Sans service worker : sinon il traite lui-même la requête et la simulation ne la voit pas
+  const newCtx = async (browser: Browser, opts: BrowserContextOptions) => withRelease(await browser.newContext({ serviceWorkers: 'block', ...opts }));
+  test.use({ serviceWorkers: 'block' });
+  test.beforeEach(async ({ context }) => {
+    await withRelease(context);
+  });
+
+  test('sur un téléphone Android : invitation, fenêtre d’informations, téléchargement de l’APK', async ({ browser }) => {
+    const ctx = await newCtx(browser, { userAgent: ANDROID, viewport: { width: 390, height: 800 } });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: /Installez l’application EVENT509|Install the EVENT509 app/ })).toBeVisible({ timeout: 8000 });
+    // Ce n'est pas la PWA : aucun événement d'installation, le bouton mène aux informations puis au fichier APK
+    await dialog.getByRole('button', { name: /^(Installer|Install)$/ }).click();
+    await expect(dialog.getByText(/Google Play/)).toBeVisible();
+    const link = dialog.getByRole('link', { name: /Télécharger l’application|Download the app/ });
+    await expect(link).toHaveAttribute('href', '/app/event509.apk');
+    await expect(link).toHaveAttribute('download', 'EVENT509.apk');
+    await expect(dialog.getByText('1.0.20').first()).toBeVisible();
+    await expect(dialog.getByText(/24 Mo|24 MB/).first()).toBeVisible();
+    await ctx.close();
+  });
+
+  test('« Plus tard » masque l’invitation, qui ne revient pas au rechargement', async ({ browser }) => {
+    const ctx = await newCtx(browser, { userAgent: ANDROID, viewport: { width: 390, height: 800 } });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 8000 });
+    await dialog.getByRole('button', { name: /Plus tard|Later/ }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.reload();
+    await page.waitForTimeout(2500);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test('pas d’invitation hors Android ni dans l’application', async ({ browser }) => {
+    const desktop = await newCtx(browser, { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', viewport: { width: 1280, height: 800 } });
+    const pc = await desktop.newPage();
+    await pc.goto('/');
+    await pc.waitForTimeout(2500);
+    await expect(pc.getByRole('dialog')).toHaveCount(0); // ordinateur : l'APK ne s'installe que sur Android
+    await desktop.close();
+    const ctx = await newCtx(browser, { userAgent: ANDROID });
+    const inside = await ctx.newPage();
+    await inside.addInitScript(() => {
+      (window as unknown as { AppBridge: unknown }).AppBridge = { postMessage: () => {} };
+    });
+    await inside.goto('/');
+    await inside.waitForTimeout(2500);
+    await expect(inside.getByRole('dialog')).toHaveCount(0); // l'application elle-même
+    await ctx.close();
+  });
+
+  test('la page /telecharger donne les informations et le fichier', async ({ page }) => {
+    await page.goto('/telecharger');
+    await expect(page.getByRole('heading', { level: 1, name: /Application Android|Android app/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Télécharger l’application|Download the app/ })).toHaveAttribute('href', '/app/event509.apk');
+  });
+
+  test('dans l’application, une version plus récente propose la mise à jour', async ({ browser }) => {
+    const ctx = await newCtx(browser, { userAgent: ANDROID, viewport: { width: 390, height: 800 } });
+    const page = await ctx.newPage();
+    const sent: string[] = [];
+    await page.exposeFunction('record', (m: string) => sent.push(m));
+    await page.addInitScript(() => {
+      const w = window as unknown as { AppBridge: { postMessage: (m: string) => void }; onAppVersion?: (v: { build: number; name: string }) => void; record: (m: string) => void };
+      w.AppBridge = {
+        postMessage: (m: string) => {
+          w.record(m);
+          // Une ancienne version installée (numéro 1) répond à « app:version »
+          if (m === 'app:version') setTimeout(() => w.onAppVersion?.({ build: 1, name: '1.0.1' }), 50);
+        },
+      };
+    });
+    await page.goto('/');
+    const banner = page.getByRole('region', { name: /Mise à jour disponible|Update available/ });
+    await expect(banner).toBeVisible({ timeout: 8000 });
+    await banner.getByRole('button', { name: /Mettre à jour|Update/ }).click();
+    await expect.poll(() => sent.includes('update:open')).toBe(true);
+    await ctx.close();
+  });
+});
+
+test.describe('commission', () => {
+  test('le pourcentage de commission est défini par l’administrateur et repris dans les conditions d’utilisation', async ({ page }) => {
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin/commissions');
+    const fee = page.getByLabel(/^(Pourcentage \(%\)|Percentage \(%\))/);
+    await fee.fill('7');
+    await page.getByRole('button', { name: /^(Enregistrer|Save)$/ }).first().click();
+    // Réglage enregistré (démonstration : gardé sur l'appareil) avant de changer de page
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('e509.demo.fees') ?? '{}').percent === 7);
+    await page.goto('/cgu');
+    await expect(page.getByText(/7 % \+/)).toBeVisible();
   });
 });
