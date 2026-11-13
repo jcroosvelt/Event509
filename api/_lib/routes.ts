@@ -12,6 +12,7 @@ import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
 import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
+import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
@@ -46,6 +47,8 @@ export interface UserRow {
 
 export interface Ctx {
   user: UserRow | null;
+  method?: string;
+  path?: string;
   authorization?: string;
   params: Record<string, string>;
   query: Record<string, string>;
@@ -463,7 +466,10 @@ const createOrder: Handler = async (c) => {
     const emailSent = result.order.status === 'paid'
       ? await sendTicketsEmail({ to: buyer.email, name: buyer.name, lang, event: result.event, tickets: result.tickets, orderId: result.order.id, accessKey })
       : false;
-    if (result.order.status === 'paid') await notifySale(result.order, result.event, result.tickets.length, accessKey);
+    if (result.order.status === 'paid') {
+      await notifySale(result.order, result.event, result.tickets.length, accessKey);
+      await emitSale(result.order, result.event, result.tickets.length);
+    }
     return { order: result.order, tickets: result.tickets, accessKey, emailSent, ...(payUrl ? { payUrl } : {}) };
   } catch (e) {
     // Index unique sur les places : quelqu'un vient de prendre la même place
@@ -494,6 +500,13 @@ async function notifySale(order: Order, ev: EventItem, count: number, key: strin
     await notifyEmails([order.buyerEmail], { title: 'Billet reçu', body: `${count} billet(s) pour ${ev.title}`, url: orderPath(order.id, key), channel: 'tickets' });
   });
   await notifyTeamSale(ev, count);
+}
+
+/** Webhook « ticket.sold » : aucune donnée personnelle d'acheteur, seulement l'identifiant de commande et les montants. */
+async function emitSale(order: Order, ev: EventItem, count: number) {
+  await fireWebhooks(ev.organizerId, 'ticket.sold', {
+    orderId: order.id, eventId: ev.id, eventTitle: ev.title, tickets: count, amount: order.subtotal - order.discount, currency: order.currency, createdAt: order.createdAt,
+  });
 }
 
 /** Nouvelle vente et « presque complet » pour l'organisation. */
@@ -896,6 +909,7 @@ const checkin: Handler = async (c) => {
   const ev = async (id: string) => (await eventById(id)) ?? undefined;
   if (done) {
     await act(c, orgId, 'Entrée validée', done.data.code);
+    await fireWebhooks(orgId, 'ticket.checked_in', { ticketId: done.data.id, eventId: done.data.eventId, checkedInAt: done.data.checkedInAt });
     return { ok: true, attendee: toAttendee(done.data, await ev(done.data.eventId)) };
   }
   const t = (await docs<IssuedTicket>(
@@ -1452,6 +1466,7 @@ async function settleOrder(orderId: string, by?: Ctx) {
   if (out.event) {
     await safely(() => notifyEmails([out.order.buyerEmail], { title: 'Paiement confirmé', body: `Vos billets pour ${out.event!.title} sont prêts`, url: orderPath(out.order.id, out.key), channel: 'tickets' }));
     await notifyTeamSale(out.event, out.tickets.length);
+    await emitSale(out.order, out.event, out.tickets.length);
   }
   return { emailSent };
 }
@@ -1758,6 +1773,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...marketingRoutes({ fail, str, auth, admin, org, audit }),
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ...boostRoutes({ fail, str, auth, admin, org, audit }),
+  ...devApiRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };

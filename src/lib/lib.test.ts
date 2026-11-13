@@ -168,3 +168,28 @@ describe('fichiers envoyés', () => {
     expect(safeName(undefined)).toBe('fichier');
   });
 });
+
+import { checkWebhookUrl } from '../../api/_lib/devapi';
+describe('webhooks : adresses refusées (protection contre l’accès au réseau interne)', () => {
+  it.each([
+    ['http://exemple.com/h', 'https://'],
+    ['https://localhost/h', 'locale'],
+    ['https://127.0.0.1/h', 'privée'],
+    ['https://10.1.2.3/h', 'privée'],
+    ['https://172.16.0.1/h', 'privée'],
+    ['https://192.168.1.10/h', 'privée'],
+    ['https://169.254.169.254/latest/meta-data', 'privée'],
+    ['https://[::1]/h', 'privée'],
+    ['https://service.internal/h', 'locale'],
+    ['https://user:pass@exemple.com/h', 'identifiants'],
+    ['pas une adresse', 'invalide'],
+  ])('refuse %s', async (url, why) => {
+    const err = await checkWebhookUrl(url);
+    expect(err).toBeTruthy();
+    expect(err!.toLowerCase()).toContain(why.toLowerCase());
+  });
+
+  it('accepte une adresse publique en IP', async () => {
+    expect(await checkWebhookUrl('https://8.8.8.8/hook')).toBeNull();
+  });
+});

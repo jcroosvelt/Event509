@@ -135,3 +135,16 @@ export const getAdminBoosts = () => http<{ config: BoostConfig; items: AdminBoos
 export const saveBoostConfig = (c: BoostConfig) => http<BoostConfig>('/admin/boost/config', { method: 'PUT', body: JSON.stringify(c) });
 export const confirmBoost = (id: string) => http<null>(`/admin/boosts/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
 export const cancelBoost = (id: string) => http<null>(`/admin/boosts/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+
+// API et intégrations
+export interface ApiKeyInfo { id: string; name: string; prefix: string; scopes: string[]; createdAt: string; lastUsedAt: string | null; revoked: boolean; requests24h: number }
+export const listApiKeys = () => http<{ canCreate: boolean; limits: { perMinute: number; maxKeys: number }; keys: ApiKeyInfo[] }>('/org/api/keys');
+export const createApiKey = (name: string, scopes: string[]) => http<{ id: string; key: string; prefix: string }>('/org/api/keys', { method: 'POST', body: JSON.stringify({ name, scopes }) });
+export const revokeApiKey = (id: string) => http<null>(`/org/api/keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getApiUsage = () => http<{ at: string; method: string; path: string; status: number; key: string }[]>('/org/api/usage');
+export interface WebhookInfo { id: string; url: string; events: string[]; active: boolean; failures: number; createdAt: string }
+export interface WebhookData { canCreate: boolean; events: string[]; hooks: WebhookInfo[]; deliveries: { hookId: string; event: string; at: string; status: number | null; ok: boolean; error: string | null }[] }
+export const listWebhooks = () => http<WebhookData>('/org/api/webhooks');
+export const createWebhook = (url: string, events: string[]) => http<{ id: string; secret: string }>('/org/api/webhooks', { method: 'POST', body: JSON.stringify({ url, events }) });
+export const deleteWebhook = (id: string) => http<null>(`/org/api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const testWebhook = (id: string) => http<{ ok: boolean; code: number | null; error: string | null }>(`/org/api/webhooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
