@@ -5,22 +5,33 @@ export type Perm =
   | 'dashboard' | 'events' | 'attendees' | 'checkin' | 'promos' | 'refunds' | 'payouts'
   | 'marketing' | 'team' | 'settings' | 'admin';
 
-const teamPerms: Record<TeamRole, Perm[]> = {
+export const teamPerms: Record<TeamRole, Perm[]> = {
   admin: ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'payouts', 'marketing', 'team', 'settings'],
+  manager: ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'marketing'],
+  lead: ['attendees', 'checkin'],
   staff: ['checkin'],
   accountant: ['dashboard', 'attendees', 'refunds', 'payouts'],
 };
 
+/** Permissions attribuables une à une à un membre (avantage « équipes avancées »). */
+export const MEMBER_PERMS: Perm[] = ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'payouts', 'marketing', 'settings'];
+export const permLabel: Record<string, string> = {
+  dashboard: 'Voir les ventes et le tableau de bord', events: 'Créer et modifier des événements', attendees: 'Voir et exporter les participants', checkin: 'Scanner les billets',
+  promos: 'Codes promo', refunds: 'Gérer les remboursements', payouts: 'Versements', marketing: 'Marketing et campagnes', settings: 'Paramètres de l’organisation',
+};
+
 export const teamRoleLabel: Record<TeamRole, string> = {
   admin: 'Administrateur',
-  staff: 'Staff d’entrée',
+  manager: 'Gestionnaire',
+  lead: 'Responsable de contrôle',
+  staff: 'Agent de contrôle',
   accountant: 'Comptable',
 };
 
 export function permsOf(user: AppUser | null): Perm[] {
   if (!user) return [];
   if (user.role === 'admin') return [...teamPerms.admin, 'admin'];
-  if (user.role === 'organizer') return teamPerms[user.teamRole ?? 'admin'];
+  if (user.role === 'organizer') return user.teamPerms ? (user.teamPerms as Perm[]) : teamPerms[user.teamRole ?? 'admin'];
   return [];
 }
 

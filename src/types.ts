@@ -162,7 +162,7 @@ export interface PromoCode {
   active: boolean;
 }
 
-export type TeamRole = 'admin' | 'staff' | 'accountant';
+export type TeamRole = 'admin' | 'manager' | 'lead' | 'staff' | 'accountant';
 
 export interface TeamMember {
   id: string;
@@ -171,6 +171,8 @@ export interface TeamMember {
   role: TeamRole;
   status: 'active' | 'invited';
   lastActive?: string;
+  /** Permissions personnalisées (remplacent celles du rôle) ; absent = permissions du rôle. */
+  perms?: string[];
 }
 
 export interface Attendee {
@@ -255,6 +257,8 @@ export interface AppUser {
   teamRole?: TeamRole;
   /** Organisation dont l'utilisateur fait partie (fournie par le serveur). */
   organizerId?: string;
+  /** Permissions personnalisées du membre (fournies par le serveur). */
+  teamPerms?: string[];
 }
 
 export interface Dispute {
