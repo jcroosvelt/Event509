@@ -1,4 +1,5 @@
 import { AppLockCard } from '@/components/AppLockCard';
+import { ProPageCard } from './ProPageCard';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, Globe, ImagePlus } from 'lucide-react';
@@ -139,6 +140,8 @@ export default function OrgSettings() {
             <Button type="submit" className="mt-4" loading={busy}>{t('Enregistrer')}</Button>
           </form>
         </Card>
+
+        <ProPageCard />
 
         {DEMO ? (
           <Card>

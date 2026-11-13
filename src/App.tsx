@@ -110,6 +110,7 @@ export default function App() {
             <Route path="confidentialite" element={<Legal page="privacy" />} />
             <Route path="ambassadeurs" element={<Ambassador />} />
             <Route path="organisateur-verifie" element={<VerifiedProgram />} />
+            <Route path="organisateur/:slug" element={<OrganizerPage />} />
             <Route path="billets" element={<Wallet_ />} />
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
             <Route path="favoris" element={auth(<Favorites />)} />

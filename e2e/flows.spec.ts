@@ -242,3 +242,14 @@ test.describe('programme Organisateur vérifié (démonstration)', () => {
     await expect(page.getByRole('heading', { name: 'Programme disponible sur le site en ligne' })).toBeVisible();
   });
 });
+
+test.describe('page professionnelle (démonstration)', () => {
+  test('l’adresse /organisateur/<nom> ouvre la page, sans masquer l’espace organisateur', async ({ page }) => {
+    await fresh(page, '/organisateur/lakay-productions');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Lakay Productions');
+    await page.goto('/organisateur/evenements');
+    await expect(page).not.toHaveURL(/lakay/);
+    await page.goto('/organisateur/adresse-inconnue');
+    await expect(page.getByText('Cette page n’existe pas')).toBeVisible();
+  });
+});

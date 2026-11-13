@@ -6,8 +6,9 @@ import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
 import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
-import { checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
+import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
+import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATE, setRate, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
@@ -756,6 +757,17 @@ const deleteOrder: Handler = async (c) => {
   return null;
 };
 
+/** Adresses qu'un organisateur ne peut pas prendre : pages du site et de son espace (/organisateur/…). */
+const RESERVED_SLUGS = new Set([
+  'evenements', 'participants', 'checkin', 'codes-promo', 'remboursements', 'marketing', 'emails', 'ambassadeurs', 'avis', 'equipe', 'versements',
+  'parametres', 'verification', 'abonnement', 'nouveau', 'admin', 'api', 'connexion', 'inscription', 'explorer', 'revente', 'compte', 'billets',
+  'favoris', 'notifications', 'cgu', 'confidentialite', 'event509', 'support', 'aide',
+]);
+const socialUrl = (v: unknown) => {
+  const u = str(v, 200);
+  return /^https:\/\/[^\s"'<>]+$/.test(u) ? u : '';
+};
+
 const saveOrganizer: Handler = async (c) => {
   const orgId = org(c, 'settings');
   const cur = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId]))[0];
@@ -763,13 +775,42 @@ const saveOrganizer: Handler = async (c) => {
   const p = c.body as Partial<Organizer>;
   // Un champ absent de la demande est conservé tel quel (ex. envoi du logo seul)
   const keep = (v: unknown, max: number, old?: string) => (v === undefined ? old : str(v, max));
+  // L'état de vérification, la date de certification et les anciens liens ne viennent jamais du formulaire
   const next: Organizer = {
     ...cur!, name: str(p.name, 80) || cur!.name, bio: keep(p.bio, 1000, cur!.bio), website: keep(p.website, 200, cur!.website),
-    instagram: keep(p.instagram, 60, cur!.instagram), city: keep(p.city, 60, cur!.city) || cur!.city, cover: p.cover ?? cur!.cover,
+    instagram: keep(p.instagram, 60, cur!.instagram), city: keep(p.city, 60, cur!.city) || cur!.city,
     logo: p.logo === '' ? undefined : validCover(p.logo) ? p.logo : cur!.logo,
   };
-  await upsert('organizers', { id: next.id, slug: next.slug, data: next });
-  return next;
+  // Bannière : un dégradé est libre ; une image personnelle, la couleur de marque, les réseaux et l'adresse sont des avantages premium
+  const wantsPremium = (p.cover !== undefined && validCover(p.cover) && !p.cover.includes('gradient(')) || p.brandColor !== undefined || p.socials !== undefined
+    || (p.slug !== undefined && p.slug !== cur!.slug);
+  if (p.cover !== undefined) {
+    if (!validCover(p.cover)) fail(422, 'Image de bannière invalide');
+    next.cover = p.cover;
+  }
+  if (wantsPremium && !(await benefitsFor(orgId)).includes('page')) fail(403, 'La page professionnelle est réservée aux organisateurs vérifiés');
+  let slug = cur!.slug;
+  if (p.brandColor !== undefined) {
+    const col = str(p.brandColor, 7);
+    if (col && !readableBrand(col)) fail(422, 'Choisissez une couleur plus foncée : le texte blanc des boutons doit rester lisible');
+    next.brandColor = col || undefined;
+  }
+  if (p.socials !== undefined) {
+    const so = (p.socials ?? {}) as NonNullable<Organizer['socials']>;
+    next.socials = { facebook: socialUrl(so.facebook), tiktok: socialUrl(so.tiktok), youtube: socialUrl(so.youtube), linkedin: socialUrl(so.linkedin), x: socialUrl(so.x) };
+    for (const k of Object.keys(next.socials) as (keyof typeof next.socials)[]) if (!next.socials[k]) delete next.socials[k];
+  }
+  if (p.slug !== undefined && p.slug !== cur!.slug) {
+    const wanted = str(p.slug, 40).toLowerCase();
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(wanted) || wanted.length < 3) fail(422, 'Adresse invalide : 3 à 40 caractères, lettres minuscules, chiffres et tirets');
+    if (RESERVED_SLUGS.has(wanted)) fail(422, 'Cette adresse est réservée');
+    if (await one(`select 1 from organizers where id <> $2 and (slug = $1 or data->'oldSlugs' ? $1)`, [wanted, orgId])) fail(409, 'Cette adresse est déjà prise');
+    next.oldSlugs = [...new Set([cur!.slug, ...(cur!.oldSlugs ?? [])])].slice(0, 5);
+    next.slug = wanted;
+    slug = wanted;
+  }
+  await upsert('organizers', { id: next.id, slug, data: { ...next, slug } });
+  return { ...next, slug };
 };
 
 async function orgTickets(orgId: string, eventId?: string) {
