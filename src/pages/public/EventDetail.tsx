@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, BadgeCheck, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
 } from 'lucide-react';
-import { getEvent, getOrganizer, listEvents, listResale, occurrences, reportEvent } from '@/services/api';
+import { getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
 import { useForm } from '@/lib/form';
 import { reportReason } from '@/lib/labels';
 import { useAsync, useTitle } from '@/lib/hooks';
@@ -11,6 +11,7 @@ import { useApp } from '@/store/app';
 import { convert, cx, dateLong, dateShort, money, num, time } from '@/lib/format';
 import { downloadICS } from '@/lib/export';
 import { trackPixel } from '@/lib/pixels';
+import { ReviewItem, Stars } from '@/components/Reviews';
 import { Avatar, Badge, Button, Card, Field, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, Select, Textarea, type Tone } from '@/components/ui';
 import { CategoryIcon, EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
 import { useSessionLabel } from '@/components/TicketCard';
@@ -263,6 +264,8 @@ export default function EventDetail() {
             </div>
           </Card>
 
+          <ReviewsSection eventId={ev.id} />
+
           {resale && resale.length > 0 && (
             <Card className="flex flex-wrap items-center gap-4">
               <IconBadge tone="amber"><Repeat2 className="h-[18px] w-[18px]" /></IconBadge>
@@ -402,5 +405,23 @@ export default function EventDetail() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** Note moyenne et avis des participants (visible dès qu'il y en a). */
+function ReviewsSection({ eventId }: { eventId: string }) {
+  const { t, lang } = useApp();
+  const { data } = useAsync(() => listReviews(eventId), [eventId]);
+  if (!data || !data.count) return null;
+  return (
+    <section aria-labelledby="h-reviews">
+      <SectionHeader id="h-reviews" title={t('Avis des participants')} />
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-3xl font-extrabold">{data.average.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}</span>
+        <Stars value={data.average} size={20} label={t('{n} sur 5', { n: data.average })} />
+        <span className="text-sm text-ink-muted">{data.count > 1 ? t('{n} avis', { n: data.count }) : t('1 avis')}</span>
+      </div>
+      <ul className="space-y-3">{data.items.slice(0, 5).map((r) => <ReviewItem key={r.id} r={r} lang={lang} />)}</ul>
+    </section>
   );
 }

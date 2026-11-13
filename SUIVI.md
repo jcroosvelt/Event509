@@ -21,6 +21,7 @@
 
 ## En cours (cette session)
 
+- [x] Avis et notes : un avis par commande payée, après la fin de l'événement (lien de la commande), note moyenne et avis sur la page événement, page organisateur « Avis » avec réponses (table `reviews`, testé sur une base locale : doublon, événement futur et mauvaise clé refusés)
 - [x] Jusqu'à 5 visuels par événement (éditeur : ajout multiple, visuel principal modifiable, retrait ; page événement : galerie de miniatures). Le serveur ne garde que des fichiers du site ou des adresses https, 5 au plus.
 - [x] Taux de change gourdes / dollar réglable par l'administrateur (page Commissions, `PUT /api/admin/rate`, relu depuis la base à chaque requête, enregistré au journal). Par défaut 132.
 - [x] Application Android, phase 4 côté site : messages `ticket:open` / `ticket:close` sur les pages de billet (écran allumé, luminosité maximale, captures bloquées), réglage « Verrouiller l'application » (empreinte ou code du téléphone, visible dans l'application seulement), fichier des liens profonds `/.well-known/assetlinks.json` (empreinte de la clé de signature de l'application)
@@ -82,3 +83,4 @@
 - 2026-11-12 : nouveau billet ultra HD, téléchargement recommandé à la confirmation, déconnexion visible.
 - 2026-11-12 : paiement en ligne MonCash / NatCash / KashPaw / carte (API unique), logos, page de retour, vérification et webhook.
 - 2026-11-12 : visuels multiples (5), taux de change réglable par l'admin, phase 4 côté site (billet, verrouillage, liens profonds).
+- 2026-11-13 : avis et notes (API, page événement, confirmation, page organisateur) ; test e2e « visiteur renvoyé vers la connexion » rendu fiable (il attend le démarrage de l'application).

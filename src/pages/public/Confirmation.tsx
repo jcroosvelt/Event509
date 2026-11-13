@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { ReviewForm, Stars } from '@/components/Reviews';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, Copy, Download, Mail, TriangleAlert } from 'lucide-react';
-import { claimOrder, DEMO, getOrderByKey, verifyOrderPayment } from '@/services/api';
+import { claimOrder, DEMO, getOrderByKey, reviewState, verifyOrderPayment } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { moneyRaw } from '@/lib/format';
@@ -177,10 +178,29 @@ export default function Confirmation() {
         </Card>
       )}
 
+      {!pending && key && !DEMO && <ReviewPrompt orderId={id} orderKey={key} />}
+
       <div className="mt-8 flex flex-col gap-2 sm:flex-row">
         {user && <ButtonLink to="/billets" size="lg" className="flex-1">{t('Ouvrir mes billets')}</ButtonLink>}
         <ButtonLink to="/explorer" size="lg" variant="outline" className="flex-1">{t('Continuer à explorer')}</ButtonLink>
       </div>
     </div>
   );
+}
+
+/** Après l'événement : invitation à noter (une seule fois par commande) ou rappel de l'avis déjà donné. */
+function ReviewPrompt({ orderId, orderKey }: { orderId: string; orderKey: string }) {
+  const { t } = useApp();
+  const [tick, setTick] = useState(0);
+  const { data } = useAsync(() => reviewState(orderId, orderKey), [orderId, orderKey, tick]);
+  if (!data) return null;
+  if (data.canReview) return <ReviewForm orderId={orderId} orderKey={orderKey} onDone={() => setTick((n) => n + 1)} />;
+  if (data.review)
+    return (
+      <Card className="mt-6 flex items-center gap-3">
+        <Stars value={data.review.rating} size={20} label={t('{n} sur 5', { n: data.review.rating })} />
+        <span className="text-sm text-ink-soft">{t('Merci, votre avis est publié.')}</span>
+      </Card>
+    );
+  return null;
 }

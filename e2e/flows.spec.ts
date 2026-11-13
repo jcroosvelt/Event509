@@ -64,6 +64,8 @@ test.describe('participant', () => {
 test.describe('accès et rôles', () => {
   test('un visiteur est renvoyé vers la connexion puis revient à la page demandée', async ({ page }) => {
     await page.goto('/');
+    // L'application doit être démarrée : sinon elle réécrit l'utilisateur de démonstration par-dessus
+    await expect(page.locator('#contenu')).toBeVisible();
     await page.evaluate(() => localStorage.setItem('e509.user', 'null'));
     await page.goto('/compte');
     await expect(page).toHaveURL(/\/connexion\?next=%2Fcompte/);

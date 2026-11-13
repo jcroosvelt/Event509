@@ -1,6 +1,6 @@
 import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, Dispute, EventItem, IssuedTicket, Order, Organizer, Payout,
-  PlatformTarget, PromoCode, RefundRequest, Report, TeamMember, TeamRole, VerificationRequest,
+  PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, VerificationRequest,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
@@ -1487,6 +1487,88 @@ const unregisterDevice: Handler = async (c) => {
   return null;
 };
 
+// ---------- Avis et notes ----------
+
+/** « Marie Dupont » → « Marie D. » : l'avis public ne montre jamais le nom complet. */
+const shortName = (name: string) => {
+  const [first, ...rest] = name.trim().split(/\s+/);
+  return rest.length ? `${first} ${rest[rest.length - 1]![0]!.toUpperCase()}.` : first || 'Participant';
+};
+
+const reviewSummary = async (eventId: string) => {
+  const r = await one<{ avg: string | null; n: string }>(`select avg(rating) as avg, count(*) as n from reviews where event_id = $1`, [eventId]);
+  return { average: r?.avg ? Math.round(Number(r.avg) * 10) / 10 : 0, count: Number(r?.n ?? 0) };
+};
+
+const eventReviews: Handler = async (c) => {
+  const e = await eventById(c.params.id);
+  if (!e || (e.status !== 'published' && e.status !== 'ended')) fail(404, 'Événement introuvable');
+  const items = await docs<Review>(`select data from reviews where event_id = $1 order by created_at desc limit 100`, [e!.id]);
+  return { ...(await reviewSummary(e!.id)), items };
+};
+
+/** L'acheteur (lien de sa commande) peut donner son avis une fois l'événement terminé. */
+const reviewState: Handler = async (c) => {
+  const r = await orderAccess(c, str(c.query.order, 60), str(c.query.k, 60));
+  const ev = await eventById(r.data.eventId);
+  const mine = (await docs<Review>(`select data from reviews where order_id = $1`, [r.data.id]))[0] ?? null;
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  const over = !!ev && localMs(ev.end) < Date.parse(`${nowLocal}Z`);
+  return { canReview: !mine && over && r.data.status === 'paid', over, review: mine };
+};
+
+const createReview: Handler = async (c) => {
+  const r = await orderAccess(c, str(c.body.orderId, 60), str(c.body.key, 60));
+  if (r.data.status !== 'paid') fail(409, 'Seules les commandes payées peuvent être notées');
+  const ev = await eventById(r.data.eventId);
+  if (!ev) fail(404, 'Événement introuvable');
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  if (localMs(ev!.end) >= Date.parse(`${nowLocal}Z`)) fail(409, 'Vous pourrez donner votre avis une fois l’événement terminé');
+  const rating = Math.round(Number(c.body.rating));
+  if (!(rating >= 1 && rating <= 5)) fail(422, 'Choisissez une note de 1 à 5');
+  const rv: Review = {
+    id: newId('rv'), eventId: ev!.id, rating, comment: str(c.body.comment, 1000), author: shortName(r.data.buyerName), createdAt: new Date().toISOString(),
+  };
+  try {
+    await db().query(
+      `insert into reviews (id, event_id, order_id, rating, created_at, data) values ($1,$2,$3,$4,$5,$6)`,
+      [rv.id, rv.eventId, r.data.id, rv.rating, rv.createdAt, JSON.stringify(rv)],
+    );
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') fail(409, 'Vous avez déjà donné votre avis pour cette commande');
+    throw e;
+  }
+  await safely(async () => {
+    const ids = await organizerUserIds(ev!.organizerId);
+    await notifyUsers(ids, { title: 'Nouvel avis', body: `${rv.author} a noté « ${ev!.title} » ${rv.rating}/5`, url: '/organisateur/avis', channel: 'sales' });
+  });
+  return rv;
+};
+
+const orgReviews: Handler = async (c) => {
+  const orgId = org(c, 'marketing');
+  const items = await all<{ data: Review; title: string }>(
+    `select r.data, e.data->>'title' as title from reviews r join events e on e.id = r.event_id where e.organizer_id = $1 order by r.created_at desc limit 300`, [orgId]);
+  return items.map((x) => ({ ...x.data, eventTitle: x.title }));
+};
+
+const replyReview: Handler = async (c) => {
+  const orgId = org(c, 'marketing');
+  const body = str(c.body.body, 1000);
+  if (!body) fail(422, 'Écrivez une réponse');
+  const r = await one<{ data: Review }>(`select r.data from reviews r join events e on e.id = r.event_id where r.id = $1 and e.organizer_id = $2`, [c.params.id, orgId]);
+  if (!r) fail(404, 'Avis introuvable');
+  await db().query(`update reviews set data = data || $2::jsonb where id = $1`, [c.params.id, JSON.stringify({ reply: { body, at: new Date().toISOString() } })]);
+  return null;
+};
+
+const removeReview: Handler = async (c) => {
+  admin(c);
+  const r = await one<{ title: string }>(`delete from reviews where id = $1 returning (select data->>'title' from events where id = event_id) as title`, [c.params.id]);
+  if (r) await audit(c, 'Avis supprimé', r.title ?? c.params.id);
+  return null;
+};
+
 /** Début de l'événement sans fuseau (heure locale d'Haïti) lu comme une heure UTC, comme le reste du site. */
 const localMs = (iso: string) => Date.parse(iso.length === 16 ? `${iso}:00Z` : `${iso}Z`.replace('ZZ', 'Z'));
 
@@ -1546,6 +1628,12 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/events/:id', getEvent],
   ['POST', '/promo/validate', validatePromo],
   ['POST', '/reports', reportEvent],
+  ['GET', '/events/:id/reviews', eventReviews],
+  ['GET', '/reviews/state', reviewState],
+  ['POST', '/reviews', createReview],
+  ['GET', '/org/reviews', orgReviews],
+  ['POST', '/org/reviews/:id/reply', replyReview],
+  ['DELETE', '/admin/reviews/:id', removeReview],
   ['POST', '/files', uploadFile],
   ['GET', '/files/:id', readFile],
   ['GET', '/org/verification', orgVerification],
