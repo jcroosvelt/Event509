@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, Star, Trash2, XCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, Star, Trash2, XCircle, LayoutTemplate } from 'lucide-react';
 import { DEMO, deleteEvent, featureEvent, listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, dateShort, num, time } from '@/lib/format';
 import { orgOf } from '@/lib/permissions';
-import { Badge, Button, ButtonLink, Card, EmptyState, Loading, Modal, PageHeader, ProgressBar, Segmented, type Tone } from '@/components/ui';
+import { deleteTemplate, listTemplates, saveTemplate, type EventTemplate } from '@/services/premium';
+import { Badge, Button, ButtonLink, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, ProgressBar, Segmented, type Tone } from '@/components/ui';
 import { organizers } from '@/data/mock';
 import { EventCover } from '@/components/events';
 import type { EventItem } from '@/types';
@@ -20,7 +21,7 @@ export const eventStatus: Record<EventItem['status'], { l: string; tone: Tone }>
   ended: { l: 'Terminé', tone: 'brand' },
 };
 
-function ActionsMenu({ e, onDuplicate, onCancel, onDelete, onFeature }: { e: EventItem; onDuplicate: () => void; onCancel: () => void; onDelete: () => void; onFeature?: () => void }) {
+function ActionsMenu({ e, onDuplicate, onCancel, onDelete, onFeature, onTemplate }: { e: EventItem; onDuplicate: () => void; onCancel: () => void; onDelete: () => void; onFeature?: () => void; onTemplate?: () => void }) {
   const { t } = useApp();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -51,6 +52,7 @@ function ActionsMenu({ e, onDuplicate, onCancel, onDelete, onFeature }: { e: Eve
           <Link to={`/organisateur/evenements/${e.id}/stats`} className={item} onClick={() => setOpen(false)}><BarChart3 className="h-4 w-4" aria-hidden /> {t('Statistiques')}</Link>
           <Link to={`/e/${e.slug}`} className={item} onClick={() => setOpen(false)}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
           <button type="button" onClick={() => { setOpen(false); onDuplicate(); }} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>
+          {onTemplate && <button type="button" onClick={() => { setOpen(false); onTemplate(); }} className={item}><LayoutTemplate className="h-4 w-4" aria-hidden /> {t('Enregistrer comme modèle')}</button>}
           {onFeature && e.status === 'published' && <button type="button" onClick={() => { setOpen(false); onFeature(); }} className={item}><Star className="h-4 w-4" aria-hidden /> {e.featured ? t('Retirer de la vedette') : t('Mettre en vedette')}</button>}
           {e.status !== 'cancelled' && <button type="button" onClick={() => { setOpen(false); onCancel(); }} className={`${item} text-red-600 hover:bg-red-50`}><XCircle className="h-4 w-4" aria-hidden /> {t('Annuler l’événement')}</button>}
           <button type="button" onClick={() => { setOpen(false); onDelete(); }} className={`${item} text-red-600 hover:bg-red-50`}><Trash2 className="h-4 w-4" aria-hidden /> {t('Supprimer')}</button>
@@ -69,8 +71,6 @@ export default function Events() {
   const [busy, setBusy] = useState(false);
   const [remove, setRemove] = useState<EventItem | null>(null);
 
-  if (loading) return <Loading />;
-  const list = (data ?? []).filter((e) => tab === 'all' || (tab === 'draft' ? ['draft', 'pending', 'rejected'].includes(e.status) : e.status === tab));
 
   // Avantage « visibilité » : le serveur fixe `priority` sur l'organisateur tant que le badge est actif
   const canFeature = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.priority;
@@ -83,6 +83,47 @@ export default function Events() {
       toast(err instanceof Error ? err.message : t('Action impossible. Réessayez.'), 'error');
     }
   };
+
+  // Avantage « multi-événements » : modèles d'événements (le serveur contrôle l'accès)
+  const nav = useNavigate();
+  const canTpl = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.perks?.includes('multiEvents');
+  const [tplFor, setTplFor] = useState<EventItem | null>(null);
+  const [tplName, setTplName] = useState('');
+  const tpls = useAsync(() => (canTpl ? listTemplates() : Promise.resolve([] as EventTemplate[])), [canTpl]);
+  const saveTpl = async () => {
+    setBusy(true);
+    try {
+      await saveTemplate(tplFor!.id, tplName.trim());
+      toast(t('Modèle enregistré'));
+      setTplFor(null);
+      tpls.reload();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('Action impossible. Réessayez.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const fromTemplate = async (tp: EventTemplate) => {
+    // Nouvel événement en brouillon : mêmes billets et lieu, dates à choisir (par défaut dans 30 jours)
+    const d = new Date(Date.now() + 30 * 86_400_000);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const now = new Date();
+    const nowIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    try {
+      const e = tp.event as EventItem;
+      const saved = await saveEvent({
+        ...e, id: '', slug: `${(e.title ?? 'evenement').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}-${Date.now().toString(36).slice(-4)}`, start: `${day}T18:00`, end: `${day}T22:00`,
+        status: 'draft', views: 0, organizerId: orgOf(user), tickets: e.tickets.map((x) => ({ ...x, sold: 0, salesStart: nowIso, salesEnd: `${day}T18:00` })),
+      });
+      toast(t('Événement créé depuis le modèle : choisissez les dates'));
+      nav(`/organisateur/evenements/${saved.id}`);
+    } catch {
+      toast(t('Action impossible. Réessayez.'), 'error');
+    }
+  };
+
+  if (loading) return <Loading />;
+  const list = (data ?? []).filter((e) => tab === 'all' || (tab === 'draft' ? ['draft', 'pending', 'rejected'].includes(e.status) : e.status === tab));
 
   const duplicate = async (e: EventItem) => {
     await saveEvent({ ...e, id: `e${Date.now()}`, slug: `${e.slug}-copie-${Date.now().toString(36).slice(-4)}`, title: `${e.title} (${t('copie')})`, status: 'draft', tickets: e.tickets.map((x) => ({ ...x, sold: 0 })), views: 0 });
@@ -97,6 +138,21 @@ export default function Events() {
         subtitle={t('Créez, modifiez et suivez vos événements.')}
         actions={<ButtonLink to="/organisateur/evenements/nouveau"><Plus className="h-4 w-4" aria-hidden /> {t('Nouvel événement')}</ButtonLink>}
       />
+      {canTpl && (tpls.data?.length ?? 0) > 0 && (
+        <section aria-labelledby="h-tpl" className="mb-6">
+          <h2 id="h-tpl" className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-muted">{t('Mes modèles')}</h2>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {tpls.data!.map((tp) => (
+              <li key={tp.id} className="flex items-center gap-2 rounded-2xl bg-surface p-3 shadow-card">
+                <LayoutTemplate className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{tp.name}</span>
+                <Button size="sm" variant="soft" onClick={() => fromTemplate(tp)}>{t('Utiliser')}</Button>
+                <Button size="sm" variant="ghost" aria-label={t('Supprimer le modèle {name}', { name: tp.name })} onClick={async () => { await deleteTemplate(tp.id).catch(() => {}); tpls.reload(); }}><Trash2 className="h-4 w-4" aria-hidden /></Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <Segmented label={t('Filtre')} className="mb-5" value={tab} onChange={setTab} options={[{ value: 'all', label: t('Tous') }, { value: 'published', label: t('Publiés') }, { value: 'draft', label: t('Brouillons et validation') }]} />
 
       {!list.length ? (
@@ -115,7 +171,7 @@ export default function Events() {
                     <div className="min-w-0 flex-1 py-1">
                       <div className="flex items-start justify-between gap-2">
                         <Badge tone={st.tone}>{t(st.l)}</Badge>
-                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} onDelete={() => setRemove(e)} onFeature={canFeature ? () => feature(e) : undefined} />
+                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} onDelete={() => setRemove(e)} onFeature={canFeature ? () => feature(e) : undefined} onTemplate={canTpl ? () => { setTplFor(e); setTplName(e.title); } : undefined} />
                       </div>
                       <Link to={`/organisateur/evenements/${e.id}/stats`} className="mt-1 line-clamp-1 font-bold hover:text-brand-ink">{e.title}</Link>
                       <div className="text-xs text-ink-muted">{dateShort(e.start, lang)} · {time(e.start, lang)} · {e.venue?.city ?? t('En ligne')}</div>
@@ -131,6 +187,17 @@ export default function Events() {
           })}
         </ul>
       )}
+
+      <Modal
+        open={!!tplFor}
+        onClose={() => setTplFor(null)}
+        title={t('Enregistrer comme modèle')}
+        description={t('Le modèle garde le lieu, la description et les billets, mais ni les dates ni les ventes.')}
+        size="sm"
+        footer={<><Button variant="ghost" className="flex-1" onClick={() => setTplFor(null)}>{t('Annuler')}</Button><Button className="flex-1" loading={busy} onClick={saveTpl}>{t('Enregistrer')}</Button></>}
+      >
+        <Field label={t('Nom du modèle')}><Input value={tplName} maxLength={80} onChange={(e) => setTplName(e.target.value)} /></Field>
+      </Modal>
 
       <Modal
         open={!!remove}

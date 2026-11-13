@@ -104,6 +104,8 @@ export interface Organizer {
   oldSlugs?: string[];
   /** Coup de pouce de visibilité en % (tri « Populaires »), fixé par le serveur pour un organisateur vérifié ; absent sinon. */
   priority?: number;
+  /** Avantages premium actuellement actifs (fixés par le serveur, jamais par l'organisateur). */
+  perks?: PremiumBenefit[];
 }
 
 export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'kashpaw' | 'paypal' | 'transfer';

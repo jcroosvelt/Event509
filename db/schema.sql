@@ -265,3 +265,13 @@ create table if not exists document_access_log (
   at timestamptz not null default now()
 );
 create index if not exists document_access_org on document_access_log(organizer_id, at desc);
+
+-- Modèles d'événements (avantage « gestionnaire multi-événements ») : un événement type, sans dates ni ventes.
+create table if not exists event_templates (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  data jsonb not null
+);
+create index if not exists event_templates_org on event_templates(organizer_id, created_at desc);

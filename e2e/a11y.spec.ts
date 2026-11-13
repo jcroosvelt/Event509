@@ -7,7 +7,7 @@ import { loginAs } from './helpers';
  * principales, en thème clair et sombre. Échoue sur toute violation sérieuse ou critique.
  */
 const publicPages = ['/', '/explorer', '/e/festival-kompa-live-2026', '/e/ayiti-tech-summit/achat?t=t2b:1', '/billets', '/billets/it3', '/connexion', '/organisateur-verifie', '/revente', '/o/lakay-productions', '/organisateur/lakay-productions', '/compte/parametres'];
-const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal'];
+const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/calendrier', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal'];
 
 async function audit(page: import('@playwright/test').Page, path: string) {
   await page.goto(path);
