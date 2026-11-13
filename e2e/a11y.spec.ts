@@ -7,7 +7,7 @@ import { loginAs } from './helpers';
  * principales, en thème clair et sombre. Échoue sur toute violation sérieuse ou critique.
  */
 const publicPages = ['/', '/explorer', '/e/festival-kompa-live-2026', '/e/ayiti-tech-summit/achat?t=t2b:1', '/billets', '/billets/it3', '/connexion', '/organisateur-verifie', '/desinscription', '/revente', '/o/lakay-productions', '/organisateur/lakay-productions', '/compte/parametres'];
-const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/calendrier', '/organisateur/activite', '/organisateur/support', '/organisateur/liens', '/organisateur/boosts', '/organisateur/finances', '/organisateur/marketing', '/organisateur/codes-promo', '/organisateur/equipe', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal', '/admin/support', '/admin/boosts', '/admin/programme-verifie'];
+const orgPages = ['/organisateur', '/organisateur/evenements/e1/stats', '/organisateur/participants', '/organisateur/checkin', '/organisateur/checkin/e1', '/organisateur/versements', '/organisateur/verification', '/organisateur/abonnement', '/organisateur/analyses', '/organisateur/calendrier', '/organisateur/activite', '/organisateur/support', '/organisateur/liens', '/organisateur/api', '/organisateur/boosts', '/organisateur/finances', '/organisateur/marketing', '/organisateur/codes-promo', '/organisateur/equipe', '/organisateur/evenements/nouveau', '/admin', '/admin/utilisateurs', '/admin/utilisateurs/u2', '/admin/transactions', '/admin/versements', '/admin/litiges', '/admin/moderation?onglet=signalements', '/admin/verification', '/admin/commissions', '/admin/journal', '/admin/support', '/admin/boosts', '/admin/programme-verifie'];
 
 async function audit(page: import('@playwright/test').Page, path: string) {
   await page.goto(path);
@@ -28,6 +28,8 @@ for (const theme of ['light', 'dark'] as const) {
   });
 
   test(`espace organisateur et admin sans violation sérieuse — thème ${theme}`, async ({ page }) => {
+    // Une quarantaine de pages sont auditées une à une : le délai par défaut ne suffit plus
+    test.setTimeout(180_000);
     await loginAs(page, /Admin plateforme/);
     await page.evaluate((th) => localStorage.setItem('e509.theme', JSON.stringify(th)), theme);
     const problems: string[] = [];

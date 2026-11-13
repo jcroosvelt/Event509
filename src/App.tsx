@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -60,6 +60,8 @@ const Unsubscribe = lazy(() => import('@/pages/public/Unsubscribe'));
 const Finances = lazy(() => import('@/pages/organizer/Finances'));
 const Boosts = lazy(() => import('@/pages/organizer/Boosts'));
 const AdminBoosts = lazy(() => import('@/pages/admin/AdminBoosts'));
+const ApiPage = lazy(() => import('@/pages/organizer/Api'));
+const Widget = lazy(() => import('@/pages/public/Widget'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -103,6 +105,8 @@ export default function App() {
       <InstallPrompt />
       <Suspense fallback={<Loading />}>
         <Routes>
+          {/* Widget intégrable : sans en-tête ni menu du site */}
+          <Route path="widget/:slug" element={<Widget />} />
           <Route element={<PublicLayout />}>
             <Route index element={<HomePage />} />
             <Route path="explorer" element={<Explore />} />
@@ -158,6 +162,7 @@ export default function App() {
                     { to: `${O}/ambassadeurs`, label: t('Ambassadeurs'), icon: Share2, perm: 'marketing' },
                     { to: `${O}/boosts`, label: t('Boost'), icon: Rocket, perm: 'events' },
                     { to: `${O}/liens`, label: t('Liens de suivi'), icon: Link2, perm: 'marketing' },
+                    { to: `${O}/api`, label: t('API et intégrations'), icon: Code2, perm: 'settings' },
                     { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
                     { to: `${O}/analyses`, label: t('Statistiques avancées'), icon: TrendingUp, perm: 'dashboard' },
                   ] },
@@ -199,6 +204,7 @@ export default function App() {
             <Route path="support" element={<OrgSupport />} />
             <Route path="liens" element={<Links />} />
             <Route path="boosts" element={<Boosts />} />
+            <Route path="api" element={<ApiPage />} />
             <Route path="finances" element={<Finances />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />

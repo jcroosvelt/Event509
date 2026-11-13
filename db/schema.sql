@@ -357,3 +357,59 @@ create table if not exists event_boosts (
 );
 create index if not exists event_boosts_org on event_boosts(organizer_id, created_at desc);
 create index if not exists event_boosts_event on event_boosts(event_id, status);
+
+-- API et intégrations (avantage des organisateurs vérifiés) : clés API (stockées hachées), journal des requêtes,
+-- compteurs pour la limite d'utilisation, webhooks signés et leurs envois.
+create table if not exists api_keys (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  name text not null,
+  prefix text not null,
+  key_hash text unique not null,
+  scopes text[] not null default '{events:read}',
+  created_by text,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+create index if not exists api_keys_org on api_keys(organizer_id);
+
+create table if not exists api_usage (
+  key_id text not null references api_keys(id) on delete cascade,
+  minute timestamptz not null,
+  count integer not null default 0,
+  primary key (key_id, minute)
+);
+
+create table if not exists api_requests (
+  id text primary key,
+  key_id text not null references api_keys(id) on delete cascade,
+  at timestamptz not null default now(),
+  method text not null,
+  path text not null,
+  status integer not null
+);
+create index if not exists api_requests_key on api_requests(key_id, at desc);
+
+create table if not exists webhooks (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  url text not null,
+  secret text not null,
+  events text[] not null default '{ticket.sold}',
+  active boolean not null default true,
+  failures integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists webhooks_org on webhooks(organizer_id);
+
+create table if not exists webhook_deliveries (
+  id text primary key,
+  webhook_id text not null references webhooks(id) on delete cascade,
+  event text not null,
+  at timestamptz not null default now(),
+  status_code integer,
+  ok boolean not null,
+  error text
+);
+create index if not exists webhook_deliveries_hook on webhook_deliveries(webhook_id, at desc);

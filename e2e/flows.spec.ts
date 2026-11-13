@@ -253,3 +253,10 @@ test.describe('page professionnelle (démonstration)', () => {
     await expect(page.getByText('Cette page n’existe pas')).toBeVisible();
   });
 });
+
+test.describe('widget de billetterie (démonstration)', () => {
+  test('n’est pas disponible pour un organisateur sans l’avantage API', async ({ page }) => {
+    await page.goto('/widget/festival-kompa-live-2026');
+    await expect(page.getByText('Ce widget de billetterie n’est pas disponible.')).toBeVisible();
+  });
+});
