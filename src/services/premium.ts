@@ -56,3 +56,16 @@ export const getPremiumAdmin = () =>
   http<{ subscriptions: (PremiumSubscription & { name: string })[]; payments: (PremiumPayment & { organizerId: string; name: string })[] }>('/admin/premium/subscriptions');
 export const confirmPremiumPayment = (id: string) => http<unknown>(`/admin/premium/payments/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
 export const markPremiumRefunded = (id: string) => http<null>(`/admin/premium/payments/${encodeURIComponent(id)}/refunded`, { method: 'POST' });
+
+// Statistiques avancées
+export interface Analytics {
+  range: { from: string; to: string };
+  totals: { revenue: number; fees: number; net: number; tickets: number; orders: number; averageOrder: number };
+  inventory: { capacity: number; sold: number; remaining: number };
+  series: { day: string; tickets: number; revenue: number }[];
+  events: { id: string; title: string; start: string; status: string; category: string; revenue: number; ticketsInPeriod: number; orders: number; views: number; quota: number; sold: number; remaining: number; conversion: number }[];
+  categories: { id: string; revenue: number; tickets: number }[];
+  sources: { key: 'direct' | 'promo' | 'ambassador'; orders: number; revenue: number }[];
+  campaigns: { id: string; name: string; channel: string; status: string; sent: number; opened: number; clicks: number; date: string }[];
+}
+export const getAnalytics = (from: string, to: string) => http<Analytics>(`/org/analytics?from=${from}&to=${to}`);

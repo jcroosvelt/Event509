@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  ScanLine, Settings, Share2, Star, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -51,6 +51,7 @@ const VerifiedProgram = lazy(() => import('@/pages/public/VerifiedProgram'));
 const OrgVerification = lazy(() => import('@/pages/organizer/Verification'));
 const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
 const PremiumSettings = lazy(() => import('@/pages/admin/PremiumSettings'));
+const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
 const Team = lazy(() => import('@/pages/organizer/Team'));
@@ -144,6 +145,7 @@ export default function App() {
                     { to: `${O}/emails`, label: t('Emails automatiques'), icon: Mail, perm: 'marketing' },
                     { to: `${O}/ambassadeurs`, label: t('Ambassadeurs'), icon: Share2, perm: 'marketing' },
                     { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
+                    { to: `${O}/analyses`, label: t('Statistiques avancées'), icon: TrendingUp, perm: 'dashboard' },
                   ] },
                   { title: t('Organisation'), items: [
                     { to: `${O}/equipe`, label: t('Équipe & rôles'), icon: UserCog, perm: 'team' },
@@ -175,6 +177,7 @@ export default function App() {
             <Route path="marketing" element={<Marketing />} />
             <Route path="emails" element={<Automations />} />
             <Route path="avis" element={<Reviews />} />
+            <Route path="analyses" element={<Analytics />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />
