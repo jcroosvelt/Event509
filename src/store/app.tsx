@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
-import { becomeOrganizer, claimOrder, DEMO, fetchMe, fetchMyOrders, fetchMyTickets, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
+import { becomeOrganizer, claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
+import { DEFAULT_PLACE, type Place, type TasteProfile } from '@/data/countries';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
 import { isDisplayCurrency, type AppUser, type DisplayCurrency, type IssuedTicket, type Lang, type NotificationItem, type Order } from '@/types';
@@ -72,6 +73,18 @@ interface AppState {
   t: (fr: string, vars?: Vars) => string;
   currency: DisplayCurrency;
   setCurrency: (c: DisplayCurrency) => void;
+  /** Position de l'utilisateur (pays, ville) : les événements proches passent en premier. */
+  place: Place;
+  /** Choisie à la main (n'est plus remplacée par la détection) ou détectée. */
+  setPlace: (p: Pick<Place, 'country' | 'city'>, manual?: boolean) => void;
+  /** Cherche la position réelle (GPS, avec l'autorisation de l'utilisateur) ; renvoie false si elle n'a pas pu être trouvée. */
+  locate: () => Promise<boolean>;
+  /** Centres d'intérêt choisis (catégories). */
+  tastes: string[];
+  setTastes: (c: string[]) => void;
+  /** Goûts de l'utilisateur : choix, favoris, billets achetés, événements consultés. */
+  profile: TasteProfile;
+  recordView: (eventId: string) => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
 
@@ -122,6 +135,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Une valeur inconnue (ancienne version, stockage modifié) retombe sur les gourdes
   const currency: DisplayCurrency = isDisplayCurrency(storedCurrency) ? storedCurrency : 'HTG';
   const [theme, setTheme] = usePersisted<Theme>('e509.theme', 'system');
+  const [place, setPlaceState] = usePersisted<Place>('e509.place', DEFAULT_PLACE);
+  const [tastes, setTastes] = usePersisted<string[]>('e509.tastes', []);
+  const [viewed, setViewed] = usePersisted<string[]>('e509.viewed', []);
   const [user, setUser] = usePersisted<AppUser | null>('e509.user', DEMO ? db.users[0] : null);
   const [favorites, setFavorites] = usePersisted<string[]>('e509.favs', DEMO ? ['e2', 'e4'] : []);
   const [reminders, setReminders] = usePersisted<string[]>('e509.reminders', DEMO ? ['e2'] : []);
@@ -253,12 +269,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [setUser, setTickets, setOrders]);
 
+  const setPlace = useCallback((p: Pick<Place, 'country' | 'city'>, manual = true) => setPlaceState({ country: p.country, city: p.city, manual }), [setPlaceState]);
+
+  /** Cherche la position réelle (GPS, avec l'autorisation de l'utilisateur) ; true si une ville connue a été trouvée. */
+  const locate = useCallback(async () => {
+    const g = await locateByGps();
+    if (!g) return false;
+    setPlaceState({ ...g, manual: false });
+    return true;
+  }, [setPlaceState]);
+
+  // Au démarrage : GPS si l'autorisation est déjà accordée (aucune fenêtre à afficher), sinon pays de la connexion.
+  // Un lieu choisi à la main n'est jamais remplacé. La démonstration garde un classement stable (Haïti).
+  useEffect(() => {
+    if (DEMO || place.manual) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const perm = 'geolocation' as PermissionName;
+        const st = await navigator.permissions?.query({ name: perm });
+        if (st?.state === 'granted') {
+          const g = await locateByGps();
+          if (g && alive) return setPlaceState({ ...g, manual: false });
+        }
+      } catch {
+        /* autorisations non lisibles : on passe au pays de la connexion */
+      }
+      const d = await detectPlace();
+      if (!d || !alive) return;
+      setPlaceState((cur) => (cur.manual ? cur : { country: d.country, city: d.city || (cur.country === d.country ? cur.city : ''), manual: false }));
+    })();
+    return () => {
+      alive = false;
+    };
+    // Une seule fois au démarrage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const profile = useMemo<TasteProfile>(
+    () => ({ tastes, favorites, purchased: [...new Set([...orders.map((o) => o.eventId), ...tickets.map((x) => x.eventId)])], viewed }),
+    [tastes, favorites, orders, tickets, viewed],
+  );
+
   const toggle = (set: (fn: (s: string[]) => string[]) => void) => (id: string) =>
     set((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
 
   const value = useMemo<AppState>(
     () => ({
       lang, setLang, t, currency, setCurrency, theme, setTheme,
+      place, setPlace, locate, tastes, setTastes, profile,
+      recordView: (id) => setViewed((v) => [id, ...v.filter((x) => x !== id)].slice(0, 30)),
       user, login, startSession, refresh: sync, logout,
       updateUser: (patch) => {
         setUser((u) => (u ? { ...u, ...patch } : u));
@@ -290,7 +350,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toasts, toast, dismissToast,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lang, t, currency, theme, user, login, startSession, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
+    [lang, t, currency, theme, place, setPlace, locate, tastes, profile, user, login, startSession, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -16,6 +16,16 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
     query,
     body: req.body,
     authorization: req.headers.authorization,
+    geo: {
+      country: String(req.headers['x-vercel-ip-country'] ?? '').toUpperCase() || undefined,
+      city: (() => {
+        try {
+          return decodeURIComponent(String(req.headers['x-vercel-ip-city'] ?? '')).slice(0, 80) || undefined;
+        } catch {
+          return undefined;
+        }
+      })(),
+    },
   });
   res.setHeader('Cache-Control', 'no-store');
   if (out.body instanceof Binary) {

@@ -50,6 +50,7 @@ export interface Ctx {
   method?: string;
   path?: string;
   authorization?: string;
+  geo?: { country?: string; city?: string };
   params: Record<string, string>;
   query: Record<string, string>;
   body: Record<string, unknown>;
@@ -736,6 +737,8 @@ const saveEvent: Handler = async (c) => {
     organizerId: existing?.organizer_id ?? orgId,
     cover: images.length ? images[0]! : validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
     images,
+    // Pays du lieu (code à 2 lettres) : les participants de ce pays voient l'événement en premier
+    venue: e.venue ? { ...e.venue, country: /^[A-Z]{2}$/.test(String(e.venue.country ?? '')) ? e.venue.country : undefined } : null,
     // Les ventes et les vues sont tenues par le serveur, pas par le formulaire
     views: existing?.data.views ?? 0,
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
@@ -1291,6 +1294,12 @@ async function siteInfo(q: Q = db()): Promise<Record<string, string>> {
 const LEGAL_DOCS = ['terms', 'privacy', 'refund'];
 
 /** Textes juridiques modifiés par l'administrateur (public). Ce qui n'a pas été modifié garde le texte d'origine du site. */
+/** Pays et ville de la connexion (fournis par l'hébergeur), pour proposer d'abord les événements proches. Rien n'est enregistré. */
+const getGeo: Handler = async (c) => ({
+  country: /^[A-Z]{2}$/.test(c.geo?.country ?? '') ? c.geo!.country! : null,
+  city: c.geo?.city ?? null,
+});
+
 const getLegal: Handler = async () => {
   const r = await one<{ value: Record<string, Record<string, string>> }>(`select value from settings where key = 'legal'`);
   return r?.value ?? {};
@@ -1923,6 +1932,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
 
   ['PUT', '/admin/fees', saveFees],
   ['PUT', '/admin/rate', saveRate],
+  ['GET', '/geo', getGeo],
   ['GET', '/legal', getLegal],
   ['PUT', '/admin/legal', saveLegal],
   ['PUT', '/admin/site', saveSite],

@@ -53,6 +53,8 @@ export interface Venue {
   name: string;
   address: string;
   city: string;
+  /** Pays du lieu (code à 2 lettres, ex. HT, US). Sans valeur : déduit de la ville, sinon Haïti. */
+  country?: string;
 }
 
 export type EventStatus = 'draft' | 'pending' | 'published' | 'rejected' | 'cancelled' | 'ended';

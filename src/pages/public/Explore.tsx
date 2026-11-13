@@ -5,6 +5,8 @@ import { categories, cities } from '@/data/mock';
 import { listEvents, type EventFilters } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
+import { countryName } from '@/data/countries';
+import { PersonalizeModal } from '@/components/PersonalizeModal';
 import { cx } from '@/lib/format';
 import { Button, Chip, EmptyState, Field, Input, Modal, Segmented, Select, Skeleton, Toggle } from '@/components/ui';
 import { CategoryIcon, EventCard } from '@/components/events';
@@ -13,8 +15,9 @@ import type { CategoryId } from '@/types';
 const whenLabels = { '': 'Toutes', today: 'Aujourd’hui', weekend: 'Ce week-end', week: '7 prochains jours', month: 'Ce mois-ci' } as const;
 
 export default function Explore() {
-  const { t } = useApp();
+  const { t, place, profile, lang } = useApp();
   useTitle(t('Explorer'));
+  const [personalize, setPersonalize] = useState(false);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState(false);
 
@@ -25,7 +28,10 @@ export default function Explore() {
     when: (params.get('when') ?? '') as EventFilters['when'],
     price: (params.get('price') ?? '') as EventFilters['price'],
     online: params.get('online') === '1',
-    sort: (params.get('sort') ?? 'date') as EventFilters['sort'],
+    // Par défaut : « Pour vous » (ma ville, puis mon pays, puis mes goûts, puis la date)
+    sort: (params.get('sort') ?? 'near') as EventFilters['sort'],
+    place,
+    profile,
   };
   const set = (k: string, v: string) => {
     const p = new URLSearchParams(params);
@@ -33,7 +39,7 @@ export default function Explore() {
     else p.delete(k);
     setParams(p, { replace: true });
   };
-  const { data, loading } = useAsync(() => listEvents(f), [params.toString()]);
+  const { data, loading } = useAsync(() => listEvents(f), [params.toString(), place.country, place.city, profile.tastes.join(), profile.favorites.join(), profile.purchased.join(), profile.viewed.join()]);
   const activeCount = ['city', 'category', 'when', 'price', 'online'].filter((k) => params.get(k)).length;
   const count = data?.length ?? 0;
 
@@ -116,15 +122,22 @@ export default function Explore() {
             <Segmented
               size="sm"
               label={t('Trier par')}
-              value={f.sort ?? 'date'}
+              value={f.sort ?? 'near'}
               onChange={(v) => set('sort', v)}
               options={[
+                { value: 'near', label: t('Pour vous') },
                 { value: 'date', label: t('Date') },
                 { value: 'popular', label: t('Popularité') },
                 { value: 'price', label: t('Prix') },
               ]}
             />
           </div>
+          {f.sort === 'near' && (
+            <p className="-mt-2 mb-4 text-xs text-ink-muted">
+              {t('Classés selon votre position ({place}), puis vos goûts, puis la date.', { place: place.city ? `${place.city}, ${countryName(place.country, lang)}` : countryName(place.country, lang) })}{' '}
+              <button type="button" onClick={() => setPersonalize(true)} className="font-semibold text-brand-ink underline">{t('Personnaliser')}</button>
+            </p>
+          )}
           {f.sort === 'popular' && <p className="-mt-2 mb-4 text-xs text-ink-muted">{t('Classement transparent : les événements « Sponsorisés » (boost payant) passent en tête, et ceux des organisateurs vérifiés reçoivent un léger coup de pouce. Les tris par date et par prix ne sont jamais modifiés.')}</p>}
           {loading ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-72" />)}</div>
@@ -144,6 +157,7 @@ export default function Explore() {
       <Modal open={open} onClose={() => setOpen(false)} title={t('Filtres')} footer={<Button className="flex-1" onClick={() => setOpen(false)}>{count > 1 ? t('Voir {n} événements', { n: count }) : t('Voir {n} événement', { n: count })}</Button>}>
         {Filters}
       </Modal>
+      <PersonalizeModal open={personalize} onClose={() => setPersonalize(false)} />
     </div>
   );
 }
