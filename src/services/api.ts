@@ -12,6 +12,7 @@ import type {
 } from '@/types';
 import { convert, RATES, setRates, setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { defaultSiteInfo, type SiteInfo } from '@/lib/legalDoc';
+import { browserCountry, DEFAULT_PLACE, EMPTY_PROFILE, nearestKnownCity, proximityTier, tasteScore, tasteWeights, type Place, type TasteProfile } from '@/data/countries';
 import type { LegalDoc } from '@/data/legalDefaults';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
@@ -176,7 +177,43 @@ export interface EventFilters {
   price?: '' | 'free' | 'paid';
   maxPrice?: number;
   online?: boolean;
-  sort?: 'date' | 'popular' | 'price';
+  /** Position de l'utilisateur, pour le tri « Près de chez moi ». */
+  place?: Place;
+  /** Goûts de l'utilisateur (catégories choisies, favoris, billets, événements consultés) pour le tri « Pour vous ». */
+  profile?: TasteProfile;
+  sort?: 'near' | 'date' | 'popular' | 'price';
+}
+
+/** Position probable de l'utilisateur : pays (et ville) de sa connexion, fournis par le serveur ; sinon la langue du navigateur. */
+export async function detectPlace(): Promise<Pick<Place, 'country' | 'city'> | null> {
+  if (!DEMO) {
+    try {
+      const g = await http<{ country: string | null; city: string | null }>('/geo');
+      if (g.country) return { country: g.country, city: g.city ?? '' };
+    } catch {
+      /* hors ligne : on essaie la langue */
+    }
+  }
+  const c = browserCountry();
+  return c ? { country: c, city: '' } : null;
+}
+
+/**
+ * Position réelle de l'utilisateur (GPS), avec son autorisation : rattachée à la ville connue la plus proche.
+ * Hors d'un rayon de 60 km d'une ville connue, seul le pays de la connexion reste utilisé.
+ */
+export function locateByGps(): Promise<Pick<Place, 'country' | 'city'> | null> {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator)) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const near = nearestKnownCity(pos.coords.latitude, pos.coords.longitude);
+        resolve(near ? { country: near.country, city: near.city } : null);
+      },
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 10 * 60_000 },
+    );
+  });
 }
 
 export function minPrice(e: EventItem) {
@@ -213,8 +250,11 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
   const boosted = (e: EventItem) => e.views * (1 + (db.organizers.find((o) => o.id === e.organizerId)?.priority ?? 0) / 100);
   // Événements sponsorisés (boost payant) : en tête de « Populaires », étiquetés « Sponsorisé » ; date et prix ne bougent jamais
   const sponsored = (e: EventItem) => (isBoosted(e) ? 1 : 0);
+  // « Près de chez moi » : même ville, puis même pays, puis le reste ; à proximité égale, par date. Date et prix ne sont jamais modifiés.
+  const place = f.place ?? DEFAULT_PLACE;
+  const weights = tasteWeights(f.profile ?? EMPTY_PROFILE, db.events);
   list = [...list].sort((a, b) =>
-    sort === 'popular' ? sponsored(b) - sponsored(a) || boosted(b) - boosted(a) : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
+    sort === 'near' ? proximityTier(a, place) - proximityTier(b, place) || tasteScore(b, weights) - tasteScore(a, weights) || a.start.localeCompare(b.start) : sort === 'popular' ? sponsored(b) - sponsored(a) || boosted(b) - boosted(a) : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
   );
   return clone(list);
 }

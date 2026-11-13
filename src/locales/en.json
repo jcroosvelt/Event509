@@ -1897,5 +1897,22 @@
   "Les prix sont fixés en gourdes (HTG). Indiquez ce que vaut 1 unité de chaque devise en gourdes : l’application s’en sert pour afficher les prix dans la devise choisie par l’acheteur. Le paiement est toujours prélevé en gourdes. Les commandes déjà passées ne changent pas.": "Prices are set in gourdes (HTG). Enter what 1 unit of each currency is worth in gourdes: the app uses it to show prices in the currency chosen by the buyer. Payment is always charged in gourdes. Orders already placed do not change.",
   "1 {code} = … gourdes": "1 {code} = … gourdes",
   "Enregistrer les taux": "Save the rates",
-  "Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.": "Prices are set in gourdes: you will be charged {htg}, at today's rate."
+  "Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.": "Prices are set in gourdes: you will be charged {htg}, at today's rate.",
+  "Position trouvée : les événements près de vous passent en premier": "Location found: events near you now come first",
+  "Position introuvable. Autorisez la localisation ou choisissez votre pays et votre ville.": "Location not found. Allow location access or choose your country and city.",
+  "Préférences enregistrées": "Preferences saved",
+  "Personnaliser": "Personalize",
+  "Les événements près de vous et ceux que vous aimez passent en premier.": "Events near you and the ones you like come first.",
+  "Où êtes-vous ?": "Where are you?",
+  "Utiliser ma position": "Use my location",
+  "Pays": "Country",
+  "Ce que vous aimez": "What you like",
+  "Vos favoris, vos billets et les événements que vous consultez comptent aussi. Ces choix restent sur cet appareil.": "Your favorites, your tickets and the events you view count too. These choices stay on this device.",
+  "Position et centres d’intérêt": "Location and interests",
+  "{n} centre(s) d’intérêt": "{n} interest(s)",
+  "Les participants de ce pays voient votre événement en premier": "Attendees in this country see your event first",
+  "Pour vous": "For you",
+  "Classés selon votre position ({place}), puis vos goûts, puis la date.": "Sorted by your location ({place}), then your tastes, then date.",
+  "Près de chez vous : {place}": "Near you: {place}",
+  "Aucun événement à venir près de chez vous pour le moment. Changez votre position ou explorez tout le catalogue.": "No upcoming events near you right now. Change your location or explore the whole catalog."
 }

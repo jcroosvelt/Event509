@@ -7,6 +7,8 @@ import { languages } from '@/lib/i18n';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { Button, Card, Field, Input, Modal, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
 import { currencyName } from '@/lib/format';
+import { countryName } from '@/data/countries';
+import { PersonalizeModal } from '@/components/PersonalizeModal';
 import { AppLockCard } from '@/components/AppLockCard';
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
@@ -14,7 +16,8 @@ const NOTIF_KEY = 'e509.notifPrefs';
 const defaultPrefs = { reminders: true, updates: true, reco: true, sms: false, whatsapp: true, marketing: false };
 
 export default function Settings() {
-  const { lang, setLang, currency, setCurrency, theme, setTheme, user, updateUser, logout, toast, t } = useApp();
+  const { lang, setLang, currency, setCurrency, theme, setTheme, user, updateUser, logout, toast, t, place, tastes } = useApp();
+  const [personalize, setPersonalize] = useState(false);
   useTitle(t('Paramètres'));
   const nav = useNavigate();
   const [prefs, setPrefsState] = useState(() => load(NOTIF_KEY, defaultPrefs));
@@ -81,6 +84,15 @@ export default function Settings() {
       <PageHeader title={t('Paramètres')} />
       <div className="space-y-4">
         <AppLockCard />
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-bold">{t('Position et centres d’intérêt')}</h2>
+              <p className="mt-1 text-sm text-ink-soft">{place.city ? `${place.city}, ` : ''}{countryName(place.country, lang)}{tastes.length ? ` · ${t('{n} centre(s) d’intérêt', { n: tastes.length })}` : ''}</p>
+            </div>
+            <Button variant="outline" onClick={() => setPersonalize(true)}>{t('Personnaliser')}</Button>
+          </div>
+        </Card>
         <Card>
           <h2 className="mb-4 font-bold">{t('Préférences')}</h2>
           <div className="space-y-4">
@@ -158,6 +170,7 @@ export default function Settings() {
           </Field>
         </form>
       </Modal>
+      <PersonalizeModal open={personalize} onClose={() => setPersonalize(false)} />
     </div>
   );
 }

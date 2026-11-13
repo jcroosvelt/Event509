@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, CalendarDays, Heart, MapPin, Search, Sparkles, Ticket, Zap } from 'lucide-react';
+import { ArrowRight, CalendarDays, Crosshair, Heart, MapPin, Search, Sparkles, Ticket, Zap } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { listEvents } from '@/services/api';
@@ -8,6 +8,8 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort } from '@/lib/format';
 import { isBoosted } from '@/lib/boost';
+import { countryName, proximityTier } from '@/data/countries';
+import { PersonalizeModal } from '@/components/PersonalizeModal';
 import { Avatar, Card, Chip, IconBadge, ProgressRing, SectionHeader, Skeleton, StatCard } from '@/components/ui';
 import { CategoryIcon, EventCard, EventRow } from '@/components/events';
 import { WeekStrip } from '@/components/WeekStrip';
@@ -20,10 +22,14 @@ function startOfWeek(d: Date) {
 const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export default function Home() {
-  const { t, user, tickets, favorites, lang } = useApp();
+  const { t, user, tickets, favorites, lang, place, profile } = useApp();
+  const [personalize, setPersonalize] = useState(false);
   useTitle(t('Découvrir'));
   const nav = useNavigate();
   const { data: events, loading } = useAsync(() => listEvents({ sort: 'date' }), []);
+  // « Pour vous » : ma ville, puis mon pays, puis mes goûts, puis la date
+  const { data: near } = useAsync(() => listEvents({ sort: 'near', place, profile }), [place.country, place.city, profile.tastes.join(), profile.favorites.join(), profile.purchased.join(), profile.viewed.join()]);
+  const nearby = (near ?? []).filter((e) => proximityTier(e, place) < 2).slice(0, 4);
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(() => new Date());
   const [week, setWeek] = useState(() => startOfWeek(new Date()));
@@ -129,6 +135,23 @@ export default function Home() {
             </div>
           )}
 
+          <section aria-labelledby="h-near">
+            <SectionHeader
+              id="h-near"
+              title={place.city ? t('Près de chez vous : {place}', { place: place.city }) : t('Près de chez vous : {place}', { place: countryName(place.country, lang) })}
+              action={<button type="button" onClick={() => setPersonalize(true)} className="flex items-center gap-1 text-sm font-semibold text-brand-ink"><Crosshair className="h-4 w-4" aria-hidden /> {t('Personnaliser')}</button>}
+            />
+            {nearby.length ? (
+              <div className="no-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
+                {nearby.map((e) => <EventCard key={e.id} event={e} className="w-72 shrink-0 snap-start sm:w-auto" />)}
+              </div>
+            ) : (
+              <Card className="text-sm text-ink-soft">
+                {t('Aucun événement à venir près de chez vous pour le moment. Changez votre position ou explorez tout le catalogue.')}
+              </Card>
+            )}
+          </section>
+
           <section aria-labelledby="h-cat">
             <SectionHeader id="h-cat" title={t('Catégories')} />
             <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
@@ -214,6 +237,7 @@ export default function Home() {
           </Link>
         </div>
       </section>
+      <PersonalizeModal open={personalize} onClose={() => setPersonalize(false)} />
     </div>
   );
 }

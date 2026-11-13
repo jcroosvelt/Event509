@@ -297,3 +297,28 @@ test.describe('devises', () => {
     await expect(page.getByText(/débité de|charged/)).toHaveCount(0);
   });
 });
+
+test.describe('événements près de l’utilisateur', () => {
+  test('l’accueil et l’exploration mettent en premier la ville et le pays, et on peut personnaliser', async ({ page }) => {
+    await fresh(page, '/');
+    await page.evaluate(() => localStorage.setItem('e509.place', JSON.stringify({ country: 'HT', city: 'Cap-Haïtien', manual: true })));
+    await page.reload();
+    await expect(page.getByRole('heading', { name: /Cap-Haïtien/ })).toBeVisible();
+    // Dans la section proche : les événements de la ville d'abord
+    const near = page.locator('section[aria-labelledby="h-near"]');
+    await expect(near.getByRole('link').first()).toBeVisible();
+
+    // Exploration : tri « Pour vous » par défaut
+    await page.goto('/explorer');
+    await expect(page.getByRole('radio', { name: /Pour vous|For you/ })).toBeChecked();
+
+    // Personnaliser : pays, ville et centres d'intérêt
+    await page.goto('/');
+    await page.getByRole('button', { name: /Personnaliser|Personalize/ }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^(Ville|City)/).fill('Jacmel');
+    await dialog.getByRole('button', { name: /Musique|Music/ }).click();
+    await dialog.getByRole('button', { name: /^(Enregistrer|Save)$/ }).click();
+    await expect(page.getByRole('heading', { name: /Jacmel/ })).toBeVisible();
+  });
+});

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, Monit
 import { categories, organizers } from '@/data/mock';
 import { getEvent, rowLetter, saveEvent, seatMapOf, uploadFile } from '@/services/api';
 import { shrinkImage } from '@/lib/image';
+import { COUNTRIES, countryName, countryOfEvent, DEFAULT_COUNTRY } from '@/data/countries';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { cx, uid } from '@/lib/format';
@@ -52,7 +53,7 @@ const steps = ['Informations', 'Date & lieu', 'Billets', 'Page & suivi', 'Public
 export default function EventEditor() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { toast, t, user } = useApp();
+  const { toast, t, user, lang } = useApp();
   const orgId = orgOf(user);
   const verified = organizers.find((o) => o.id === orgId)?.verified;
   const [ev, setEv] = useState<EventItem | null>(id ? null : blank(orgId));
@@ -351,6 +352,11 @@ export default function EventEditor() {
                     <div data-field="venue" className="sm:col-span-2"><Field label={t('Nom du lieu')} error={errors.venue} required><Input value={ev.venue?.name ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { address: '', city: '' }), name: e.target.value } })} placeholder={t('Ex. Salle des fêtes')} /></Field></div>
                     <Field label={t('Adresse')}><Input autoComplete="street-address" value={ev.venue?.address ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { name: '', city: '' }), address: e.target.value } })} /></Field>
                     <Field label={t('Ville')}><Input autoComplete="address-level2" value={ev.venue?.city ?? ''} onChange={(e) => up({ venue: { ...(ev.venue ?? { name: '', address: '' }), city: e.target.value } })} /></Field>
+                    <Field label={t('Pays')} hint={t('Les participants de ce pays voient votre événement en premier')}>
+                      <Select value={ev.venue?.country ?? countryOfEvent(ev) ?? DEFAULT_COUNTRY} onChange={(e) => up({ venue: { ...(ev.venue ?? { name: '', address: '', city: '' }), country: e.target.value } })}>
+                        {COUNTRIES.map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
+                      </Select>
+                    </Field>
                   </div>
                 )}
                 {mode !== 'venue' && (

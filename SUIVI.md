@@ -21,6 +21,8 @@
 
 ## En cours (cette session)
 
+- [x] Événements proches et selon les goûts : l'accueil a une section « Près de chez vous » et l'exploration trie par défaut « Pour vous » (même ville, puis même pays, puis les goûts, puis la date ; les événements en ligne comptent comme proches ; les tris Date, Popularité et Prix ne sont jamais modifiés). **Position :** pays (et ville) de la connexion fournis par l'hébergeur (`GET /api/geo`, rien n'est enregistré), précisés par le GPS avec l'autorisation de l'utilisateur (« Utiliser ma position », rattaché à la ville connue la plus proche, rayon 60 km), ou choisis à la main (pays + ville, jamais remplacés). **Goûts :** centres d'intérêt choisis, favoris, billets achetés et événements consultés. Fenêtre « Personnaliser » (accueil, exploration, paramètres). Chaque lieu d'événement a un pays (éditeur d'événement) ; sans pays il est déduit de la ville, sinon Haïti. Choix gardés sur l'appareil. Limite : la proximité se fait à la ville et au pays (les lieux n'ont pas encore de coordonnées).
+
 - [x] Principales devises du monde : l'acheteur choisit HTG, USD, EUR, GBP, CAD, CHF, JPY, CNY, AUD, MXN, BRL ou DOP (sélecteur de l'en-tête, des paramètres du compte et de la caisse). **Les prix restent fixés en gourdes** : la commande est comptée en gourdes (ou en dollars si l'acheteur choisit le dollar), garde la devise choisie à titre indicatif (`displayCurrency`, `displayTotal`) et le paiement en ligne est toujours prélevé en gourdes (note à la caisse). L'administrateur règle le taux de chaque devise en gourdes dans Administration > Commissions (`PUT /api/admin/rate`, valeurs de départ approximatives à vérifier). Les finances organisateur et admin restent en gourdes et en dollars.
 
 - [x] Contrôle d'entrée : dans l'application Android, « Activer la caméra » ouvre le scanner de QR codes natif (message `scan:start`, résultat par `window.onQrScanned`) ; il se relance après chaque validation. Dans un navigateur, la caméra de la page reste utilisée.
@@ -120,3 +122,4 @@
 - 2026-11-13 : pages légales mises à jour (3 documents FR/EN) et modifiables par l'administrateur (Contenu et réglages).
 - 2026-11-13 : contrôle d'entrée branché sur le scanner natif de l'application.
 - 2026-11-13 : devises du monde pour l'acheteur, taux réglables en gourdes par l'admin, paiement toujours en gourdes.
+- 2026-11-13 : événements proches (ville, pays) et selon les goûts, position détectée ou choisie, pays du lieu dans l'éditeur.

@@ -40,7 +40,7 @@ export const kindLabel: Record<TicketType['kind'], { label: string; tone: Tone }
 export default function EventDetail() {
   const { slug = '' } = useParams();
   const nav = useNavigate();
-  const { lang, currency, reminders, toggleReminder, follows, toggleFollow, toast, t, user } = useApp();
+  const { lang, currency, reminders, toggleReminder, follows, toggleFollow, toast, t, user, recordView } = useApp();
   const { data: ev, loading } = useAsync(() => getEvent(slug), [slug]);
   const { data: others } = useAsync(() => listEvents({ sort: 'popular' }), []);
   const { data: resale } = useAsync(() => (ev ? listResale(ev.id) : Promise.resolve([])), [ev?.id]);
@@ -57,6 +57,12 @@ export default function EventDetail() {
   useEffect(() => {
     if (ev) trackPixel('ViewContent', { event: ev.id });
   }, [ev]);
+
+  // Les événements consultés comptent dans les goûts de l'utilisateur (« Pour vous »)
+  useEffect(() => {
+    if (ev) recordView(ev.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev?.id]);
 
   const total = useMemo(() => (ev ? ev.tickets.reduce((a, x) => a + (qty[x.id] ?? 0) * x.price, 0) : 0), [ev, qty]);
   const count = Object.values(qty).reduce((a, b) => a + b, 0);
