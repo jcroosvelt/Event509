@@ -14,7 +14,7 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
-import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
+import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATES, isDisplayCurrency, RATES, round as roundCur, setRates, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
@@ -1300,6 +1300,26 @@ const getGeo: Handler = async (c) => ({
   city: c.geo?.city ?? null,
 });
 
+/**
+ * Nouvelle version de l'application Android : prévient tous les appareils où elle est installée. Appelé par le workflow de
+ * l'application une fois l'APK en ligne (mot de passe partagé : APP_ANNOUNCE_SECRET). Une version n'est annoncée qu'une fois.
+ */
+const announceApp: Handler = async (c) => {
+  const secret = process.env.APP_ANNOUNCE_SECRET;
+  if (!secret || !sameKey(c.authorization?.replace(/^Bearer\s+/i, ''), secret)) fail(401, 'Non autorisé');
+  const code = Math.floor(num(c.body.versionCode));
+  const name = str(c.body.versionName, 20);
+  if (!(code > 0) || !name) fail(422, 'Version invalide');
+  if (!(await claimOnce(`app-update:${code}`))) return { sent: 0, note: 'déjà annoncée' };
+  const sent = await notifyAllDevices({
+    title: 'Mise à jour disponible',
+    body: `EVENT509 ${name} est disponible. Touchez pour l’installer.`,
+    url: '/telecharger',
+    channel: 'updates',
+  });
+  return { sent };
+};
+
 const getLegal: Handler = async () => {
   const r = await one<{ value: Record<string, Record<string, string>> }>(`select value from settings where key = 'legal'`);
   return r?.value ?? {};
@@ -1933,6 +1953,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['PUT', '/admin/fees', saveFees],
   ['PUT', '/admin/rate', saveRate],
   ['GET', '/geo', getGeo],
+  ['POST', '/app/announce', announceApp],
   ['GET', '/legal', getLegal],
   ['PUT', '/admin/legal', saveLegal],
   ['PUT', '/admin/site', saveSite],

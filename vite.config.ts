@@ -41,7 +41,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         navigateFallback: '/index.html',
         // Les pages événement pré-rendues (aperçus de partage) restent servies telles quelles
-        navigateFallbackDenylist: [/^\/api\//],
+        // /app/ : l'APK et sa fiche de version se téléchargent tels quels ; /.well-known/ : fichier des liens profonds
+        navigateFallbackDenylist: [/^\/api\//, /^\/app\//, /^\/\.well-known\//],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {

@@ -360,6 +360,7 @@ export default function PublicLayout() {
           <Link to="/cgu" className="hover:text-ink">{t('Conditions d’utilisation')}</Link>
           <Link to="/confidentialite" className="hover:text-ink">{t('Confidentialité')}</Link>
           <Link to="/remboursement" className="hover:text-ink">{t('Remboursement')}</Link>
+          <Link to="/telecharger" className="hover:text-ink">{t('Application Android')}</Link>
         </div>
       </footer>
 

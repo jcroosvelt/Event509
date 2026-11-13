@@ -5,7 +5,7 @@ import {
   FileText, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
-import { InstallPrompt } from '@/components/InstallPrompt';
+import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
 import { RequireAuth, SessionWatcher } from '@/components/guards';
 import PublicLayout from '@/layouts/PublicLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
@@ -19,6 +19,7 @@ const EventDetail = lazy(() => import('@/pages/public/EventDetail'));
 const Checkout = lazy(() => import('@/pages/public/Checkout'));
 const Confirmation = lazy(() => import('@/pages/public/Confirmation'));
 const PaymentReturn = lazy(() => import('@/pages/public/PaymentReturn'));
+const DownloadApp = lazy(() => import('@/pages/public/DownloadApp'));
 const OrganizerPage = lazy(() => import('@/pages/public/OrganizerPage'));
 const Resale = lazy(() => import('@/pages/public/Resale'));
 const Auth = lazy(() => import('@/pages/public/Auth'));
@@ -103,7 +104,8 @@ export default function App() {
     <>
       <SessionWatcher />
       <Toaster />
-      <InstallPrompt />
+      <AppInstallPopup />
+      <AppUpdateBanner />
       <Suspense fallback={<Loading />}>
         <Routes>
           {/* Widget intégrable : sans en-tête ni menu du site */}
@@ -115,6 +117,7 @@ export default function App() {
             <Route path="e/:slug/achat" element={<Checkout />} />
             <Route path="commande/:id" element={<Confirmation />} />
             <Route path="retour-paiement" element={<PaymentReturn />} />
+            <Route path="telecharger" element={<DownloadApp />} />
             <Route path="o/:slug" element={<OrganizerPage />} />
             <Route path="revente" element={<Resale />} />
             <Route path="connexion" element={<Auth mode="login" />} />
