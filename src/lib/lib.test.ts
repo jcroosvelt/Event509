@@ -89,23 +89,36 @@ describe('i18n', () => {
 
 
 describe('frais de service', () => {
-  it('ajoute pourcentage et frais fixes au prix payé par l’acheteur', () => {
-    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 25, passToBuyer: true }, 2500, 1, 'HTG');
-    expect(f.fee).toBe(150); // 125 + 25
-    expect(f.total).toBe(2650);
-    expect(f.organizerNet).toBe(2500);
+  it('partage la commission : 5 % = 2,5 % payés par l’acheteur et 2,5 % par l’organisateur', () => {
+    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 0, buyerShare: 50 }, 2000, 1, 'HTG');
+    expect(f.fee).toBe(100); // 5 % de 2000
+    expect(f.buyerFee).toBe(50); // 2,5 % payés en plus par l'acheteur
+    expect(f.organizerFee).toBe(50); // 2,5 % déduits de l'organisateur
+    expect(f.total).toBe(2050);
+    expect(f.organizerNet).toBe(1950);
+    expect(f.buyerFee + f.organizerFee).toBe(f.fee);
   });
 
-  it('déduit les frais du revenu de l’organisateur si l’acheteur ne les paie pas', () => {
-    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 0, passToBuyer: false }, 1000, 2, 'HTG');
-    expect(f.total).toBe(1000);
-    expect(f.organizerNet).toBe(950);
+  it('par défaut : 5 %, sans frais fixes, partagés à parts égales', () => {
+    expect(DEFAULT_FEES).toMatchObject({ percent: 5, fixedHTG: 0, buyerShare: 50 });
   });
 
-  it('applique le taux négocié de l’organisateur et convertit les frais fixes en USD', () => {
-    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 132, passToBuyer: true }, 100, 1, 'USD', 3);
+  it('l’acheteur peut tout payer (100) ou rien (0)', () => {
+    const all = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 25, buyerShare: 100 }, 2500, 1, 'HTG');
+    expect(all.fee).toBe(150); // 125 + 25
+    expect(all.total).toBe(2650);
+    expect(all.organizerNet).toBe(2500);
+    const none = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 0, buyerShare: 0 }, 1000, 2, 'HTG');
+    expect(none.total).toBe(1000);
+    expect(none.organizerNet).toBe(950);
+  });
+
+  it('partage aussi les frais fixes et applique le taux négocié (USD)', () => {
+    const f = computeFees({ ...DEFAULT_FEES, percent: 5, fixedHTG: 132, buyerShare: 50 }, 100, 1, 'USD', 3);
     expect(f.rate).toBe(3);
     expect(f.fee).toBe(4); // 3 $ + 1 $ de frais fixes
+    expect(f.buyerFee).toBe(2);
+    expect(f.organizerFee).toBe(2);
   });
 
   it('ne prélève rien sur une commande gratuite', () => {
@@ -117,9 +130,9 @@ import { computeFees as serverFees } from '../../api/_lib/fees';
 describe('frais : serveur et navigateur', () => {
   it('le serveur calcule exactement les mêmes frais que l’interface', () => {
     const cases: [number, number, 'HTG' | 'USD', number | undefined][] = [[2500, 1, 'HTG', undefined], [15000, 2, 'HTG', 4.5], [50, 2, 'USD', 3], [0, 0, 'HTG', undefined]];
-    for (const passToBuyer of [true, false])
+    for (const buyerShare of [0, 50, 100])
       for (const [amount, n, cur, rate] of cases) {
-        const s = { ...DEFAULT_FEES, passToBuyer };
+        const s = { ...DEFAULT_FEES, buyerShare };
         expect(serverFees(s, amount, n, cur, rate)).toEqual(computeFees(s, amount, n, cur, rate));
       }
   });

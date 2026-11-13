@@ -7,21 +7,26 @@ export interface FeeSettings {
   percent: number;
   /** Frais fixes par billet payant, en HTG (convertis si la commande est en USD). */
   fixedHTG: number;
-  /** true : l'acheteur paie les frais en plus ; false : ils sont déduits du revenu de l'organisateur. */
-  passToBuyer: boolean;
+  /**
+   * Part de la commission payée par l'acheteur, en % de la commission (0 à 100). Le reste est déduit du revenu de
+   * l'organisateur. 50 : sur 5 % de commission, 2,5 % pour l'acheteur et 2,5 % pour l'organisateur.
+   */
+  buyerShare: number;
   /** Aucun frais sur les commandes gratuites. */
   freeNoFee: boolean;
 }
 
-export const DEFAULT_FEES: FeeSettings = { percent: 5, fixedHTG: 25, passToBuyer: true, freeNoFee: true };
+export const DEFAULT_FEES: FeeSettings = { percent: 5, fixedHTG: 0, buyerShare: 50, freeNoFee: true };
 
 export interface FeeBreakdown {
   /** Taux appliqué (personnalisé ou par défaut). */
   rate: number;
   /** Commission totale prélevée par Event509. */
   fee: number;
-  /** Part de la commission payée en plus par l'acheteur (0 si déduite de l'organisateur). */
+  /** Part de la commission payée en plus par l'acheteur. */
   buyerFee: number;
+  /** Part de la commission déduite du revenu de l'organisateur. */
+  organizerFee: number;
   /** Montant payé par l'acheteur. */
   total: number;
   /** Montant reversé à l'organisateur. */
@@ -38,15 +43,19 @@ const round = (v: number, currency: Currency) => (currency === 'HTG' ? Math.roun
  */
 export function computeFees(s: FeeSettings, amount: number, paidTickets: number, currency: Currency, customRate?: number): FeeBreakdown {
   const rate = customRate ?? s.percent;
-  if (amount <= 0 && s.freeNoFee) return { rate, fee: 0, buyerFee: 0, total: 0, organizerNet: 0 };
+  if (amount <= 0 && s.freeNoFee) return { rate, fee: 0, buyerFee: 0, organizerFee: 0, total: 0, organizerNet: 0 };
   const fixed = convert(s.fixedHTG, 'HTG', currency) * paidTickets;
   const fee = round((amount * rate) / 100 + fixed, currency);
-  const buyerFee = s.passToBuyer ? fee : 0;
+  // La commission (taux + frais fixes) est partagée : l'acheteur en paie `buyerShare` %, l'organisateur le reste
+  const share = Math.min(100, Math.max(0, Number.isFinite(s.buyerShare) ? s.buyerShare : 50));
+  const buyerFee = round((fee * share) / 100, currency);
+  const organizerFee = round(fee - buyerFee, currency);
   return {
     rate,
     fee,
     buyerFee,
+    organizerFee,
     total: round(amount + buyerFee, currency),
-    organizerNet: round(s.passToBuyer ? amount : amount - fee, currency),
+    organizerNet: round(amount - organizerFee, currency),
   };
 }

@@ -11,6 +11,7 @@ import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
 import { financeRoutes } from './finance.js';
+import { boostRoutes, checkBoostPayment } from './boost.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
@@ -111,8 +112,10 @@ function org(c: Ctx, perm: string): string {
 }
 
 async function feeSettings(q: Q = db()): Promise<FeeSettings> {
-  const r = await one<{ value: FeeSettings }>(`select value from settings where key = 'fees'`, [], q);
-  return { ...DEFAULT_FEES, ...(r?.value ?? {}) };
+  const r = await one<{ value: Partial<FeeSettings> & { passToBuyer?: boolean } }>(`select value from settings where key = 'fees'`, [], q);
+  const { passToBuyer: _legacy, ...stored } = r?.value ?? {};
+  // Anciens réglages (« l'acheteur paie tout » ou « l'organisateur paie tout ») : sans part définie, la commission est partagée 50/50
+  return { ...DEFAULT_FEES, ...stored };
 }
 let rateLoadedAt = 0;
 /** Relit le taux de change réglé par l'administrateur (au plus une fois toutes les 30 s par instance). */
@@ -717,6 +720,8 @@ const saveEvent: Handler = async (c) => {
     views: existing?.data.views ?? 0,
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
     featured: existing?.data.featured ?? false,
+    // Le boost (payant) n'est jamais modifiable par le formulaire
+    boostedUntil: existing?.data.boostedUntil,
     // Une publication par un organisateur non vérifié passe en modération
     status: e.status,
   };
@@ -1188,10 +1193,11 @@ async function balanceOf(orgId: string) {
     const gross = evs.filter((e) => e.currency === cur).reduce((a, e) => a + e.tickets.reduce((x, t) => x + t.sold * t.price, 0), 0);
     const refunded = refunds.filter((r) => r.currency === cur).reduce((a, r) => a + r.amount, 0);
     const paid = payouts.filter((p) => p.currency === cur && !['scheduled', 'rejected'].includes(p.status)).reduce((a, p) => a + p.amount, 0);
-    const f = fees.passToBuyer ? 0 : Math.round(gross * (rate / 100) * 100) / 100;
+    // Part de la commission déduite de l'organisateur (l'autre part est payée en plus par l'acheteur)
+    const f = Math.round(gross * (rate / 100) * ((100 - fees.buyerShare) / 100) * 100) / 100;
     return { gross, fees: f, rate, refunded, paid, balance: Math.max(0, gross - f - refunded - paid) };
   };
-  return { HTG: by('HTG'), USD: by('USD'), passToBuyer: fees.passToBuyer };
+  return { HTG: by('HTG'), USD: by('USD'), buyerShare: fees.buyerShare };
 }
 
 const listPayouts: Handler = async (c) => docs<Payout>(`select data from payouts where organizer_id = $1 order by created_at desc`, [org(c, 'payouts')]);
@@ -1271,11 +1277,11 @@ const saveFees: Handler = async (c) => {
   const b = c.body as Partial<FeeSettings>;
   const next: FeeSettings = {
     percent: Math.min(50, Math.max(0, num(b.percent))), fixedHTG: Math.max(0, num(b.fixedHTG)),
-    passToBuyer: b.passToBuyer !== false, freeNoFee: b.freeNoFee !== false,
+    buyerShare: Math.min(100, Math.max(0, b.buyerShare === undefined ? 50 : num(b.buyerShare))), freeNoFee: b.freeNoFee !== false,
   };
-  if (!Number.isFinite(next.percent) || !Number.isFinite(next.fixedHTG)) fail(422, 'Valeurs invalides');
+  if (!Number.isFinite(next.percent) || !Number.isFinite(next.fixedHTG) || !Number.isFinite(next.buyerShare)) fail(422, 'Valeurs invalides');
   await upsert('settings', { key: 'fees', value: next });
-  await audit(c, 'Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG`);
+  await audit(c, 'Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG, ${next.buyerShare} % payés par l’acheteur`);
   return next;
 };
 const listCommissions: Handler = async (c) => {
@@ -1504,6 +1510,7 @@ const verifyOrder: Handler = async (c) => {
 const payWebhook: Handler = async (c) => {
   const ref = str((c.body.transaction as { reference_id?: unknown } | undefined)?.reference_id, 60);
   if (ref.startsWith('sp_')) await checkPremiumPayment(ref);
+  else if (ref.startsWith('bo_')) await checkBoostPayment(ref);
   else if (ref) await checkPayment(ref);
   return { ok: true };
 };
@@ -1750,6 +1757,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...supportRoutes({ fail, str, auth, admin, org, audit }),
   ...marketingRoutes({ fail, str, auth, admin, org, audit }),
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
+  ...boostRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };

@@ -29,7 +29,6 @@ export interface PremiumDeps {
 
 export const DEFAULT_PREMIUM: PremiumConfig = {
   enabled: true,
-  monthlyPrice: 1500,
   yearlyPrice: 15000,
   validityDays: 365,
   requiredDocs: ['id'],
@@ -237,7 +236,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
   const publicConfig: Handler = async () => {
     const c = await getConfig();
     return {
-      enabled: c.enabled, monthlyPrice: c.monthlyPrice, yearlyPrice: c.yearlyPrice, validityDays: c.validityDays, requiredDocs: c.requiredDocs,
+      enabled: c.enabled, yearlyPrice: c.yearlyPrice, validityDays: c.validityDays, requiredDocs: c.requiredDocs,
       processingDays: c.processingDays, minAge: c.minAge, eligibility: c.eligibility, refund: c.refund, benefits: c.benefits,
       visibilityBoost: c.visibilityBoost, featuredPerOrganizer: c.featuredPerOrganizer,
       onlinePayment: payConfigured(),
@@ -362,9 +361,9 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const orgId = org(c, 'settings');
     const cfg = await getConfig();
     if (!cfg.enabled) fail(403, 'Le programme n’est pas ouvert pour le moment');
-    const plan = str(c.body.plan, 10);
-    if (plan !== 'monthly' && plan !== 'yearly') fail(422, 'Formule invalide');
-    const amount = plan === 'yearly' ? cfg.yearlyPrice : cfg.monthlyPrice;
+    // Une seule formule : un paiement unique couvre une année (la formule mensuelle n'existe plus)
+    const plan = 'yearly';
+    const amount = cfg.yearlyPrice;
     const method = str(c.body.method, 20) || 'moncash';
     const online = payConfigured() && amount >= MIN_HTG;
     if (online && !ONLINE_METHODS.includes(method)) fail(422, 'Moyen de paiement invalide');
@@ -533,7 +532,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const docsOk = Array.isArray(b.requiredDocs) ? (b.requiredDocs.filter((x) => DOC_TYPES_OK.includes(x)) as PremiumConfig['requiredDocs']) : cur.requiredDocs;
     const next: PremiumConfig = {
       enabled: b.enabled !== false,
-      monthlyPrice: n(b.monthlyPrice, 0, 10_000_000, cur.monthlyPrice), yearlyPrice: n(b.yearlyPrice, 0, 100_000_000, cur.yearlyPrice),
+      yearlyPrice: n(b.yearlyPrice, 0, 100_000_000, cur.yearlyPrice),
       validityDays: Math.round(n(b.validityDays, 30, 3650, cur.validityDays)), requiredDocs: docsOk,
       processingDays: Math.round(n(b.processingDays, 1, 60, cur.processingDays)), minAge: Math.round(n(b.minAge, 13, 25, cur.minAge)),
       eligibility: Array.isArray(b.eligibility) ? b.eligibility.map((x) => str(x, 200)).filter(Boolean).slice(0, 20) : cur.eligibility,
@@ -551,7 +550,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
       visibilityBoost: Math.round(n(b.visibilityBoost, 0, 100, cur.visibilityBoost)), featuredPerOrganizer: Math.round(n(b.featuredPerOrganizer, 0, 10, cur.featuredPerOrganizer)),
     };
     await upsert('settings', { key: 'premium', value: next });
-    await audit(c, 'Réglages du programme vérifié modifiés', `${next.monthlyPrice} / ${next.yearlyPrice} HTG`);
+    await audit(c, 'Réglages du programme vérifié modifiés', `${next.yearlyPrice} HTG par an`);
     // Un changement de durée de validité ou d'avantages s'applique tout de suite aux badges
     const orgs = await all<{ organizer_id: string }>(`select organizer_id from verification_requests where status in ('approved', 'expired')`);
     for (const o of orgs) await recompute(o.organizer_id);

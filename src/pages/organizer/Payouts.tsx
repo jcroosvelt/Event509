@@ -94,7 +94,7 @@ export default function Payouts() {
           <h2 className="mb-3 font-bold">{t('Détail ({cur})', { cur })}</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Ventes brutes')}</dt><dd className="font-semibold">{moneyRaw(b.gross, cur, lang)}</dd></div>
-            <div className="flex justify-between"><dt className="text-ink-soft">{balance.passToBuyer ? t('Commission Event509 (payée par les acheteurs)') : t('Commission Event509 ({n} %)', { n: b.rate })}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.fees, cur, lang)}</dd></div>
+            <div className="flex justify-between"><dt className="text-ink-soft">{t('Commission Event509 (votre part : {n} %)', { n: Math.round(b.rate * (100 - balance.buyerShare)) / 100 })}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.fees, cur, lang)}</dd></div>
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Remboursements')}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.refunded, cur, lang)}</dd></div>
             <div className="flex justify-between"><dt className="text-ink-soft">{t('Déjà versé')}</dt><dd className="font-semibold">−{moneyRaw(b.paid, cur, lang)}</dd></div>
             <div className="flex justify-between border-t border-line pt-3"><dt className="font-bold">{t('Solde')}</dt><dd className="font-extrabold">{moneyRaw(b.balance, cur, lang)}</dd></div>
@@ -106,7 +106,7 @@ export default function Payouts() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-bold">{t('Historique des versements')}</h2>
           {payouts.length > 0 && (
-            <Button size="sm" variant="outline" onClick={() => exportCSV(payouts.map((p) => ({ [t('Référence')]: p.reference, [t('Date')]: p.date, [t('Montant')]: p.amount, [t('Devise')]: p.currency, [t('Méthode')]: t(method[p.method].l), [t('Destination')]: destinationText(p), [t('Statut')]: t(status[p.status].l) })), 'versements')}>
+            <Button size="sm" variant="outline" onClick={() => exportCSV(payouts.map((p) => ({ [t('Référence')]: p.reference, [t('Date')]: p.date, [t('Montant')]: p.amount, [t('Devise')]: p.currency, [t('Méthode')]: t((method[p.method] ?? { l: String(p.method) }).l), [t('Destination')]: destinationText(p), [t('Statut')]: t((status[p.status] ?? { l: String(p.status) }).l) })), 'versements')}>
               <Download className="h-4 w-4" aria-hidden /> {t('Exporter')}
             </Button>
           )}
@@ -116,14 +116,15 @@ export default function Payouts() {
         ) : (
           <Table caption={t('Historique des versements')} head={[t('Référence'), t('Date'), t('Destination'), t('Montant'), t('Statut')]}>
             {payouts.map((p) => {
-              const M = method[p.method];
+              const M = method[p.method] ?? { l: String(p.method ?? '—'), i: Wallet };
+              const st = status[p.status] ?? { l: String(p.status ?? '—'), tone: 'gray' as Tone };
               return (
                 <tr key={p.id}>
                   <Td className="font-mono text-xs">{p.reference}</Td>
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
                   <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="text-xs text-ink-muted">{destinationText(p)}</span></span></span></Td>
                   <Td className="font-bold">{moneyRaw(p.amount, p.currency, lang)}</Td>
-                  <Td><Badge tone={status[p.status].tone}>{t(status[p.status].l)}</Badge></Td>
+                  <Td><Badge tone={st.tone}>{t(st.l)}</Badge></Td>
                 </tr>
               );
             })}

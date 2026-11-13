@@ -5,7 +5,7 @@ import type {
 
 /** Programme « Organisateur vérifié » : appels au serveur. Il n'existe pas en démonstration (aucun serveur, aucun paiement). */
 
-export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'monthlyPrice' | 'yearlyPrice' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits' | 'visibilityBoost' | 'featuredPerOrganizer'> & { onlinePayment: boolean };
+export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'yearlyPrice' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits' | 'visibilityBoost' | 'featuredPerOrganizer'> & { onlinePayment: boolean };
 
 export interface PremiumOverview {
   config: PublicPremiumConfig;
@@ -35,8 +35,8 @@ export const saveApplicationDraft = (application: Partial<VerificationApplicatio
   http<{ savedAt: string }>('/org/premium/draft', { method: 'PUT', body: JSON.stringify({ application }) });
 export const submitApplication = () => http<null>('/org/premium/apply', { method: 'POST' });
 export const sendAppeal = (message: string) => http<null>('/org/premium/appeal', { method: 'POST', body: JSON.stringify({ message }) });
-export const subscribePremium = (plan: 'monthly' | 'yearly', method: string) =>
-  http<{ paymentId: string; paid: boolean; manual?: boolean; payUrl?: string }>('/org/premium/subscribe', { method: 'POST', body: JSON.stringify({ plan, method }) });
+export const subscribePremium = (method: string) =>
+  http<{ paymentId: string; paid: boolean; manual?: boolean; payUrl?: string }>('/org/premium/subscribe', { method: 'POST', body: JSON.stringify({ plan: 'yearly', method }) });
 export const cancelPremium = () => http<null>('/org/premium/cancel', { method: 'POST' });
 export const resumePremium = () => http<null>('/org/premium/resume', { method: 'POST' });
 export const checkPremiumPayment = (id: string) => http<{ status: 'paid' | 'pending' | 'failed' }>(`/premium/payments/${encodeURIComponent(id)}/check`, { method: 'POST' });
@@ -112,11 +112,26 @@ export const unsubscribeMarketing = (o: string, e: string, token: string) => htt
 // Gestion financière avancée
 export interface FinanceData {
   range: { from: string; to: string };
-  summary: { gross: number; fees: number; refunds: number; net: number; pendingAmount: number; pendingOrders: number; orders: number };
-  balance: { HTG: number; USD: number; passToBuyer: boolean };
+  summary: { gross: number; fees: number; buyerFees: number; organizerFees: number; refunds: number; net: number; pendingAmount: number; pendingOrders: number; orders: number };
+  balance: { HTG: number; USD: number; buyerShare: number };
   payoutTotals: Record<string, number>;
   monthly: { month: string; gross: number; fees: number; orders: number }[];
   transactions: { id: string; date: string; event: string; method: string; status: string; currency: 'HTG' | 'USD'; amount: number; fee: number; total: number; tickets: number }[];
   payouts: { id: string; reference: string; date: string; amount: number; currency: 'HTG' | 'USD'; method: string; status: string; priority: boolean }[];
 }
 export const getFinance = (from: string, to: string) => http<FinanceData>(`/org/finance?from=${from}&to=${to}`);
+
+// Boost par événement
+export interface BoostConfig { enabled: boolean; packages: { days: number; price: number }[]; maxActive: number }
+export interface BoostPublicConfig extends BoostConfig { slotsLeft: number; onlinePayment: boolean }
+export interface OrgBoost { id: string; eventId: string; event: string; days: number; amount: number; state: 'pending' | 'active' | 'ended' | 'canceled' | 'failed'; method: 'online' | 'transfer'; createdAt: string; startsAt: string | null; endsAt: string | null; views: number; orders: number; tickets: number }
+export const getBoostConfig = () => http<BoostPublicConfig>('/boost/config');
+export const listBoosts = () => http<OrgBoost[]>('/org/boosts');
+export const createBoost = (eventId: string, days: number, method: string) =>
+  http<{ id: string; paid: boolean; manual?: boolean; payUrl?: string }>('/org/boosts', { method: 'POST', body: JSON.stringify({ eventId, days, method }) });
+export const checkBoostPayment = (id: string) => http<{ status: 'paid' | 'pending' | 'failed' }>(`/boost/payments/${encodeURIComponent(id)}/check`, { method: 'POST' });
+export interface AdminBoost { id: string; event: string; organization: string; days: number; amount: number; state: OrgBoost['state']; method: 'online' | 'transfer'; createdAt: string; endsAt: string | null }
+export const getAdminBoosts = () => http<{ config: BoostConfig; items: AdminBoost[] }>('/admin/boosts');
+export const saveBoostConfig = (c: BoostConfig) => http<BoostConfig>('/admin/boost/config', { method: 'PUT', body: JSON.stringify(c) });
+export const confirmBoost = (id: string) => http<null>(`/admin/boosts/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+export const cancelBoost = (id: string) => http<null>(`/admin/boosts/${encodeURIComponent(id)}/cancel`, { method: 'POST' });

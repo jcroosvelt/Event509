@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, LineChart, Link2, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -58,6 +58,8 @@ const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'));
 const Links = lazy(() => import('@/pages/organizer/Links'));
 const Unsubscribe = lazy(() => import('@/pages/public/Unsubscribe'));
 const Finances = lazy(() => import('@/pages/organizer/Finances'));
+const Boosts = lazy(() => import('@/pages/organizer/Boosts'));
+const AdminBoosts = lazy(() => import('@/pages/admin/AdminBoosts'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -154,6 +156,7 @@ export default function App() {
                     { to: `${O}/marketing`, label: t('Campagnes'), icon: Megaphone, perm: 'marketing' },
                     { to: `${O}/emails`, label: t('Emails automatiques'), icon: Mail, perm: 'marketing' },
                     { to: `${O}/ambassadeurs`, label: t('Ambassadeurs'), icon: Share2, perm: 'marketing' },
+                    { to: `${O}/boosts`, label: t('Boost'), icon: Rocket, perm: 'events' },
                     { to: `${O}/liens`, label: t('Liens de suivi'), icon: Link2, perm: 'marketing' },
                     { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
                     { to: `${O}/analyses`, label: t('Statistiques avancées'), icon: TrendingUp, perm: 'dashboard' },
@@ -195,6 +198,7 @@ export default function App() {
             <Route path="activite" element={<Activity />} />
             <Route path="support" element={<OrgSupport />} />
             <Route path="liens" element={<Links />} />
+            <Route path="boosts" element={<Boosts />} />
             <Route path="finances" element={<Finances />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
@@ -218,6 +222,7 @@ export default function App() {
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
                     { to: `${A}/programme-verifie`, label: t('Programme vérifié'), icon: BadgeCheck, perm: 'admin' },
                     { to: `${A}/support`, label: t('Support'), icon: Headphones, perm: 'admin' },
+                    { to: `${A}/boosts`, label: t('Boosts'), icon: Rocket, perm: 'admin' },
                   ] },
                   { title: t('Finances'), items: [
                     { to: `${A}/transactions`, label: t('Transactions'), icon: Receipt, perm: 'admin' },
@@ -245,6 +250,7 @@ export default function App() {
             <Route path="verification" element={<Verification />} />
             <Route path="programme-verifie" element={<PremiumSettings />} />
             <Route path="support" element={<AdminSupport />} />
+            <Route path="boosts" element={<AdminBoosts />} />
             <Route path="litiges" element={<Disputes />} />
             <Route path="commissions" element={<Commissions />} />
             <Route path="utilisateurs/:id" element={<UserDetail />} />

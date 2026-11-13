@@ -13,6 +13,7 @@ import type {
 import { setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
+import { isBoosted } from '@/lib/boost';
 import { blobToBase64, blobToDataUrl } from '@/lib/image';
 
 export const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -203,8 +204,10 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
   const sort = f.sort ?? 'date';
   // Classement transparent : seul le tri « Populaires » reçoit le coup de pouce des organisateurs vérifiés (date et prix jamais modifiés)
   const boosted = (e: EventItem) => e.views * (1 + (db.organizers.find((o) => o.id === e.organizerId)?.priority ?? 0) / 100);
+  // Événements sponsorisés (boost payant) : en tête de « Populaires », étiquetés « Sponsorisé » ; date et prix ne bougent jamais
+  const sponsored = (e: EventItem) => (isBoosted(e) ? 1 : 0);
   list = [...list].sort((a, b) =>
-    sort === 'popular' ? boosted(b) - boosted(a) : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
+    sort === 'popular' ? sponsored(b) - sponsored(a) || boosted(b) - boosted(a) : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
   );
   return clone(list);
 }
@@ -575,11 +578,11 @@ export async function getBalance(orgId: string) {
     const titles = new Set(evs.filter((e) => e.currency === cur).map((e) => e.title));
     const refunded = db.refunds.filter((r) => r.status === 'approved' && r.currency === cur && titles.has(r.eventTitle)).reduce((a, r) => a + r.amount, 0);
     const paid = db.payouts.filter((p) => p.organizerId === orgId && p.currency === cur && !['scheduled', 'rejected'].includes(p.status)).reduce((a, p) => a + p.amount, 0);
-    // Si l'acheteur paie les frais, l'organisateur reçoit le prix plein
-    const fees = feeSettings.passToBuyer ? 0 : Math.round(gross * (rate / 100) * 100) / 100;
+    // Seule la part de la commission qui n'est pas payée par l'acheteur est déduite de l'organisateur
+    const fees = Math.round(gross * (rate / 100) * ((100 - feeSettings.buyerShare) / 100) * 100) / 100;
     return { gross, fees, rate, refunded, paid, balance: Math.max(0, gross - fees - refunded - paid) };
   };
-  return { HTG: by('HTG'), USD: by('USD'), passToBuyer: feeSettings.passToBuyer };
+  return { HTG: by('HTG'), USD: by('USD'), buyerShare: feeSettings.buyerShare };
 }
 
 export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination'], priority = false) {

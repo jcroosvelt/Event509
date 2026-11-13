@@ -37,7 +37,6 @@ export default function VerifiedProgram() {
   const cfg = useAsync(() => (premiumAvailable ? getPremiumConfig() : Promise.resolve(null)), []);
   if (cfg.loading) return <Loading />;
   const c = cfg.data;
-  const yearlySaving = c && c.monthlyPrice > 0 ? Math.max(0, Math.round((1 - c.yearlyPrice / (c.monthlyPrice * 12)) * 100)) : 0;
   const benefits = BENEFITS.filter((b) => !c || c.benefits[b.key]);
 
   return (
@@ -102,18 +101,11 @@ export default function VerifiedProgram() {
       <section id="tarifs" aria-labelledby="h-prix">
         <SectionHeader id="h-prix" title={t('Tarifs')} />
         {c && c.enabled ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card>
-              <h3 className="font-bold">{t('Mensuel')}</h3>
-              <p className="mt-2 text-3xl font-extrabold">{moneyRaw(c.monthlyPrice, 'HTG', lang)}<span className="text-base font-semibold text-ink-muted"> / {t('mois')}</span></p>
-              <p className="mt-2 text-sm text-ink-soft">{t('Sans engagement : résiliable à tout moment.')}</p>
-            </Card>
-            <Card className="ring-2 ring-brand">
-              <h3 className="font-bold">{t('Annuel')}{yearlySaving > 0 && <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">−{yearlySaving} %</span>}</h3>
-              <p className="mt-2 text-3xl font-extrabold">{moneyRaw(c.yearlyPrice, 'HTG', lang)}<span className="text-base font-semibold text-ink-muted"> / {t('an')}</span></p>
-              <p className="mt-2 text-sm text-ink-soft">{t('La formule la plus avantageuse pour un organisateur régulier.')}</p>
-            </Card>
-          </div>
+          <Card className="mx-auto max-w-md text-center ring-2 ring-brand">
+            <h3 className="font-bold">{t('Abonnement annuel')}</h3>
+            <p className="mt-2 text-4xl font-extrabold">{moneyRaw(c.yearlyPrice, 'HTG', lang)}<span className="text-base font-semibold text-ink-muted"> / {t('an')}</span></p>
+            <p className="mt-2 text-sm text-ink-soft">{t('Un seul prix, payé en une seule fois pour toute l’année. Tous les avantages sont inclus.')}</p>
+          </Card>
         ) : (
           <Card><p className="text-sm text-ink-soft">{premiumAvailable ? t('Le programme n’est pas ouvert aux nouvelles demandes pour le moment.') : t('Les tarifs sont affichés sur le site en ligne.')}</p></Card>
         )}

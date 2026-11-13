@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, TriangleAlert } from 'lucide-react';
 import { verifyOrderPayment } from '@/services/api';
-import { checkPremiumPayment } from '@/services/premium';
+import { checkBoostPayment, checkPremiumPayment } from '@/services/premium';
 import { ApiError } from '@/lib/errors';
 import { guestOrderKey, useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
@@ -29,12 +29,13 @@ export default function PaymentReturn() {
     let stop = false;
     // Abonnement « Organisateur vérifié » : retour vers la page de l'abonnement
     const sub = id.startsWith('sp_');
+    const boost = id.startsWith('bo_');
     const key = guestOrderKey(id);
-    const done = () => nav(sub ? '/organisateur/abonnement' : `/commande/${id}${key ? `?k=${encodeURIComponent(key)}` : ''}`, { replace: true });
+    const done = () => nav(sub ? '/organisateur/abonnement' : boost ? '/organisateur/boosts' : `/commande/${id}${key ? `?k=${encodeURIComponent(key)}` : ''}`, { replace: true });
     let tries = 0;
     const check = async () => {
       try {
-        const s = sub ? (await checkPremiumPayment(id)).status : await verifyOrderPayment(id);
+        const s = sub ? (await checkPremiumPayment(id)).status : boost ? (await checkBoostPayment(id)).status : await verifyOrderPayment(id);
         if (stop) return;
         if (s === 'paid') return done();
         if (s === 'failed' || (s as string) === 'cancelled') return setState('failed');

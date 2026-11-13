@@ -32,6 +32,26 @@ describe('classement transparent des organisateurs vérifiés', () => {
   });
 });
 
+describe('événements sponsorisés (boost)', () => {
+  it('passent en tête de « Populaires » sans toucher aux tris par date et par prix', async () => {
+    const byDate = (await api.listEvents({ sort: 'date' })).map((e) => e.id);
+    const byPrice = (await api.listEvents({ sort: 'price' })).map((e) => e.id);
+    const last = (await api.listEvents({ sort: 'popular' })).at(-1)!;
+    const target = events.find((e) => e.id === last.id)!;
+    target.boostedUntil = new Date(Date.now() + 86_400_000).toISOString();
+    try {
+      expect((await api.listEvents({ sort: 'popular' }))[0]!.id).toBe(target.id);
+      expect((await api.listEvents({ sort: 'date' })).map((e) => e.id)).toEqual(byDate);
+      expect((await api.listEvents({ sort: 'price' })).map((e) => e.id)).toEqual(byPrice);
+      // un boost terminé ne compte plus
+      target.boostedUntil = new Date(Date.now() - 1000).toISOString();
+      expect((await api.listEvents({ sort: 'popular' }))[0]!.id).not.toBe(target.id);
+    } finally {
+      delete target.boostedUntil;
+    }
+  });
+});
+
 describe('événements', () => {
   it('filtre par catégorie, ville et gratuité', async () => {
     const music = await api.listEvents({ category: 'music' });
@@ -143,8 +163,8 @@ describe('revente et versements', () => {
     const b = await api.getBalance('org1');
     for (const cur of ['HTG', 'USD'] as const) {
       expect(b[cur].balance).toBeGreaterThanOrEqual(0);
-      // Par défaut l'acheteur paie les frais : l'organisateur touche le prix plein
-      expect(b[cur].fees).toBe(0);
+      // Par défaut la commission est partagée à parts égales : l'organisateur supporte la moitié du taux (2,5 % sur 5 %, ou la moitié de son taux négocié)
+      expect(b[cur].fees).toBeCloseTo((b[cur].gross * b[cur].rate) / 200, 1); // moitié du taux de l'organisateur
     }
   });
 });
