@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as api from './api';
-import { attendees, events, promoCodes } from '@/data/mock';
+import { attendees, events, organizers, promoCodes } from '@/data/mock';
 
 const ev = (id: string) => events.find((e) => e.id === id)!;
 
@@ -8,6 +8,27 @@ describe('données de démo', () => {
   it('décale les dates pour que les événements vedettes restent à venir', () => {
     const now = new Date();
     for (const e of events.filter((x) => x.featured)) expect(new Date(e.end).getTime()).toBeGreaterThan(now.getTime());
+  });
+});
+
+describe('classement transparent des organisateurs vérifiés', () => {
+  it('le coup de pouce ne touche que le tri « Populaires »', async () => {
+    const byDate = (await api.listEvents({ sort: 'date' })).map((e) => e.id);
+    const byPrice = (await api.listEvents({ sort: 'price' })).map((e) => e.id);
+    const last = (await api.listEvents({ sort: 'popular' })).at(-1)!;
+    const org = organizers.find((o) => o.id === last.organizerId)!;
+    const before = org.priority;
+    org.priority = 100000; // énorme coup de pouce : le dernier de « Populaires » passe devant
+    try {
+      const boosted = await api.listEvents({ sort: 'popular' });
+      expect(boosted[0]!.organizerId).toBe(org.id);
+      expect((await api.listEvents({ sort: 'date' })).map((e) => e.id)).toEqual(byDate);
+      expect((await api.listEvents({ sort: 'price' })).map((e) => e.id)).toEqual(byPrice);
+      // personne n'est masqué : même nombre d'événements
+      expect(boosted.length).toBe(byDate.length);
+    } finally {
+      org.priority = before;
+    }
   });
 });
 

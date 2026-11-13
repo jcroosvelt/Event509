@@ -201,8 +201,10 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
     list = list.filter((e) => new Date(e.start) <= end && new Date(e.end) >= now);
   }
   const sort = f.sort ?? 'date';
+  // Classement transparent : seul le tri « Populaires » reçoit le coup de pouce des organisateurs vérifiés (date et prix jamais modifiés)
+  const boosted = (e: EventItem) => e.views * (1 + (db.organizers.find((o) => o.id === e.organizerId)?.priority ?? 0) / 100);
   list = [...list].sort((a, b) =>
-    sort === 'popular' ? b.views - a.views : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
+    sort === 'popular' ? boosted(b) - boosted(a) : sort === 'price' ? minPrice(a) - minPrice(b) : a.start.localeCompare(b.start),
   );
   return clone(list);
 }
@@ -265,6 +267,11 @@ export async function saveEvent(e: EventItem) {
   if (i >= 0) db.events[i] = clone(e);
   else db.events.unshift(clone(e));
   return clone(e);
+}
+
+export async function featureEvent(id: string, on: boolean) {
+  await http(`/org/events/${encodeURIComponent(id)}/feature`, { method: 'POST', body: JSON.stringify({ on }) });
+  patchCachedEvent(id, { featured: on });
 }
 
 export async function setEventStatus(id: string, status: EventItem['status']) {

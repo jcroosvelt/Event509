@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, Trash2, XCircle } from 'lucide-react';
-import { deleteEvent, listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
+import { BarChart3, CalendarPlus, Copy, ExternalLink, MoreHorizontal, Pencil, Plus, ScanLine, Star, Trash2, XCircle } from 'lucide-react';
+import { DEMO, deleteEvent, featureEvent, listOrganizerEvents, saveEvent, setEventStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { compact, dateShort, num, time } from '@/lib/format';
 import { orgOf } from '@/lib/permissions';
 import { Badge, Button, ButtonLink, Card, EmptyState, Loading, Modal, PageHeader, ProgressBar, Segmented, type Tone } from '@/components/ui';
+import { organizers } from '@/data/mock';
 import { EventCover } from '@/components/events';
 import type { EventItem } from '@/types';
 
@@ -19,7 +20,7 @@ export const eventStatus: Record<EventItem['status'], { l: string; tone: Tone }>
   ended: { l: 'Terminé', tone: 'brand' },
 };
 
-function ActionsMenu({ e, onDuplicate, onCancel, onDelete }: { e: EventItem; onDuplicate: () => void; onCancel: () => void; onDelete: () => void }) {
+function ActionsMenu({ e, onDuplicate, onCancel, onDelete, onFeature }: { e: EventItem; onDuplicate: () => void; onCancel: () => void; onDelete: () => void; onFeature?: () => void }) {
   const { t } = useApp();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -50,6 +51,7 @@ function ActionsMenu({ e, onDuplicate, onCancel, onDelete }: { e: EventItem; onD
           <Link to={`/organisateur/evenements/${e.id}/stats`} className={item} onClick={() => setOpen(false)}><BarChart3 className="h-4 w-4" aria-hidden /> {t('Statistiques')}</Link>
           <Link to={`/e/${e.slug}`} className={item} onClick={() => setOpen(false)}><ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}</Link>
           <button type="button" onClick={() => { setOpen(false); onDuplicate(); }} className={item}><Copy className="h-4 w-4" aria-hidden /> {t('Dupliquer')}</button>
+          {onFeature && e.status === 'published' && <button type="button" onClick={() => { setOpen(false); onFeature(); }} className={item}><Star className="h-4 w-4" aria-hidden /> {e.featured ? t('Retirer de la vedette') : t('Mettre en vedette')}</button>}
           {e.status !== 'cancelled' && <button type="button" onClick={() => { setOpen(false); onCancel(); }} className={`${item} text-red-600 hover:bg-red-50`}><XCircle className="h-4 w-4" aria-hidden /> {t('Annuler l’événement')}</button>}
           <button type="button" onClick={() => { setOpen(false); onDelete(); }} className={`${item} text-red-600 hover:bg-red-50`}><Trash2 className="h-4 w-4" aria-hidden /> {t('Supprimer')}</button>
         </div>
@@ -69,6 +71,18 @@ export default function Events() {
 
   if (loading) return <Loading />;
   const list = (data ?? []).filter((e) => tab === 'all' || (tab === 'draft' ? ['draft', 'pending', 'rejected'].includes(e.status) : e.status === tab));
+
+  // Avantage « visibilité » : le serveur fixe `priority` sur l'organisateur tant que le badge est actif
+  const canFeature = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.priority;
+  const feature = async (e: EventItem) => {
+    try {
+      await featureEvent(e.id, !e.featured);
+      toast(e.featured ? t('Événement retiré de la vedette') : t('Événement mis en vedette sur l’accueil'));
+      reload();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('Action impossible. Réessayez.'), 'error');
+    }
+  };
 
   const duplicate = async (e: EventItem) => {
     await saveEvent({ ...e, id: `e${Date.now()}`, slug: `${e.slug}-copie-${Date.now().toString(36).slice(-4)}`, title: `${e.title} (${t('copie')})`, status: 'draft', tickets: e.tickets.map((x) => ({ ...x, sold: 0 })), views: 0 });
@@ -101,7 +115,7 @@ export default function Events() {
                     <div className="min-w-0 flex-1 py-1">
                       <div className="flex items-start justify-between gap-2">
                         <Badge tone={st.tone}>{t(st.l)}</Badge>
-                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} onDelete={() => setRemove(e)} />
+                        <ActionsMenu e={e} onDuplicate={() => duplicate(e)} onCancel={() => setCancel(e)} onDelete={() => setRemove(e)} onFeature={canFeature ? () => feature(e) : undefined} />
                       </div>
                       <Link to={`/organisateur/evenements/${e.id}/stats`} className="mt-1 line-clamp-1 font-bold hover:text-brand-ink">{e.title}</Link>
                       <div className="text-xs text-ink-muted">{dateShort(e.start, lang)} · {time(e.start, lang)} · {e.venue?.city ?? t('En ligne')}</div>

@@ -125,6 +125,7 @@ export default function Explore() {
               ]}
             />
           </div>
+          {f.sort === 'popular' && <p className="-mt-2 mb-4 text-xs text-ink-muted">{t('Classement transparent : les événements des organisateurs vérifiés reçoivent un léger coup de pouce dans ce tri. Les tris par date et par prix ne sont jamais modifiés.')}</p>}
           {loading ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-72" />)}</div>
           ) : count ? (

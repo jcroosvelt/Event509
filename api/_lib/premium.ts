@@ -50,6 +50,8 @@ export const DEFAULT_PREMIUM: PremiumConfig = {
   benefits: { profile: true, visibility: true, analytics: true, multiEvents: true, team: true, support: true, marketing: true, page: true, finance: true, api: true },
   notify: { onDecision: true, onExpiry: true },
   apiLimits: { perMinute: 60, maxKeys: 5 },
+  visibilityBoost: 25,
+  featuredPerOrganizer: 2,
 };
 
 export async function getConfig(q: Q = db()): Promise<PremiumConfig> {
@@ -127,6 +129,9 @@ export async function recompute(orgId: string, q: Q = db()) {
   await q.query(`update organizers set data = data || jsonb_build_object('verified', $2::boolean) where id = $1`, [orgId, verified]);
   if (verified && req?.data.approvedAt) await q.query(`update organizers set data = data || jsonb_build_object('verifiedSince', $2::text) where id = $1`, [orgId, req.data.approvedAt]);
   else if (!verified) await q.query(`update organizers set data = data - 'verifiedSince' where id = $1`, [orgId]);
+  // Visibilité : un coup de pouce transparent, seulement tant que le badge est actif et que l'avantage est offert
+  if (verified && cfg.benefits.visibility && cfg.visibilityBoost > 0) await q.query(`update organizers set data = data || jsonb_build_object('priority', $2::int) where id = $1`, [orgId, cfg.visibilityBoost]);
+  else await q.query(`update organizers set data = data - 'priority' where id = $1`, [orgId]);
   return verified;
 }
 
@@ -231,6 +236,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     return {
       enabled: c.enabled, monthlyPrice: c.monthlyPrice, yearlyPrice: c.yearlyPrice, validityDays: c.validityDays, requiredDocs: c.requiredDocs,
       processingDays: c.processingDays, minAge: c.minAge, eligibility: c.eligibility, refund: c.refund, benefits: c.benefits,
+      visibilityBoost: c.visibilityBoost, featuredPerOrganizer: c.featuredPerOrganizer,
       onlinePayment: payConfigured(),
     };
   };
@@ -382,6 +388,23 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     return null;
   };
 
+  /** Met un événement en vedette (page d'accueil), dans la limite fixée par l'administration. */
+  const feature: Handler = async (c) => {
+    const orgId = org(c, 'events');
+    if (!(await benefitsFor(orgId)).includes('visibility')) fail(403, 'La mise en vedette est réservée aux organisateurs vérifiés');
+    const on = c.body.on === true;
+    const ev = await one<{ id: string; data: { status: string; end: string; featured?: boolean } }>(`select id, data from events where id = $1 and organizer_id = $2`, [c.params.id, orgId]);
+    if (!ev) fail(404, 'Événement introuvable');
+    if (on) {
+      if (ev!.data.status !== 'published') fail(409, 'Seul un événement publié peut être mis en vedette');
+      const cfg = await getConfig();
+      const n = Number((await one<{ n: string }>(`select count(*) as n from events where organizer_id = $1 and id <> $2 and (data->>'featured')::boolean and data->>'status' = 'published'`, [orgId, ev!.id]))?.n ?? 0);
+      if (n >= cfg.featuredPerOrganizer) fail(409, `Vous pouvez mettre ${cfg.featuredPerOrganizer} événement(s) en vedette à la fois`);
+    }
+    await db().query(`update events set data = data || jsonb_build_object('featured', $2::boolean) where id = $1`, [ev!.id, on]);
+    return null;
+  };
+
   const checkPay: Handler = async (c) => ({ status: await checkPremiumPayment(c.params.id) });
 
   const setCancel = (value: boolean): Handler => async (c) => {
@@ -522,6 +545,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
       benefits: Object.fromEntries((Object.keys(DEFAULT_PREMIUM.benefits) as PremiumBenefit[]).map((k) => [k, b.benefits?.[k] ?? cur.benefits[k]])) as PremiumConfig['benefits'],
       notify: { onDecision: b.notify?.onDecision !== false, onExpiry: b.notify?.onExpiry !== false },
       apiLimits: { perMinute: Math.round(n(b.apiLimits?.perMinute, 1, 10_000, cur.apiLimits.perMinute)), maxKeys: Math.round(n(b.apiLimits?.maxKeys, 1, 50, cur.apiLimits.maxKeys)) },
+      visibilityBoost: Math.round(n(b.visibilityBoost, 0, 100, cur.visibilityBoost)), featuredPerOrganizer: Math.round(n(b.featuredPerOrganizer, 0, 10, cur.featuredPerOrganizer)),
     };
     await upsert('settings', { key: 'premium', value: next });
     await audit(c, 'Réglages du programme vérifié modifiés', `${next.monthlyPrice} / ${next.yearlyPrice} HTG`);
@@ -563,6 +587,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
   return [
     ['GET', '/premium/config', publicConfig],
     ['POST', '/premium/payments/:id/check', checkPay],
+    ['POST', '/org/events/:id/feature', feature],
     ['GET', '/org/premium', overview],
     ['PUT', '/org/premium/draft', saveDraft],
     ['POST', '/org/premium/apply', apply],

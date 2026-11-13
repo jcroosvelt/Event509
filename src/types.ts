@@ -102,6 +102,8 @@ export interface Organizer {
   /** Date de certification (calculée par le serveur) ; ancien(s) lien(s) de la page, qui redirigent encore. */
   verifiedSince?: string;
   oldSlugs?: string[];
+  /** Coup de pouce de visibilité en % (tri « Populaires »), fixé par le serveur pour un organisateur vérifié ; absent sinon. */
+  priority?: number;
 }
 
 export type PaymentMethod = 'card' | 'moncash' | 'natcash' | 'kashpaw' | 'paypal' | 'transfer';
@@ -340,6 +342,9 @@ export interface PremiumConfig {
   benefits: Record<PremiumBenefit, boolean>;
   notify: { onDecision: boolean; onExpiry: boolean };
   apiLimits: { perMinute: number; maxKeys: number };
+  /** Visibilité : coup de pouce (%) dans le tri « Populaires » et nombre d'événements pouvant être mis en vedette. */
+  visibilityBoost: number;
+  featuredPerOrganizer: number;
 }
 
 export interface PremiumPayment {
