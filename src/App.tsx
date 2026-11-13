@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Headphones, Link2, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -55,6 +55,8 @@ const Calendar = lazy(() => import('@/pages/organizer/Calendar'));
 const Activity = lazy(() => import('@/pages/organizer/Activity'));
 const OrgSupport = lazy(() => import('@/pages/organizer/Support'));
 const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'));
+const Links = lazy(() => import('@/pages/organizer/Links'));
+const Unsubscribe = lazy(() => import('@/pages/public/Unsubscribe'));
 const Analytics = lazy(() => import('@/pages/organizer/Analytics'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
@@ -115,6 +117,7 @@ export default function App() {
             <Route path="confidentialite" element={<Legal page="privacy" />} />
             <Route path="ambassadeurs" element={<Ambassador />} />
             <Route path="organisateur-verifie" element={<VerifiedProgram />} />
+            <Route path="desinscription" element={<Unsubscribe />} />
             <Route path="organisateur/:slug" element={<OrganizerPage />} />
             <Route path="billets" element={<Wallet_ />} />
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
@@ -149,6 +152,7 @@ export default function App() {
                     { to: `${O}/marketing`, label: t('Campagnes'), icon: Megaphone, perm: 'marketing' },
                     { to: `${O}/emails`, label: t('Emails automatiques'), icon: Mail, perm: 'marketing' },
                     { to: `${O}/ambassadeurs`, label: t('Ambassadeurs'), icon: Share2, perm: 'marketing' },
+                    { to: `${O}/liens`, label: t('Liens de suivi'), icon: Link2, perm: 'marketing' },
                     { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
                     { to: `${O}/analyses`, label: t('Statistiques avancées'), icon: TrendingUp, perm: 'dashboard' },
                   ] },
@@ -188,6 +192,7 @@ export default function App() {
             <Route path="calendrier" element={<Calendar />} />
             <Route path="activite" element={<Activity />} />
             <Route path="support" element={<OrgSupport />} />
+            <Route path="liens" element={<Links />} />
             <Route path="ambassadeurs" element={<Affiliates />} />
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />

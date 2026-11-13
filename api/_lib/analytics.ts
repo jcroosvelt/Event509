@@ -36,7 +36,7 @@ export function analyticsRoutes(h: PremiumDeps): [string, string, Handler][] {
     const htg = (o: Order, v: number) => Math.round(convert(v, o.currency, 'HTG'));
     const byEvent = new Map<string, { revenue: number; tickets: number; orders: number }>();
     const byDay = new Map<string, { tickets: number; revenue: number }>();
-    const sources = { direct: { orders: 0, revenue: 0 }, promo: { orders: 0, revenue: 0 }, ambassador: { orders: 0, revenue: 0 } };
+    const sources = { direct: { orders: 0, revenue: 0 }, promo: { orders: 0, revenue: 0 }, ambassador: { orders: 0, revenue: 0 }, link: { orders: 0, revenue: 0 } };
     let revenue = 0, fees = 0, tickets = 0;
     for (const r of rows) {
       const o = r.data;
@@ -48,7 +48,7 @@ export function analyticsRoutes(h: PremiumDeps): [string, string, Handler][] {
       const d = r.created_at.toLocaleDateString('en-CA', { timeZone: 'America/Port-au-Prince' });
       const dd = byDay.get(d) ?? { tickets: 0, revenue: 0 };
       dd.tickets += q; dd.revenue += rev; byDay.set(d, dd);
-      const src = o.referral ? 'ambassador' : o.promoCode ? 'promo' : 'direct';
+      const src = o.src ? 'link' : o.referral ? 'ambassador' : o.promoCode ? 'promo' : 'direct';
       sources[src].orders++; sources[src].revenue += rev;
     }
     // Série continue : un point par jour de la période (les jours sans vente valent 0)

@@ -304,6 +304,9 @@ export interface CheckoutInput {
   totals: { subtotal: number; discount: number; fees: number; total: number };
   sessionLabel?: string;
   referral?: string;
+  /** Lien de suivi de l'organisateur et consentement (case cochée) à recevoir ses actualités. */
+  src?: string;
+  marketingOptIn?: boolean;
   /** Langue de l'email des billets. */
   lang?: 'fr' | 'en';
 }
@@ -330,7 +333,7 @@ export async function createOrder(input: CheckoutInput): Promise<OrderResult> {
   if (!DEMO)
     return http('/orders', {
       method: 'POST',
-      body: JSON.stringify({ eventId: input.eventId, items: input.items, promoCode: input.promo?.code, method: input.method, currency: input.currency, buyer: input.buyer, sessionLabel: input.sessionLabel, referral: input.referral, lang: input.lang }),
+      body: JSON.stringify({ eventId: input.eventId, items: input.items, promoCode: input.promo?.code, method: input.method, currency: input.currency, buyer: input.buyer, sessionLabel: input.sessionLabel, referral: input.referral, lang: input.lang, src: input.src, marketingOptIn: input.marketingOptIn }),
     });
   await wait(1200); // simulation passerelle de paiement
   const ev = db.events.find((e) => e.id === input.eventId)!;

@@ -146,6 +146,9 @@ export interface Order {
   buyerPhone?: string;
   promoCode?: string;
   referral?: string;
+  /** Code d'un lien de suivi (outils marketing) et consentement à recevoir les actualités de l'organisateur. */
+  src?: string;
+  marketingOptIn?: boolean;
   sessionLabel?: string;
   refundRequest?: { reason: string; at: string; status: 'pending' | 'approved' | 'declined' };
 }
@@ -160,6 +163,11 @@ export interface PromoCode {
   expiresAt: string;
   eventId: string | 'all';
   active: boolean;
+  /** Options avancées (avantage « outils marketing ») : début de validité, billets minimum, un seul type de billet, usages par email. */
+  startsAt?: string;
+  minQty?: number;
+  ticketTypeId?: string;
+  perEmailLimit?: number;
 }
 
 export type TeamRole = 'admin' | 'manager' | 'lead' | 'staff' | 'accountant';

@@ -9,6 +9,7 @@ import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, t
 import { analyticsRoutes } from './analytics.js';
 import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
+import { marketingRoutes } from './marketing.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { readableBrand } from './color.js';
@@ -334,7 +335,7 @@ const createOrder: Handler = async (c) => {
   const b = c.body as {
     eventId: string; items: { ticketTypeId: string; qty: number; seats?: string[] }[]; promoCode?: string;
     method: Order['method']; currency: Currency; buyer: { name: string; email: string; phone?: string };
-    sessionLabel?: string; referral?: string; lang?: string;
+    sessionLabel?: string; referral?: string; lang?: string; src?: string; marketingOptIn?: boolean;
   };
   const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'kashpaw', 'paypal', 'transfer'];
   if (!methods.includes(b.method)) fail(422, 'Moyen de paiement invalide');
@@ -367,17 +368,31 @@ const createOrder: Handler = async (c) => {
       });
       if (count > ev!.maxPerPerson) fail(422, `Maximum ${ev!.maxPerPerson} billets par personne`);
 
+      const srcCode = b.src ? ((await one<{ code: string }>(`select code from tracking_links where code = $1 and organizer_id = $2 and (event_id is null or event_id = $3)`, [str(b.src, 20), ev!.organizerId, ev!.id], q))?.code ?? '') : '';
       const cur = b.currency;
       const c2 = (v: number) => Math.round(convert(v, ev!.currency, cur) * 100) / 100;
       const subtotal = c2(lines.reduce((a, l) => a + l.qty * l.tt.price, 0));
       let promo: PromoCode | undefined;
+      let discount = 0;
       if (b.promoCode) {
         promo = (await docs<PromoCode>(`select data from promo_codes where upper(code) = upper($1) for update`, [str(b.promoCode, 40)], q))[0];
         if (!promo || !promo.active || promo.used >= promo.limit || new Date(promo.expiresAt) < now || (promo.eventId !== 'all' && promo.eventId !== ev!.id))
           fail(409, 'Ce code promo n’est plus valable');
+        if (promo!.startsAt && new Date(promo!.startsAt) > now) fail(409, 'Ce code promo n’est pas encore valable');
+        // Options avancées : seuls les billets visés comptent, et le minimum de billets s'apprécie sur eux
+        const eligible = promo!.ticketTypeId ? lines.filter((l) => l.tt.id === promo!.ticketTypeId) : lines;
+        const eligibleQty = eligible.reduce((a, l) => a + l.qty, 0);
+        if (promo!.ticketTypeId && eligibleQty === 0) fail(409, 'Ce code promo ne s’applique pas aux billets choisis');
+        if (promo!.minQty && eligibleQty < promo!.minQty) fail(409, `Ce code promo demande au moins ${promo!.minQty} billet(s)`);
+        if (promo!.perEmailLimit) {
+          const used = Number((await one<{ n: string }>(
+            `select count(*) as n from orders where lower(buyer_email) = lower($1) and data->>'promoCode' = $2 and status in ('paid', 'pending', 'partially_refunded')`, [buyer.email, promo!.code], q))?.n ?? 0);
+          if (used >= promo!.perEmailLimit) fail(409, 'Vous avez déjà utilisé ce code promo le nombre de fois autorisé');
+        }
         await q.query(`update promo_codes set data = jsonb_set(data, '{used}', to_jsonb((data->>'used')::int + 1)) where id = $1`, [promo!.id]);
+        const eligibleSubtotal = c2(eligible.reduce((a, l) => a + l.qty * l.tt.price, 0));
+        discount = Math.min(eligibleSubtotal, promo!.type === 'percent' ? Math.round(eligibleSubtotal * promo!.value) / 100 : c2(promo!.value));
       }
-      const discount = promo ? Math.min(subtotal, promo.type === 'percent' ? Math.round(subtotal * promo.value) / 100 : c2(promo.value)) : 0;
       const paidTickets = lines.filter((l) => l.tt.price > 0).reduce((a, l) => a + l.qty, 0);
       const fb = computeFees(await feeSettings(q), subtotal - discount, paidTickets, cur, await rateFor(ev!.organizerId, q));
 
@@ -391,6 +406,8 @@ const createOrder: Handler = async (c) => {
         status: (b.method === 'transfer' && subtotal > 0) || (payConfigured() && ONLINE_METHODS.includes(b.method) && fb.total > 0) ? 'pending' : 'paid',
         buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone,
         promoCode: promo?.code, referral: str(b.referral, 40) || undefined, sessionLabel: str(b.sessionLabel, 80) || undefined,
+        // Lien de suivi : gardé seulement s'il existe et appartient à l'organisateur de l'événement
+        src: srcCode || undefined, marketingOptIn: b.marketingOptIn === true ? true : undefined,
       };
       await q.query(`insert into orders (id, event_id, user_id, buyer_email, status, created_at, data, access_key) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [order.id, order.eventId, c.user?.id ?? null, buyer.email, order.status, order.createdAt, JSON.stringify(order), accessKey]);
@@ -1060,11 +1077,22 @@ const savePromo: Handler = async (c) => {
   const p = c.body as unknown as PromoCode;
   const code = str(p.code, 30).toUpperCase();
   if (!/^[A-Z0-9_-]{3,30}$/.test(code)) fail(422, 'Code invalide');
+  // Options avancées (avantage « outils marketing ») : nettoyées, et refusées sans l'avantage
+  const adv = {
+    minQty: Number(p.minQty) >= 2 ? Math.min(100, Math.floor(Number(p.minQty))) : undefined,
+    perEmailLimit: Number(p.perEmailLimit) >= 1 ? Math.min(100, Math.floor(Number(p.perEmailLimit))) : undefined,
+    startsAt: typeof p.startsAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(p.startsAt) ? p.startsAt.slice(0, 16) : undefined,
+    ticketTypeId: typeof p.ticketTypeId === 'string' && p.ticketTypeId ? str(p.ticketTypeId, 40) : undefined,
+  };
+  const before = (await docs<PromoCode>(`select data from promo_codes where id = $1`, [p.id]))[0];
+  const changed = (k: keyof typeof adv) => adv[k] !== before?.[k];
+  if ((Object.keys(adv) as (keyof typeof adv)[]).some((k) => adv[k] !== undefined && changed(k)) && !(await benefitsFor(orgId)).includes('marketing'))
+    fail(403, 'Les codes promo avancés sont réservés aux organisateurs vérifiés');
   const clash = await one<{ id: string; organizer_id: string }>(`select id, organizer_id from promo_codes where upper(code) = $1`, [code]);
   if (clash && clash.id !== p.id) fail(409, 'Ce code existe déjà');
   const own = await one<{ organizer_id: string }>(`select organizer_id from promo_codes where id = $1`, [p.id]);
   if (own && own.organizer_id !== orgId) fail(403, 'Code d’un autre organisateur');
-  await upsert('promo_codes', { id: p.id || newId('pc'), organizer_id: orgId, code, data: { ...p, code } });
+  await upsert('promo_codes', { id: p.id || newId('pc'), organizer_id: orgId, code, data: { ...p, code, ...adv } });
   return null;
 };
 
@@ -1716,6 +1744,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
   ...supportRoutes({ fail, str, auth, admin, org, audit }),
+  ...marketingRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };

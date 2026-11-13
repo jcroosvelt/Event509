@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BadgePercent, Copy, Plus } from 'lucide-react';
-import { events } from '@/data/mock';
-import { listPromoCodes, savePromo } from '@/services/api';
+import { events, organizers } from '@/data/mock';
+import { DEMO, listPromoCodes, savePromo } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric, uid } from '@/lib/format';
@@ -18,9 +18,11 @@ export default function Promos() {
   const [editing, setEditing] = useState<PromoCode | null>(null);
   const [busy, setBusy] = useState(false);
   const myEvents = events.filter((e) => e.organizerId === orgOf(user));
+  // Avantage « outils marketing » : le serveur fixe les avantages actifs et refuse les options sans lui
+  const advanced = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.perks?.includes('marketing');
 
   const form = useForm(
-    { code: '', type: 'percent', value: '10', limit: '100', expiresAt: '', eventId: 'all', active: 'true' },
+    { code: '', type: 'percent', value: '10', limit: '100', expiresAt: '', eventId: 'all', active: 'true', minQty: '', perEmailLimit: '', startsAt: '', ticketTypeId: '' },
     {
       code: (v) => (String(v).length < 3 ? t('Au moins 3 lettres ou chiffres') : undefined),
       value: (v, all) => (!(Number(v) > 0) ? t('Indiquez une valeur supérieure à 0') : all.type === 'percent' && Number(v) > 100 ? t('Un pourcentage ne peut pas dépasser 100') : undefined),
@@ -36,7 +38,7 @@ export default function Promos() {
     d.setMonth(d.getMonth() + 1);
     const base = p ?? { id: uid('p'), code: '', type: 'percent' as const, value: 10, used: 0, limit: 100, expiresAt: d.toISOString().slice(0, 16), eventId: 'all', active: true };
     setEditing(base);
-    form.reset({ code: base.code, type: base.type, value: String(base.value), limit: String(base.limit), expiresAt: base.expiresAt.slice(0, 16), eventId: base.eventId, active: String(base.active) });
+    form.reset({ code: base.code, type: base.type, value: String(base.value), limit: String(base.limit), expiresAt: base.expiresAt.slice(0, 16), eventId: base.eventId, active: String(base.active), minQty: base.minQty ? String(base.minQty) : '', perEmailLimit: base.perEmailLimit ? String(base.perEmailLimit) : '', startsAt: base.startsAt ?? '', ticketTypeId: base.ticketTypeId ?? '' });
   };
 
   const save = async () => {
@@ -44,7 +46,8 @@ export default function Promos() {
     setBusy(true);
     try {
       const v = form.values;
-      await savePromo({ ...editing, code: v.code, type: v.type as PromoCode['type'], value: Number(v.value), limit: Number(v.limit), expiresAt: v.expiresAt, eventId: v.eventId, active: v.active === 'true' });
+      await savePromo({ ...editing, code: v.code, type: v.type as PromoCode['type'], value: Number(v.value), limit: Number(v.limit), expiresAt: v.expiresAt, eventId: v.eventId, active: v.active === 'true',
+        ...(advanced ? { minQty: Number(v.minQty) || undefined, perEmailLimit: Number(v.perEmailLimit) || undefined, startsAt: v.startsAt || undefined, ticketTypeId: v.eventId !== 'all' && v.ticketTypeId ? v.ticketTypeId : undefined } : {}) });
       setEditing(null);
       toast(t('Code promo enregistré'));
       reload();
@@ -108,6 +111,24 @@ export default function Promos() {
               {myEvents.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
             </Select>
           </Field>
+          {advanced && (
+            <fieldset className="space-y-4 rounded-2xl bg-canvas p-4">
+              <legend className="px-1 text-sm font-bold">{t('Options avancées')}</legend>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label={t('Début de validité')}><Input type="datetime-local" {...form.bind('startsAt')} /></Field>
+                <Field label={t('Billets minimum')} hint={t('Facultatif')}><Input type="text" inputMode="numeric" autoComplete="off" {...form.bind('minQty')} onChange={(e) => form.set('minQty', cleanNumber(e.target.value, false))} /></Field>
+                <Field label={t('Usages par email')} hint={t('Facultatif')}><Input type="text" inputMode="numeric" autoComplete="off" {...form.bind('perEmailLimit')} onChange={(e) => form.set('perEmailLimit', cleanNumber(e.target.value, false))} /></Field>
+                {form.values.eventId !== 'all' && (
+                  <Field label={t('Type de billet visé')}>
+                    <Select {...form.bind('ticketTypeId')}>
+                      <option value="">{t('Tous les billets')}</option>
+                      {(myEvents.find((e) => e.id === form.values.eventId)?.tickets ?? []).map((tk) => <option key={tk.id} value={tk.id}>{tk.name}</option>)}
+                    </Select>
+                  </Field>
+                )}
+              </div>
+            </fieldset>
+          )}
           <Toggle checked={form.values.active === 'true'} onChange={(v) => form.set('active', String(v))} label={t('Actif')} />
         </form>
       </Modal>

@@ -65,7 +65,7 @@ export interface Analytics {
   series: { day: string; tickets: number; revenue: number }[];
   events: { id: string; title: string; start: string; status: string; category: string; revenue: number; ticketsInPeriod: number; orders: number; views: number; quota: number; sold: number; remaining: number; conversion: number }[];
   categories: { id: string; revenue: number; tickets: number }[];
-  sources: { key: 'direct' | 'promo' | 'ambassador'; orders: number; revenue: number }[];
+  sources: { key: 'direct' | 'promo' | 'ambassador' | 'link'; orders: number; revenue: number }[];
   campaigns: { id: string; name: string; channel: string; status: string; sent: number; opened: number; clicks: number; date: string }[];
 }
 export const getAnalytics = (from: string, to: string) => http<Analytics>(`/org/analytics?from=${from}&to=${to}`);
@@ -98,3 +98,13 @@ export const resolveSupport = (id: string) => http<null>(`/org/support/${encodeU
 export const getSupportInbox = (status = '') => http<SupportTicket[]>(`/admin/support${status ? `?status=${status}` : ''}`);
 export const adminReplySupport = (id: string, body: string, resolve: boolean) => http<null>(`/admin/support/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ body, resolve }) });
 export const adminSupportStatus = (id: string, status: string) => http<null>(`/admin/support/${encodeURIComponent(id)}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+
+// Outils marketing
+export interface TrackingLink { id: string; code: string; label: string; eventId: string | null; event: string | null; clicks: number; orders: number; revenue: number; conversion: number; createdAt: string }
+export const listLinks = () => http<TrackingLink[]>('/org/links');
+export const createLink = (label: string, eventId: string) => http<{ id: string; code: string }>('/org/links', { method: 'POST', body: JSON.stringify({ label, eventId }) });
+export const deleteLink = (id: string) => http<null>(`/org/links/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getAudience = (eventId: string) => http<{ consenting: number; buyers: number; mailConfigured: boolean; pushConfigured: boolean }>(`/org/audience?eventId=${encodeURIComponent(eventId)}`);
+export const sendCampaign = (i: { name: string; subject: string; body: string; eventId: string; channels: string[] }) =>
+  http<{ recipients: number; sentEmail: number; sentPush: number }>('/org/campaigns/send', { method: 'POST', body: JSON.stringify(i) });
+export const unsubscribeMarketing = (o: string, e: string, token: string) => http<{ organization: string }>('/unsubscribe', { method: 'POST', body: JSON.stringify({ o, e, t: token }) });

@@ -319,3 +319,23 @@ create table if not exists support_messages (
   created_at timestamptz not null default now()
 );
 create index if not exists support_messages_ticket on support_messages(ticket_id, created_at);
+
+-- Outils marketing (avantage des organisateurs vérifiés) : liens de suivi et désinscription des communications.
+create table if not exists tracking_links (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  event_id text,
+  code text unique not null,
+  label text not null,
+  clicks integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists tracking_links_org on tracking_links(organizer_id, created_at desc);
+
+-- Un acheteur qui se désinscrit ne reçoit plus de campagne de cet organisateur (le consentement se donne à l'achat).
+create table if not exists marketing_optouts (
+  organizer_id text not null references organizers(id) on delete cascade,
+  email text not null,
+  at timestamptz not null default now(),
+  primary key (organizer_id, email)
+);

@@ -117,3 +117,38 @@ ${lines.map((l) => `<p style="margin:0 0 10px;line-height:1.5">${esc(l)}</p>`).j
 </table></td></tr></table></body></html>`;
   return send(to, subject, html);
 }
+
+/**
+ * Campagne d'un organisateur à ses acheteurs consentants. Chaque email porte le nom de l'organisateur et un lien de
+ * désinscription personnel : on n'envoie jamais sans lui.
+ */
+export async function sendCampaignEmail(to: string, opts: { organizer: string; subject: string; body: string; unsubscribeUrl: string }): Promise<boolean> {
+  if (!mailConfigured()) return false;
+  const paras = opts.body.split(/\n{2,}/).map((p) => `<p style="margin:0 0 12px;line-height:1.55">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
+<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">${esc(opts.organizer)}</td></tr>
+<tr><td style="padding:28px">${paras}</td></tr>
+<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Vous recevez ce message car vous avez accepté de recevoir les actualités de ${esc(opts.organizer)} lors de votre achat sur Event509.<br><a href="${esc(opts.unsubscribeUrl)}" style="color:#1A50DB">Se désinscrire</a></td></tr>
+</table></td></tr></table></body></html>`;
+  // En-têtes de désinscription en un clic, pour les messageries qui les affichent
+  return sendWithHeaders(to, opts.subject, html, { 'List-Unsubscribe': `<${opts.unsubscribeUrl}>` });
+}
+
+async function sendWithHeaders(to: string, subject: string, html: string, headers: Record<string, string>): Promise<boolean> {
+  if (!mailConfigured()) return false;
+  try {
+    const res = await fetch(process.env.RESEND_API_URL || 'https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, html, headers }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error('[mail] refus du fournisseur', res.status, await res.text().catch(() => ''));
+    return res.ok;
+  } catch (e) {
+    console.error('[mail] échec', e);
+    return false;
+  }
+}
