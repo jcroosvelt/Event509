@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('publication de l’APK sur le site', () => {
@@ -21,5 +22,14 @@ describe('publication de l’APK sur le site', () => {
     expect(cfg).toMatch(/navigateFallbackDenylist:[^\n]*\\\/app\\\//);
     expect(cfg).toMatch(/navigateFallbackDenylist:[^\n]*well-known/);
     expect(cfg).not.toMatch(/globPatterns:[^\n]*apk/);
+  });
+
+  it('la fiche de version correspond exactement au fichier APK publié (taille et empreinte)', () => {
+    if (!existsSync('public/app/event509.apk')) return; // aucun APK publié pour l'instant
+    const info = JSON.parse(readFileSync('public/app/version.json', 'utf8')) as { versionCode: number; versionName: string; size: number; sha256: string };
+    expect(info.versionCode).toBeGreaterThan(1);
+    expect(info.versionName).toBe(`1.0.${info.versionCode}`);
+    expect(statSync('public/app/event509.apk').size).toBe(info.size);
+    expect(createHash('sha256').update(readFileSync('public/app/event509.apk')).digest('hex')).toBe(info.sha256);
   });
 });

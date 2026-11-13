@@ -128,3 +128,4 @@
 - 2026-11-13 : devises du monde pour l'acheteur, taux réglables en gourdes par l'admin, paiement toujours en gourdes.
 - 2026-11-13 : événements proches (ville, pays) et selon les goûts, position détectée ou choisie, pays du lieu dans l'éditeur.
 - 2026-11-13 : invitation à installer l'APK sur le site, fenêtre d'informations, page /telecharger, mises à jour (publication automatique et notification).
+- 2026-11-13 : première version de l'application (1.0.21) publiée dans public/app/ ; le workflow de l'application garde l'APK le plus récent dans sa branche apk-release.
