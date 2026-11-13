@@ -2,7 +2,7 @@
 // on lit les premiers octets, et seuls JPEG, PNG, WebP (et PDF pour la vérification) sont acceptés.
 
 export type FileKind = 'event_cover' | 'org_logo' | 'verification';
-export const DOC_TYPES = ['id', 'license', 'bank'] as const;
+export const DOC_TYPES = ['id', 'license', 'bank', 'selfie', 'registration', 'representation'] as const;
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 export const MAX_PDF_BYTES = 3 * 1024 * 1024;

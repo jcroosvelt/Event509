@@ -1050,22 +1050,22 @@ export async function listVerificationRequests() {
   if (!DEMO) return http<VerificationRequest[]>('/admin/verifications');
   await wait(); return clone(db.verificationRequests);
 }
-export async function decideVerification(id: string, status: VerificationRequest['status'], note?: string) {
+export async function decideVerification(
+  id: string, status: VerificationRequest['status'] | 'revoked' | 'reinstated', note?: string,
+  checklist?: { identity: boolean; email: boolean; phone: boolean; presence: boolean },
+) {
   if (!DEMO) {
-    await http(`/admin/verifications/${id}`, { method: 'POST', body: JSON.stringify({ status, note }) });
-    const v = await http<VerificationRequest[]>('/admin/verifications').then((l) => l.find((x) => x.id === id));
-    const o = db.organizers.find((x) => x.id === v?.organizerId);
-    if (o) o.verified = status === 'approved';
+    await http(`/admin/verifications/${id}`, { method: 'POST', body: JSON.stringify({ status, note, checklist }) });
     return;
   }
   await wait(300);
   const v = db.verificationRequests.find((x) => x.id === id);
   if (!v) return;
-  v.status = status;
+  v.status = status === 'revoked' ? 'rejected' : status === 'reinstated' ? 'approved' : status;
   v.note = note;
-  const org = db.organizers.find((o) => o.id === v.organizerId);
-  if (org) org.verified = status === 'approved';
-  audit(status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification refusée', v.name);
+  const o = db.organizers.find((x) => x.id === v.organizerId);
+  if (o) o.verified = v.status === 'approved';
+  audit(status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification mise à jour', v.name);
 }
 
 export async function listDisputes() {

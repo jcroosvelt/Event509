@@ -216,3 +216,52 @@ create table if not exists reviews (
   data jsonb not null
 );
 create index if not exists reviews_event on reviews(event_id, created_at desc);
+
+-- Programme « Organisateur vérifié » : abonnement (un par organisation), paiements, historique des décisions.
+-- Migration additive : rien n'est supprimé. Retour arrière : drop table des quatre tables ci-dessous.
+create table if not exists premium_subscriptions (
+  id text primary key,
+  organizer_id text not null unique references organizers(id) on delete cascade,
+  plan text not null check (plan in ('monthly', 'yearly')),
+  status text not null check (status in ('pending_payment', 'active', 'canceled', 'expired', 'suspended')),
+  started_at timestamptz,
+  expires_at timestamptz,
+  cancel_at_period_end boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists premium_payments (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  plan text not null check (plan in ('monthly', 'yearly')),
+  amount numeric not null,
+  status text not null check (status in ('pending', 'paid', 'failed', 'refund_due', 'refunded')),
+  method text not null,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  data jsonb not null default '{}'
+);
+create index if not exists premium_payments_org on premium_payments(organizer_id, created_at desc);
+
+-- Historique des décisions et commentaires internes (visibles seulement de l'administration quand internal = true).
+create table if not exists verification_log (
+  id text primary key,
+  organizer_id text not null references organizers(id) on delete cascade,
+  at timestamptz not null default now(),
+  actor text not null,
+  action text not null,
+  note text,
+  internal boolean not null default false
+);
+create index if not exists verification_log_org on verification_log(organizer_id, at desc);
+
+-- Chaque consultation d'un document d'identité par l'administration est enregistrée.
+create table if not exists document_access_log (
+  id text primary key,
+  file_id text not null,
+  organizer_id text not null,
+  admin_id text not null,
+  admin_name text not null,
+  at timestamptz not null default now()
+);
+create index if not exists document_access_org on document_access_log(organizer_id, at desc);

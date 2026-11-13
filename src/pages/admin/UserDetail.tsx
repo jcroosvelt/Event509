@@ -1,6 +1,7 @@
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, CalendarDays, Receipt, Wallet } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Receipt, Wallet } from 'lucide-react';
 import { events } from '@/data/mock';
 import { getUserDetail, setUserRole, setUserStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
@@ -42,7 +43,7 @@ export default function UserDetail() {
     <div className="space-y-6">
       <Link to="/admin/utilisateurs" className="inline-flex items-center gap-2 text-sm font-semibold text-ink-soft"><ArrowLeft className="h-4 w-4" aria-hidden /> {t('Utilisateurs')}</Link>
       <PageHeader
-        title={<span className="flex items-center gap-3"><Avatar name={u.name} size={52} /> <span>{u.name}{u.verified && <BadgeCheck className="ml-1 inline h-6 w-6 text-brand-ink" aria-label={t('Vérifié')} />}</span></span>}
+        title={<span className="flex items-center gap-3"><Avatar name={u.name} size={52} /> <span>{u.name}{u.verified && <VerifiedBadge className="ml-1" size={26} />}</span></span>}
         subtitle={`${u.email}${u.phone ? ` · ${u.phone}` : ''} · ${u.city} · ${t('inscrit le {date}', { date: dateNumeric(u.joinedAt, lang) })}`}
         actions={
           !isMe && u.role !== 'admin' ? (

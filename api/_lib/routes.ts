@@ -6,6 +6,7 @@ import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
 import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
+import { checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { claimOnce, holderEmails, holderUserIds, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATE, setRate, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
@@ -882,31 +883,27 @@ const orgSales: Handler = async (c) => {
 
 const MAX_FILES_PER_ORG = 300;
 
-/** Met à jour la demande de vérification de l'organisation à partir des documents reçus. */
+/**
+ * Met à jour la liste des documents de la demande de vérification. La demande reste un brouillon tant que l'organisateur
+ * ne l'a pas soumise (POST /org/premium/apply) : envoyer un document ne l'envoie jamais à l'administration.
+ */
 async function syncVerification(orgId: string, owner: UserRow, q: Q) {
   const files = await all<{ id: string; doc_type: string; name: string; created_at: Date }>(
     `select id, doc_type, name, created_at from files where organizer_id = $1 and kind = 'verification' order by created_at`, [orgId], q);
-  const complete = DOC_TYPES.every((t) => files.some((f) => f.doc_type === t));
-  const existing = await one<{ id: string; status: VerificationRequest['status']; data: VerificationRequest }>(
-    `select id, status, data from verification_requests where organizer_id = $1 order by id limit 1`, [orgId], q);
-  // La demande n'apparaît chez l'administration que lorsque les trois documents sont là
-  if (!complete && !existing) return;
   const o = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId], q))[0];
-  const status: VerificationRequest['status'] = !existing ? 'pending' : existing.status === 'approved' ? 'approved' : complete ? 'pending' : existing.status;
-  const reqDoc: VerificationRequest = {
-    id: existing?.id ?? newId('vr'), organizerId: orgId, name: o?.name ?? orgId, owner: (owner.data.name as string) ?? owner.email,
-    email: owner.email, city: o?.city ?? '', status, note: status === 'pending' ? undefined : existing?.data.note,
-    submittedAt: existing && status === existing.status ? existing.data.submittedAt : new Date().toISOString(),
-    docs: files.map((f) => ({ type: f.doc_type as VerificationRequest['docs'][number]['type'], file: f.name, fileId: f.id, uploadedAt: new Date(f.created_at).toISOString() })),
-  };
-  await upsert('verification_requests', { id: reqDoc.id, organizer_id: orgId, status, data: reqDoc }, q);
+  await patchRequest(
+    orgId,
+    { docs: files.map((f) => ({ type: f.doc_type as VerificationRequest['docs'][number]['type'], file: f.name, fileId: f.id, uploadedAt: new Date(f.created_at).toISOString() })) },
+    { name: o?.name ?? orgId, owner: (owner.data.name as string) ?? owner.email, email: owner.email, city: o?.city ?? '' },
+    q,
+  );
 }
 
 const uploadFile: Handler = async (c) => {
   const kind = str(c.body.kind, 20) as FileKind;
   if (!['event_cover', 'org_logo', 'verification'].includes(kind)) fail(422, 'Type de fichier invalide');
   const orgId = org(c, kind === 'event_cover' ? 'events' : 'settings');
-  const docType = str(c.body.docType, 10);
+  const docType = str(c.body.docType, 20);
   if (kind === 'verification' && !(DOC_TYPES as readonly string[]).includes(docType)) fail(422, 'Type de document invalide');
   const b64 = typeof c.body.data === 'string' ? c.body.data : '';
   if (!b64 || b64.length > 4.4 * 1024 * 1024) fail(413, 'Fichier trop lourd');
@@ -934,14 +931,18 @@ const uploadFile: Handler = async (c) => {
 };
 
 const readFile: Handler = async (c) => {
-  const f = await one<{ organizer_id: string; visibility: string; mime: string; name: string; data: Buffer }>(
-    `select organizer_id, visibility, mime, name, data from files where id = $1`, [c.params.id]);
+  const f = await one<{ organizer_id: string; visibility: string; mime: string; name: string; data: Buffer; kind: string }>(
+    `select organizer_id, visibility, mime, name, data, kind from files where id = $1`, [c.params.id]);
   if (!f) fail(404, 'Fichier introuvable');
   if (f!.visibility === 'public') return new Binary(f!.mime, f!.data, 'public, max-age=31536000, immutable', f!.name);
   // Document privé : l'administration, ou l'équipe de l'organisation qui l'a envoyé. Même réponse si le fichier n'existe pas.
   const u = auth(c);
   const allowed = u.role === 'admin' || (u.organizer_id === f!.organizer_id && teamPerms[u.team_role ?? 'admin'].includes('settings'));
   if (!allowed) fail(404, 'Fichier introuvable');
+  // Chaque consultation d'un document d'identité par l'administration est enregistrée (date, heure, administrateur)
+  if (u.role === 'admin' && f!.kind === 'verification')
+    await db().query(`insert into document_access_log (id, file_id, organizer_id, admin_id, admin_name) values ($1,$2,$3,$4,$5)`,
+      [newId('da'), c.params.id, f!.organizer_id, u.id, (u.data.name as string) ?? u.email]);
   return new Binary(f!.mime, f!.data, 'private, no-store', f!.name);
 };
 
@@ -1352,7 +1353,8 @@ const verifyOrder: Handler = async (c) => {
  */
 const payWebhook: Handler = async (c) => {
   const ref = str((c.body.transaction as { reference_id?: unknown } | undefined)?.reference_id, 60);
-  if (ref) await checkPayment(ref);
+  if (ref.startsWith('sp_')) await checkPremiumPayment(ref);
+  else if (ref) await checkPayment(ref);
   return { ok: true };
 };
 
@@ -1380,23 +1382,6 @@ const setReportStatus: Handler = async (c) => {
   const status = str(c.body.status, 20) as Report['status'];
   const r = await one<{ event_id: string }>(`update reports set status = $2, data = data || $3::jsonb where id = $1 returning event_id`, [c.params.id, status, JSON.stringify({ status })]);
   if (r) await audit(c, status === 'dismissed' ? 'Signalement classé' : 'Signalement traité', (await eventById(r.event_id))?.title ?? r.event_id);
-  return null;
-};
-
-const listVerifications: Handler = async (c) => {
-  admin(c);
-  return docs<VerificationRequest>(`select data from verification_requests order by data->>'submittedAt' desc`);
-};
-const decideVerification: Handler = async (c) => {
-  admin(c);
-  const status = str(c.body.status, 20) as VerificationRequest['status'];
-  const note = str(c.body.note, 500) || undefined;
-  const v = await one<{ organizer_id: string | null; data: VerificationRequest }>(
-    `update verification_requests set status = $2, data = data || $3::jsonb where id = $1 returning organizer_id, data`, [c.params.id, status, JSON.stringify({ status, note })]);
-  if (!v) return null;
-  if (v.organizer_id)
-    await db().query(`update organizers set data = jsonb_set(data, '{verified}', to_jsonb($2::boolean)) where id = $1`, [v.organizer_id, status === 'approved']);
-  await audit(c, status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification refusée', v.data.name);
   return null;
 };
 
@@ -1584,7 +1569,8 @@ const runReminders: Handler = async (c) => {
   const stale = await all<{ id: string }>(
     `select id from orders where status = 'pending' and data->>'method' = any($1) and created_at < now() - interval '2 hours'`, [[...ONLINE_METHODS]]);
   for (const o of stale) if ((await checkPayment(o.id)) === 'pending') await dropOrder(o.id);
-  if (!pushConfigured()) return { sent: 0, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
+  const premium = await premiumMaintenance().catch((e) => (console.error('[premium] maintenance', e), null));
+  if (!pushConfigured()) return { sent: 0, premium, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
   const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
   const now = Date.parse(`${nowLocal}Z`);
   const today = nowLocal.slice(0, 10);
@@ -1604,10 +1590,11 @@ const runReminders: Handler = async (c) => {
     const body = kind === 'eve' ? `${ev.title} a lieu demain à ${time}` : kind === 'day' ? `${ev.title} a lieu aujourd’hui à ${time}` : `${ev.title} commence bientôt (${time})`;
     sent += await notifyHolders(ev.id, { title: 'Rappel', body, url: eventPath(ev), channel: 'reminders' });
   }
-  return { sent };
+  return { sent, premium };
 };
 
 export const routes: [method: string, pattern: string, handler: Handler][] = [
+  ...premiumRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };
@@ -1699,8 +1686,6 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/admin/events/:id/moderate', moderateEvent],
   ['GET', '/admin/reports', listReports],
   ['POST', '/admin/reports/:id', setReportStatus],
-  ['GET', '/admin/verifications', listVerifications],
-  ['POST', '/admin/verifications/:id', decideVerification],
   ['GET', '/admin/disputes', listDisputes],
   ['POST', '/admin/disputes/:id/resolve', resolveDispute],
   ['POST', '/admin/disputes/:id/messages', disputeMessage],

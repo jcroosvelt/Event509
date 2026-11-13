@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
-  BadgePercent, BarChart3, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
+  BadgeCheck, BadgePercent, BarChart3, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
   ScanLine, Settings, Share2, Star, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
@@ -47,6 +47,10 @@ const Promos = lazy(() => import('@/pages/organizer/Promos'));
 const Refunds = lazy(() => import('@/pages/organizer/Refunds'));
 const Marketing = lazy(() => import('@/pages/organizer/Marketing'));
 const Reviews = lazy(() => import('@/pages/organizer/Reviews'));
+const VerifiedProgram = lazy(() => import('@/pages/public/VerifiedProgram'));
+const OrgVerification = lazy(() => import('@/pages/organizer/Verification'));
+const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
+const PremiumSettings = lazy(() => import('@/pages/admin/PremiumSettings'));
 const Automations = lazy(() => import('@/pages/organizer/Automations'));
 const Affiliates = lazy(() => import('@/pages/organizer/Affiliates'));
 const Team = lazy(() => import('@/pages/organizer/Team'));
@@ -105,6 +109,7 @@ export default function App() {
             <Route path="cgu" element={<Legal page="terms" />} />
             <Route path="confidentialite" element={<Legal page="privacy" />} />
             <Route path="ambassadeurs" element={<Ambassador />} />
+            <Route path="organisateur-verifie" element={<VerifiedProgram />} />
             <Route path="billets" element={<Wallet_ />} />
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
             <Route path="favoris" element={auth(<Favorites />)} />
@@ -141,6 +146,8 @@ export default function App() {
                   ] },
                   { title: t('Organisation'), items: [
                     { to: `${O}/equipe`, label: t('Équipe & rôles'), icon: UserCog, perm: 'team' },
+                    { to: `${O}/verification`, label: t('Organisateur vérifié'), icon: BadgeCheck, perm: 'settings' },
+                    { to: `${O}/abonnement`, label: t('Mon abonnement'), icon: CreditCard, perm: 'settings' },
                     { to: `${O}/parametres`, label: t('Paramètres'), icon: Settings, perm: 'settings' },
                   ] },
                 ]}
@@ -171,6 +178,8 @@ export default function App() {
             <Route path="equipe" element={<Team />} />
             <Route path="versements" element={<Payouts />} />
             <Route path="parametres" element={<OrgSettings />} />
+            <Route path="verification" element={<OrgVerification />} />
+            <Route path="abonnement" element={<Subscription />} />
           </Route>
 
           <Route
@@ -185,6 +194,7 @@ export default function App() {
                     { to: `${A}/moderation`, label: t('Modération'), icon: Flag, perm: 'admin', badge: String(pending.events + pending.reports || '') || undefined },
                     { to: `${A}/utilisateurs`, label: t('Utilisateurs'), icon: Users, perm: 'admin' },
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
+                    { to: `${A}/programme-verifie`, label: t('Programme vérifié'), icon: BadgeCheck, perm: 'admin' },
                   ] },
                   { title: t('Finances'), items: [
                     { to: `${A}/transactions`, label: t('Transactions'), icon: Receipt, perm: 'admin' },
@@ -210,6 +220,7 @@ export default function App() {
             <Route path="moderation" element={<Moderation />} />
             <Route path="utilisateurs" element={<AdminUsers />} />
             <Route path="verification" element={<Verification />} />
+            <Route path="programme-verifie" element={<PremiumSettings />} />
             <Route path="litiges" element={<Disputes />} />
             <Route path="commissions" element={<Commissions />} />
             <Route path="utilisateurs/:id" element={<UserDetail />} />
