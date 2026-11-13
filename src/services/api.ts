@@ -7,10 +7,12 @@
  */
 import * as db from '@/data/mock';
 import type {
-  Ambassador, AppUser, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
+  Ambassador, AppUser, Lang, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
   PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, Review, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
 import { setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
+import { defaultSiteInfo, type SiteInfo } from '@/lib/legalDoc';
+import type { LegalDoc } from '@/data/legalDefaults';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
 import { isBoosted } from '@/lib/boost';
@@ -95,6 +97,7 @@ interface Bootstrap {
   fees: FeeSettings;
   /** Taux de change du jour (gourdes pour 1 dollar). */
   rate?: number;
+  site?: Partial<SiteInfo>;
   customCommissions: { organizerId: string; rate: number; reason: string }[];
 }
 const BOOT_KEY = 'e509.cache.bootstrap';
@@ -106,6 +109,7 @@ function applyBootstrap(b: Bootstrap) {
   replaceAll(db.customCommissions, b.customCommissions);
   Object.assign(feeSettings, b.fees);
   if (typeof b.rate === 'number') setUsdToHtg(b.rate);
+  if (b.site) Object.assign(siteInfo, b.site);
   // Données propres à la démo : vides tant que le serveur ne les a pas fournies
   for (const list of [db.myTickets, db.myOrders, db.notifications, db.attendees, db.resaleListings, db.promoCodes, db.team, db.refunds, db.payouts, db.campaigns, db.users, db.disputes, db.reports, db.verificationRequests, db.auditLog, db.platformTargets, db.platformOrders] as unknown[][])
     list.length = 0;
@@ -797,6 +801,43 @@ export async function saveFeeSettings(next: FeeSettings) {
   writeLocal(FEES_KEY, feeSettings);
   audit('Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG`);
 }
+// ---------- Documents légaux et valeurs du site ----------
+
+const SITE_KEY = 'e509.siteInfo';
+const LEGAL_KEY = 'e509.legalTexts';
+const siteInfo: SiteInfo = { ...defaultSiteInfo, ...((DEMO && readLocal<Partial<SiteInfo>>(SITE_KEY)) || {}) };
+
+/** Valeurs insérées dans les documents légaux (lecture synchrone). */
+export function currentSiteInfo(): SiteInfo {
+  return { ...siteInfo };
+}
+export type LegalOverrides = Partial<Record<LegalDoc, Partial<Record<Lang, string>>>>;
+
+/** Textes juridiques modifiés par l'administrateur ; ce qui manque garde le texte d'origine. */
+export async function getLegalOverrides(): Promise<LegalOverrides> {
+  if (!DEMO) return http<LegalOverrides>('/legal');
+  return readLocal<LegalOverrides>(LEGAL_KEY) ?? {};
+}
+/** Administrateur : modifie un document (ou le rétablit avec text = null). */
+export async function saveLegalText(doc: LegalDoc, lang: Lang, text: string | null) {
+  if (!DEMO) return void (await http('/admin/legal', { method: 'PUT', body: JSON.stringify({ doc, lang, text }) }));
+  await wait(150);
+  const cur = readLocal<LegalOverrides>(LEGAL_KEY) ?? {};
+  const next: LegalOverrides = { ...cur, [doc]: { ...(cur[doc] ?? {}) } };
+  if (text === null) delete next[doc]![lang];
+  else next[doc]![lang] = text;
+  writeLocal(LEGAL_KEY, next);
+  audit(text === null ? 'Texte légal rétabli' : 'Texte légal modifié', `${doc} (${lang})`);
+}
+/** Administrateur : enregistre les valeurs insérées dans les documents légaux. */
+export async function saveSiteInfo(next: SiteInfo) {
+  if (!DEMO) return void Object.assign(siteInfo, await http<Partial<SiteInfo>>('/admin/site', { method: 'PUT', body: JSON.stringify(next) }));
+  await wait(150);
+  Object.assign(siteInfo, next);
+  writeLocal(SITE_KEY, siteInfo);
+  audit('Réglages des documents légaux modifiés', Object.keys(next).join(', '));
+}
+
 /** Taux de change en vigueur : gourdes pour 1 dollar. */
 export function currentExchangeRate() {
   return USD_TO_HTG;

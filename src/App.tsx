@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  FileText, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -75,6 +75,7 @@ const Moderation = lazy(() => import('@/pages/admin/Moderation'));
 const AdminUsers = lazy(() => import('@/pages/admin/Users'));
 const Disputes = lazy(() => import('@/pages/admin/Disputes'));
 const Commissions = lazy(() => import('@/pages/admin/Commissions'));
+const AdminContent = lazy(() => import('@/pages/admin/AdminContent'));
 const Verification = lazy(() => import('@/pages/admin/Verification'));
 const UserDetail = lazy(() => import('@/pages/admin/UserDetail'));
 const Transactions = lazy(() => import('@/pages/admin/Transactions'));
@@ -122,6 +123,7 @@ export default function App() {
             <Route path="reinitialiser" element={<ResetPassword />} />
             <Route path="cgu" element={<Legal page="terms" />} />
             <Route path="confidentialite" element={<Legal page="privacy" />} />
+            <Route path="remboursement" element={<Legal page="refund" />} />
             <Route path="ambassadeurs" element={<Ambassador />} />
             <Route path="organisateur-verifie" element={<VerifiedProgram />} />
             <Route path="desinscription" element={<Unsubscribe />} />
@@ -237,6 +239,7 @@ export default function App() {
                     { to: `${A}/commissions`, label: t('Commissions'), icon: Percent, perm: 'admin' },
                   ] },
                   { title: t('Suivi'), items: [
+                    { to: `${A}/contenu`, label: t('Contenu et réglages'), icon: FileText, perm: 'admin' },
                     { to: `${A}/journal`, label: t('Journal d’activité'), icon: History, perm: 'admin' },
                   ] },
                 ]}
@@ -259,6 +262,7 @@ export default function App() {
             <Route path="boosts" element={<AdminBoosts />} />
             <Route path="litiges" element={<Disputes />} />
             <Route path="commissions" element={<Commissions />} />
+            <Route path="contenu" element={<AdminContent />} />
             <Route path="utilisateurs/:id" element={<UserDetail />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="versements" element={<AdminPayouts />} />

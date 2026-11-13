@@ -298,6 +298,7 @@ const bootstrap: Handler = async (c) => {
     events, organizers, ambassadors,
     fees: await feeSettings(),
     rate: USD_TO_HTG,
+    site: await siteInfo(),
     customCommissions: commissions.map((x) => ({ organizerId: x.organizerId, rate: Number(x.rate), reason: '' })),
   };
 };
@@ -1274,6 +1275,59 @@ const saveAmbassador: Handler = async (c) => {
 
 // ---------- Administration ----------
 
+
+/** Valeurs insérées dans les documents légaux (adresse, email, délais…), réglées par l'administrateur. */
+const SITE_FIELDS = ['address', 'email', 'sendChannel', 'resalePercent', 'payments', 'retention', 'replyDays', 'refundDelay', 'postponeDays', 'organizerRefundDays', 'errorHours', 'supportDays'] as const;
+async function siteInfo(q: Q = db()): Promise<Record<string, string>> {
+  const r = await one<{ value: Record<string, string> }>(`select value from settings where key = 'site'`, [], q);
+  return Object.fromEntries(Object.entries(r?.value ?? {}).filter(([k, v]) => (SITE_FIELDS as readonly string[]).includes(k) && typeof v === 'string'));
+}
+const LEGAL_DOCS = ['terms', 'privacy', 'refund'];
+
+/** Textes juridiques modifiés par l'administrateur (public). Ce qui n'a pas été modifié garde le texte d'origine du site. */
+const getLegal: Handler = async () => {
+  const r = await one<{ value: Record<string, Record<string, string>> }>(`select value from settings where key = 'legal'`);
+  return r?.value ?? {};
+};
+
+/** Modifie (ou rétablit, avec text = null) un document légal dans une langue. Réservé à l'administrateur. */
+const saveLegal: Handler = async (c) => {
+  admin(c);
+  const doc = str(c.body.doc, 20);
+  const lang = str(c.body.lang, 4);
+  if (!LEGAL_DOCS.includes(doc) || (lang !== 'fr' && lang !== 'en')) fail(422, 'Document ou langue invalide');
+  const cur = (await one<{ value: Record<string, Record<string, string>> }>(`select value from settings where key = 'legal'`))?.value ?? {};
+  const next = { ...cur, [doc]: { ...(cur[doc] ?? {}) } };
+  if (c.body.text === null) delete next[doc]![lang];
+  else {
+    const text = typeof c.body.text === 'string' ? c.body.text.replace(/\r\n/g, '\n').trim() : '';
+    if (text.length < 20 || text.length > 60_000) fail(422, 'Le texte doit faire entre 20 et 60 000 caractères');
+    next[doc]![lang] = text;
+  }
+  if (!Object.keys(next[doc]!).length) delete next[doc];
+  await upsert('settings', { key: 'legal', value: next });
+  await audit(c, c.body.text === null ? 'Texte légal rétabli' : 'Texte légal modifié', `${doc} (${lang})`);
+  return next;
+};
+
+/** Valeurs insérées dans les documents légaux. Réservé à l'administrateur. */
+const saveSite: Handler = async (c) => {
+  admin(c);
+  const next: Record<string, string> = {};
+  for (const k of SITE_FIELDS) {
+    const v = c.body[k];
+    if (v === undefined) continue;
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (typeof v !== 'string' || s.length > 160) fail(422, 'Valeur invalide');
+    if (k === 'email' && s && !isEmail(s)) fail(422, 'Adresse email invalide');
+    next[k] = s;
+  }
+  const merged = { ...(await siteInfo()), ...next };
+  await upsert('settings', { key: 'site', value: merged });
+  await audit(c, 'Réglages des documents légaux modifiés', Object.keys(next).join(', '));
+  return merged;
+};
+
 /** Taux de change du site : combien de gourdes valent 1 dollar. Réservé à l'administrateur. */
 const saveRate: Handler = async (c) => {
   admin(c);
@@ -1849,6 +1903,9 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
 
   ['PUT', '/admin/fees', saveFees],
   ['PUT', '/admin/rate', saveRate],
+  ['GET', '/legal', getLegal],
+  ['PUT', '/admin/legal', saveLegal],
+  ['PUT', '/admin/site', saveSite],
   ['GET', '/admin/commissions', listCommissions],
   ['PUT', '/admin/commissions', saveCommission],
   ['DELETE', '/admin/commissions/:id', removeCommission],
