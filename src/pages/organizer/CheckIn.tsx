@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import jsQR from 'jsqr';
+import { inApp, postApp } from '@/lib/appBridge';
 import { ArrowLeft, Armchair, Camera, CameraOff, CheckCircle2, CloudOff, CloudUpload, Keyboard, RefreshCw, ScanLine, Wifi, XCircle } from 'lucide-react';
 import { events } from '@/data/mock';
 import { getEvent, listAttendees, lookupTicket, verifyTicket, DEMO, type TicketCheck } from '@/services/api';
@@ -189,6 +190,23 @@ function CheckIn({ eventId, title, start }: { eventId: string; title: string; st
   // Caméra : BarcodeDetector natif si disponible, sinon jsQR
   useEffect(() => {
     if (!camOn) return;
+    // Application Android : scanner natif plein écran, plus rapide et plus fiable que la caméra de la page
+    if (inApp()) {
+      wantCam.current = true;
+      window.onQrScanned = (code: string) => {
+        setCamOn(false);
+        void handle(code);
+      };
+      window.onQrScanCancelled = () => {
+        wantCam.current = false;
+        setCamOn(false);
+      };
+      postApp('scan:start');
+      return () => {
+        window.onQrScanned = undefined;
+        window.onQrScanCancelled = undefined;
+      };
+    }
     let stream: MediaStream | null = null;
     let raf = 0;
     let stop = false;

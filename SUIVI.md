@@ -21,6 +21,8 @@
 
 ## En cours (cette session)
 
+- [x] Contrôle d'entrée : dans l'application Android, « Activer la caméra » ouvre le scanner de QR codes natif (message `scan:start`, résultat par `window.onQrScanned`) ; il se relance après chaque validation. Dans un navigateur, la caméra de la page reste utilisée.
+
 - [x] Pages légales mises à jour avec le document « Event509 – Documents légaux » (15 novembre 2026) : conditions d'utilisation, politique de confidentialité et nouvelle politique de remboursement (`/remboursement`, lien dans le pied de page), en français et en anglais. L'administrateur les modifie dans Administration > **Contenu et réglages** (texte libre par document et par langue, « rétablir le texte d'origine ») et règle les valeurs insérées (adresse, email, délais, moyens de paiement…). La commission vient de la page Commissions. **À renseigner :** l'adresse de JC Multimedia, la durée de conservation des données et le nombre de jours de la politique d'un organisateur : tant qu'ils sont vides, les pages affichent « [à renseigner] ».
 
 - [x] **Programme « Organisateur vérifié » — fondations (lot 1)** : page publique `/organisateur-verifie` ; demande en 4 étapes avec sauvegarde automatique (`/organisateur/verification`) ; abonnement mensuel/annuel, paiement (en ligne via l'API existante, sinon confirmation manuelle par l'admin), historique, factures imprimables, résiliation (`/organisateur/abonnement`) ; administration : décisions motivées (en cours, documents requis, approuver avec 4 contrôles, refuser, suspendre, révoquer, rétablir), historique, commentaires internes, journal des consultations de documents, réglages (prix, validité, documents, remboursement, rappels, avantages) et paiements à traiter (`/admin/programme-verifie`) ; recours après refus ; expiration et rappels par le cron. Le badge est calculé par le serveur (demande approuvée ET abonnement actif ET certification valable) : aucun champ envoyé par un organisateur ne peut le modifier. Tables : `premium_subscriptions`, `premium_payments`, `verification_log`, `document_access_log`. Testé sur une base locale (API : 50 contrôles ; navigateur : parcours complet demande → paiement → décision → badge → suspension).
@@ -114,3 +116,4 @@
 - 2026-11-13 : commission partagée 50/50, prix annuel unique du programme certifié, boost par événement, correctif de la page Versements (admin).
 - 2026-11-13 : avantage « API et intégrations » du programme vérifié (clés, API /v1, webhooks signés, widget, documentation).
 - 2026-11-13 : pages légales mises à jour (3 documents FR/EN) et modifiables par l'administrateur (Contenu et réglages).
+- 2026-11-13 : contrôle d'entrée branché sur le scanner natif de l'application.
