@@ -86,16 +86,22 @@ describe('inscription progressive : profil, questions, conditions', () => {
     expect(screen.queryByLabelText(/naissance|birth|téléphone|phone/i)).toBeNull();
   });
 
-  it('exige trois questions complètes puis les deux acceptations avant de créer le compte', async () => {
+  it('une seule question suffit ; on peut en ajouter jusqu’à trois ; puis les deux acceptations avant de créer le compte', async () => {
     const onSubmit = setup();
     set(screen.getByLabelText(/^(Ville|City)/), 'Jacmel');
     next();
-    // Étape 2 : trois questions et trois réponses
-    expect(questions()).toHaveLength(3);
+    // Étape 2 : une question et une réponse au départ
+    expect(questions()).toHaveLength(1);
     expect((screen.getByRole('button', { name: /^(Continuer|Continue)$/ }) as HTMLButtonElement).disabled).toBe(true);
-    const qs = ['Comment s’appelait mon premier chat ?', 'Quel était le titre de mon premier projet ?', 'Où ai-je caché mon carnet rouge ?'];
-    questions().forEach((q, i) => set(q, qs[i]!));
-    answers().forEach((a, i) => set(a, ['Moustache', 'Kanaval', 'Sous le lit'][i]!));
+    set(questions()[0]!, 'Mon premier chat ?');
+    set(answers()[0]!, 'Moustache');
+    expect((screen.getByRole('button', { name: /^(Continuer|Continue)$/ }) as HTMLButtonElement).disabled).toBe(false);
+    // Ajout facultatif d'une deuxième question, qui doit alors être complète
+    fireEvent.click(screen.getByRole('button', { name: /Ajouter une question|Add a question/ }));
+    expect(questions()).toHaveLength(2);
+    expect((screen.getByRole('button', { name: /^(Continuer|Continue)$/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Retirer cette question|Remove this question/ }));
+    expect(questions()).toHaveLength(1);
     next();
     // Étape 3 : conditions et confidentialité
     const create = screen.getByRole('button', { name: /Créer mon compte|Create my account/ }) as HTMLButtonElement;
@@ -107,7 +113,7 @@ describe('inscription progressive : profil, questions, conditions', () => {
     expect(create.disabled).toBe(false);
     fireEvent.click(create);
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
-    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', acceptTerms: true, acceptPrivacy: true, questions: [{ question: qs[0], answer: 'Moustache' }, { question: qs[1], answer: 'Kanaval' }, { question: qs[2], answer: 'Sous le lit' }] });
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', acceptTerms: true, acceptPrivacy: true, questions: [{ question: 'Mon premier chat ?', answer: 'Moustache' }] });
   });
 
   it('un refus du serveur sur les questions ramène à l’étape des questions avec le message', async () => {
@@ -115,15 +121,15 @@ describe('inscription progressive : profil, questions, conditions', () => {
     setup(onSubmit);
     set(screen.getByLabelText(/^(Ville|City)/), 'Jacmel');
     next();
-    questions().forEach((q, i) => set(q, `Question personnelle numéro ${i + 1} ?`));
-    answers().forEach((a, i) => set(a, `réponse ${i + 1} unique`));
+    set(questions()[0]!, 'Question personnelle ?');
+    set(answers()[0]!, 'réponse unique');
     next();
     const [terms, privacy] = screen.getAllByRole('checkbox');
     fireEvent.click(terms!);
     fireEvent.click(privacy!);
     fireEvent.click(screen.getByRole('button', { name: /Créer mon compte|Create my account/ }));
     expect(await screen.findByText(/informations publiques/)).toBeTruthy();
-    expect(questions()).toHaveLength(3); // revenu à l'étape des questions
+    expect(questions()).toHaveLength(1); // revenu à l'étape des questions
   });
 });
 

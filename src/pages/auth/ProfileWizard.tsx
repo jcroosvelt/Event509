@@ -20,14 +20,14 @@ export function ProfileWizard({
   const examples = [t('Quel était le surnom que j’utilisais pendant mon enfance ?'), t('Quel était le nom de mon premier projet personnel ?'), t('Quel était le nom de mon premier événement organisé ?')];
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [p, setP] = useState({ givenName: initial.givenName ?? '', familyName: initial.familyName ?? '', country: initial.country || 'HT', city: initial.city ?? '', username: initial.username ?? '', orgName: '' });
-  const [qs, setQs] = useState<QuestionDraft[]>([{ question: '', answer: '' }, { question: '', answer: '' }, { question: '', answer: '' }]);
+  const [qs, setQs] = useState<QuestionDraft[]>([{ question: '', answer: '' }]);
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const profileOk = p.givenName.trim() && p.familyName.trim() && p.city.trim().length >= 2 && /^[A-Za-z]{2}$/.test(p.country);
-  const questionsOk = qs.every((q) => q.question.trim().length >= 12 && q.answer.trim().length >= 3);
+  const questionsOk = qs.every((q) => q.question.trim().length >= 8 && q.answer.trim().length >= 3);
 
   const submit = async () => {
     setBusy(true);
@@ -83,15 +83,18 @@ export function ProfileWizard({
           <form noValidate className="mt-5 space-y-5" onSubmit={(e) => { e.preventDefault(); if (questionsOk) { setError(''); setStep(3); } }}>
             <div className="flex gap-3 rounded-2xl bg-brand-50/60 p-4 text-sm text-ink-soft">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-ink" aria-hidden />
-              <p>{t('Ces trois questions vous aideront à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.')}</p>
+              <p>{t('Cette question vous aidera à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.')}</p>
             </div>
             {qs.map((q, i) => (
               <fieldset key={i} className="space-y-3 rounded-2xl border border-line p-4">
                 <legend className="px-1 text-sm font-bold">{t('Question {n}', { n: i + 1 })}</legend>
+                {i > 0 && <button type="button" className="text-xs font-semibold text-red-600" onClick={() => setQs(qs.filter((_, j) => j !== i))}>{t('Retirer cette question')}</button>}
                 <Field label={t('Votre question')} required><Input value={q.question} maxLength={160} onChange={(e) => setQ(i, 'question', e.target.value)} placeholder={t('Ex. {example}', { example: examples[i]! })} /></Field>
                 <Field label={t('Votre réponse')} required><Input autoComplete="off" value={q.answer} maxLength={100} onChange={(e) => setQ(i, 'answer', e.target.value)} /></Field>
               </fieldset>
             ))}
+            {qs.length < 3 && <Button type="button" variant="ghost" onClick={() => setQs([...qs, { question: '', answer: '' }])}>{t('+ Ajouter une question (facultatif, jusqu’à 3)')}</Button>}
+            {!questionsOk && <p className="text-xs text-ink-muted" role="status">{t('Question : 8 caractères au moins. Réponse : 3 caractères au moins.')}</p>}
             <div className="flex gap-3">
               <Button type="button" variant="outline" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour')}</Button>
               <Button type="submit" className="flex-1" disabled={!questionsOk}>{t('Continuer')}</Button>

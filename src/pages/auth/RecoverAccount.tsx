@@ -65,7 +65,7 @@ export default function RecoverAccount() {
     setQuestions((await recoveryQuestions(token)).questions);
   });
   const answer = () => guard(async () => {
-    await recoveryAnswers(token, answers);
+    await recoveryAnswers(token, answers.slice(0, questions?.length ?? 3));
     setFactors((f) => ({ ...f, questions: true }));
   });
   const toGoogle = () => guard(async () => { location.assign((await recoveryGoogle(token)).url); });
@@ -115,7 +115,7 @@ export default function RecoverAccount() {
                 {!factors.questions && (
                   <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void answer(); }}>
                     {questions.map((q, i) => <Field key={i} label={q}><Input autoComplete="off" value={answers[i]} onChange={(e) => setAnswers(answers.map((a, j) => (j === i ? e.target.value : a)))} /></Field>)}
-                    <Button type="submit" className="w-full" loading={busy} disabled={answers.some((a) => a.trim().length < 1)}>{t('Valider mes réponses')}</Button>
+                    <Button type="submit" className="w-full" loading={busy} disabled={answers.slice(0, questions.length).some((a) => a.trim().length < 1)}>{t('Valider mes réponses')}</Button>
                   </form>
                 )}
               </section>

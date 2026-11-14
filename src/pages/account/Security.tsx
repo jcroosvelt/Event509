@@ -25,7 +25,7 @@ const eventLabels = (t: (s: string) => string): Record<string, string> => ({
   reauth: t('Identité confirmée'), reauth_failed: t('Confirmation d’identité échouée'), recovery_factor_failed: t('Vérification de récupération échouée'), recovery_factor_ok: t('Vérification de récupération réussie'),
 });
 
-const BLANK: QuestionDraft[] = [{ question: '', answer: '' }, { question: '', answer: '' }, { question: '', answer: '' }];
+const BLANK: QuestionDraft[] = [{ question: '', answer: '' }];
 
 /** Page centrale de sécurité : identités, passkeys, récupération, appareils et sessions, historique. Aucun secret ni réponse n'y est affiché. */
 export default function Security() {
@@ -165,7 +165,7 @@ export default function Security() {
         <h2 className="mb-1 flex items-center gap-2 font-bold"><LifeBuoy className="h-4 w-4" aria-hidden /> {t('Récupération du compte')}</h2>
         <div className="space-y-4 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span>{t('Questions de sécurité')} : <b>{s.questions.count === 3 ? t('3 configurées') : t('à configurer')}</b>{s.questions.updatedAt ? ` · ${t('modifiées le {date}', { date: dateShort(s.questions.updatedAt, lang) })}` : ''}</span>
+            <span>{t('Questions de sécurité')} : <b>{s.questions.count > 0 ? t('{n} configurée(s)', { n: s.questions.count }) : t('à configurer')}</b>{s.questions.updatedAt ? ` · ${t('modifiées le {date}', { date: dateShort(s.questions.updatedAt, lang) })}` : ''}</span>
             <Button size="sm" variant="outline" onClick={() => setQOpen(true)}>{t('Remplacer mes questions')}</Button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -223,8 +223,9 @@ export default function Security() {
       </Modal>
 
       {/* Remplacement des questions */}
-      <Modal open={qOpen} onClose={() => setQOpen(false)} title={t('Remplacer mes questions de sécurité')} description={t('Écrivez vos propres questions, sur des informations que vous seul connaissez (pas de date de naissance, nom de famille, adresse, parents, réseaux sociaux).')} footer={<Button className="flex-1" onClick={saveQuestions} disabled={!qs.every((q) => q.question.trim().length >= 12 && q.answer.trim().length >= 3)}>{t('Enregistrer')}</Button>}>
+      <Modal open={qOpen} onClose={() => setQOpen(false)} title={t('Remplacer mes questions de sécurité')} description={t('Écrivez vos propres questions, sur des informations que vous seul connaissez (pas de date de naissance, nom de famille, adresse, parents, réseaux sociaux).')} footer={<Button className="flex-1" onClick={saveQuestions} disabled={!qs.every((q) => q.question.trim().length >= 8 && q.answer.trim().length >= 3)}>{t('Enregistrer')}</Button>}>
         <div className="space-y-4">
+          {qs.length < 3 && <Button type="button" variant="ghost" size="sm" onClick={() => setQs([...qs, { question: '', answer: '' }])}>{t('+ Ajouter une question (facultatif, jusqu’à 3)')}</Button>}
           {qs.map((q, i) => (
             <fieldset key={i} className="space-y-2 rounded-2xl border border-line p-3">
               <legend className="px-1 text-sm font-bold">{t('Question {n}', { n: i + 1 })}</legend>

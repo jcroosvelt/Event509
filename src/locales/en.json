@@ -2044,7 +2044,6 @@
   "Cet appareil ne prend pas en charge les passkeys.": "This device doesn't support passkeys.",
   "Récupération du compte": "Account recovery",
   "Questions de sécurité": "Security questions",
-  "3 configurées": "3 set up",
   "à configurer": "to set up",
   "modifiées le {date}": "changed on {date}",
   "Remplacer mes questions": "Replace my questions",
@@ -2136,7 +2135,6 @@
   "Facultatif : sert aussi à retrouver votre compte": "Optional: also used to find your account",
   "Nom de votre organisation": "Your organization name",
   "Facultatif : par défaut, votre nom": "Optional: your name by default",
-  "Ces trois questions vous aideront à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.": "These three questions will help prove you own the account if you lose access to Google. Write your own questions about things only you know. Avoid your date of birth, family name, address, parents or anything visible on social networks. Your answers are protected and will never be shown again.",
   "Ex. {example}": "e.g. {example}",
   "J’accepte la": "I accept the",
   "Votre compte n’est créé qu’à la fin de cette étape.": "Your account is only created at the end of this step.",
@@ -2197,5 +2195,10 @@
   "La connexion Google s’ouvre dans votre navigateur, puis vous revenez dans l’application.": "Google sign-in opens in your browser, then you come back to the app.",
   "Dans l’application, associer ou changer le compte Google se fait dans le navigateur du téléphone.": "In the app, linking or changing the Google account is done in the phone's browser.",
   "Ouvrir dans le navigateur": "Open in the browser",
-  "Pour associer un nouveau compte Google, ouvrez cette page dans le navigateur du téléphone (Google ne s’ouvre pas dans l’application), puis refaites les vérifications.": "To link a new Google account, open this page in the phone's browser (Google doesn't open inside the app), then redo the checks."
+  "Pour associer un nouveau compte Google, ouvrez cette page dans le navigateur du téléphone (Google ne s’ouvre pas dans l’application), puis refaites les vérifications.": "To link a new Google account, open this page in the phone's browser (Google doesn't open inside the app), then redo the checks.",
+  "Retirer cette question": "Remove this question",
+  "+ Ajouter une question (facultatif, jusqu’à 3)": "+ Add a question (optional, up to 3)",
+  "Question : 8 caractères au moins. Réponse : 3 caractères au moins.": "Question: at least 8 characters. Answer: at least 3 characters.",
+  "{n} configurée(s)": "{n} set up",
+  "Cette question vous aidera à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.": "This question will help prove you own the account if you lose access to Google. Write your own question about something only you know. Avoid your date of birth, family name, address, parents or anything visible on social networks. Your answers are protected and will never be shown again."
 }

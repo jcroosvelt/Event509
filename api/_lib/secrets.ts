@@ -26,14 +26,14 @@ export interface QuestionInput {
   answer: string;
 }
 
-/** Contrôle de qualité des trois questions ; renvoie un message (non technique) en cas de problème. */
+/** Contrôle de qualité des questions (1 à 3, au choix de l'utilisateur) ; renvoie un message (non technique) en cas de problème. */
 export function checkQuestions(list: unknown): { ok: true; items: QuestionInput[] } | { ok: false; message: string } {
-  if (!Array.isArray(list) || list.length !== 3) return { ok: false, message: 'Définissez exactement trois questions de sécurité.' };
+  if (!Array.isArray(list) || list.length < 1 || list.length > 3) return { ok: false, message: 'Définissez entre une et trois questions de sécurité.' };
   const items: QuestionInput[] = [];
   for (const raw of list) {
     const q = typeof (raw as QuestionInput)?.question === 'string' ? (raw as QuestionInput).question.trim().replace(/\s+/g, ' ') : '';
     const a = typeof (raw as QuestionInput)?.answer === 'string' ? (raw as QuestionInput).answer : '';
-    if (q.length < 12 || q.length > 160) return { ok: false, message: 'Chaque question doit faire entre 12 et 160 caractères.' };
+    if (q.length < 8 || q.length > 160) return { ok: false, message: 'Chaque question doit faire entre 8 et 160 caractères.' };
     const n = normalizeAnswer(a);
     if (n.length < 3 || n.length > 100) return { ok: false, message: 'Chaque réponse doit faire entre 3 et 100 caractères.' };
     if (WEAK_ANSWERS.has(strip(n)) || /^(.)\1+$/.test(n)) return { ok: false, message: 'Une de vos réponses est trop facile à deviner. Choisissez une information que vous seul connaissez.' };
@@ -41,19 +41,19 @@ export function checkQuestions(list: unknown): { ok: true; items: QuestionInput[
     if (strip(n) === strip(q)) return { ok: false, message: 'La réponse ne peut pas répéter la question.' };
     items.push({ question: q, answer: a });
   }
-  if (new Set(items.map((i) => strip(i.question))).size !== 3) return { ok: false, message: 'Les trois questions doivent être différentes.' };
-  if (new Set(items.map((i) => strip(normalizeAnswer(i.answer)))).size !== 3) return { ok: false, message: 'Les trois réponses doivent être différentes.' };
+  if (new Set(items.map((i) => strip(i.question))).size !== items.length) return { ok: false, message: 'Les questions doivent être différentes.' };
+  if (new Set(items.map((i) => strip(normalizeAnswer(i.answer)))).size !== items.length) return { ok: false, message: 'Les réponses doivent être différentes.' };
   return { ok: true, items };
 }
 
 export const hashAnswer = (answer: string) =>
   argon2id({ password: normalizeAnswer(answer), salt: randomBytes(16), parallelism: 1, iterations: 2, memorySize: 19456, hashLength: 32, outputType: 'encoded' });
 
-/** Remplace les trois questions d'un compte (dans la transaction fournie). */
+/** Remplace les questions d'un compte (1 à 3, dans la transaction fournie). */
 export async function saveQuestions(userId: string, items: QuestionInput[], q: Q) {
   const hashes = await Promise.all(items.map((i) => hashAnswer(i.answer)));
   await q.query(`delete from security_questions where user_id = $1`, [userId]);
-  for (let i = 0; i < 3; i++)
+  for (let i = 0; i < items.length; i++)
     await q.query(`insert into security_questions (id, user_id, position, question, answer_hash) values ($1,$2,$3,$4,$5)`, [newId('sq'), userId, i + 1, items[i]!.question, hashes[i]]);
 }
 
@@ -61,10 +61,10 @@ export async function saveQuestions(userId: string, items: QuestionInput[], q: Q
 export const getQuestions = (userId: string, q?: Q) =>
   all<{ position: number; question: string }>(`select position, question from security_questions where user_id = $1 order by position`, [userId], q);
 
-/** Vérifie les trois réponses ; les trois empreintes sont toujours calculées (pas de fuite par le temps de réponse). */
+/** Vérifie toutes les réponses (autant que de questions) ; toutes les empreintes sont calculées (pas de fuite par le temps de réponse). */
 export async function verifyAnswers(userId: string, answers: unknown): Promise<boolean> {
   const rows = await all<{ position: number; answer_hash: string }>(`select position, answer_hash from security_questions where user_id = $1 order by position`, [userId]);
-  if (rows.length !== 3 || !Array.isArray(answers) || answers.length !== 3) return false;
+  if (rows.length < 1 || rows.length > 3 || !Array.isArray(answers) || answers.length !== rows.length) return false;
   const results = await Promise.all(rows.map((r, i) => {
     const a = answers[i];
     return typeof a === 'string' && a.length <= 200 ? argon2Verify({ password: normalizeAnswer(a), hash: r.answer_hash }).catch(() => false) : Promise.resolve(false);

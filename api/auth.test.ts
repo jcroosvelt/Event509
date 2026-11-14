@@ -16,10 +16,15 @@ describe('questions de sécurité : règles', () => {
     { question: 'Où ai-je rangé mon vieux carnet rouge ?', answer: 'Sous le lit de grand-père' },
   ];
   it('accepte trois questions personnelles distinctes', () => expect(checkQuestions(ok).ok).toBe(true));
-  it('refuse un nombre incorrect de questions', () => {
-    expect(checkQuestions(ok.slice(0, 2)).ok).toBe(false);
-    expect(checkQuestions([...ok, ok[0]]).ok).toBe(false);
+  it('accepte une, deux ou trois questions, jamais zéro ni plus de trois', () => {
+    expect(checkQuestions(ok.slice(0, 1)).ok).toBe(true);
+    expect(checkQuestions(ok.slice(0, 2)).ok).toBe(true);
+    expect(checkQuestions([]).ok).toBe(false);
+    expect(checkQuestions([...ok, { question: 'Quel est le nom de mon vieux vélo ?', answer: 'Zéphyr' }]).ok).toBe(false);
     expect(checkQuestions('x').ok).toBe(false);
+    // Une question courte mais personnelle est acceptée (8 caractères au moins)
+    expect(checkQuestions([{ question: 'Mon chat ?', answer: 'Moustache' }]).ok).toBe(true);
+    expect(checkQuestions([{ question: 'Chat', answer: 'Moustache' }]).ok).toBe(false);
   });
   it('refuse les questions sur des informations publiques', () => {
     for (const q of ['Quelle est votre date de naissance exacte ?', 'Quel est votre nom de famille complet ?', 'Quelle est votre adresse actuelle ?', 'Comment s’appelle votre mère ?', 'Quel est votre pseudo Instagram ?'])
@@ -286,7 +291,7 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect((await b.call('POST', '/auth/signup/complete', profile({ acceptPrivacy: false }))).body.code).toBe('consent_required');
     expect((await b.call('POST', '/auth/signup/complete', profile({ givenName: '' }))).body.code).toBe('profile_invalid');
     expect((await b.call('POST', '/auth/signup/complete', profile({ country: 'Haïti' }))).body.code).toBe('profile_invalid');
-    expect((await b.call('POST', '/auth/signup/complete', profile({ questions: qs3.slice(0, 2) }))).body.code).toBe('questions_invalid');
+    expect((await b.call('POST', '/auth/signup/complete', profile({ questions: [] }))).body.code).toBe('questions_invalid');
     expect((await b.call('POST', '/auth/signup/complete', profile({ questions: [{ question: 'Quelle est votre date de naissance ?', answer: 'xxxxxx' }, qs3[1], qs3[2]] }))).body.code).toBe('questions_invalid');
     // Rien n'a été créé par les refus (atomicité) : l'inscription provisoire est toujours là
     expect((await pool.query(`select 1 from users where email = $1`, [claims.email])).rowCount).toBe(0);
@@ -755,7 +760,7 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     await pool.query(`update auth_sessions set recent_auth_at = now() where user_id = $1`, [id]);
     const newQs = [{ question: 'Comment appelais-je ma guitare ?', answer: 'Mélodie' }, qs3[1], qs3[2]];
     expect((await b.call('POST', '/auth/security/questions', { questions: newQs })).status).toBe(200);
-    expect((await b.call('POST', '/auth/security/questions', { questions: qs3.slice(0, 1) })).status).toBe(422);
+    expect((await b.call('POST', '/auth/security/questions', { questions: [] })).status).toBe(422);
     // Les ressources de gestion ne sont pas ouvertes sans session
     const anon = new Browser();
     for (const [m, p] of [['GET', '/auth/security'], ['GET', '/auth/sessions'], ['POST', '/auth/security/recovery-codes'], ['POST', '/auth/passkeys/register/options']] as const)
@@ -947,6 +952,27 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     // Sans l'application : page de connexion du site, comme avant
     const r3 = await new Browser().google('login', google(123), { claimsOverride: (c, nonce) => ({ iss: 'https://evil.example', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600, nonce, email_verified: true, ...c }) });
     expect(loc(r3.cb)).toContain('/connexion?error=');
+  });
+
+  it('22. une seule question de sécurité suffit : inscription, puis récupération avec cette réponse', async () => {
+    const b = new Browser();
+    const claims = google(130);
+    await b.google('login', claims);
+    const done = await b.call('POST', '/auth/signup/complete', profile({ questions: [{ question: 'Mon premier chat ?', answer: 'Moustache' }] }));
+    expect(done.status).toBe(200);
+    const id = done.body.user.id as string;
+    expect((await pool.query(`select count(*)::int as n from security_questions where user_id = $1`, [id])).rows[0].n).toBe(1);
+    expect((await b.call('GET', '/auth/security')).body.questions.count).toBe(1);
+    const codes: string[] = (await b.call('POST', '/auth/security/recovery-codes')).body.codes;
+    const rec = new Browser();
+    const token = (await rec.call('POST', '/auth/recovery/start', { identifier: claims.email })).body.recoveryToken;
+    await rec.call('POST', '/auth/recovery/code', { recoveryToken: token, code: codes[0] });
+    expect((await rec.call('POST', '/auth/recovery/questions/list', { recoveryToken: token })).body.questions).toEqual(['Mon premier chat ?']);
+    // Un nombre de réponses différent du nombre de questions est refusé ; la mauvaise réponse aussi
+    expect((await rec.call('POST', '/auth/recovery/questions/answer', { recoveryToken: token, answers: ['Moustache', 'x', 'y'] })).status).toBe(400);
+    expect((await rec.call('POST', '/auth/recovery/questions/answer', { recoveryToken: token, answers: ['Pirate'] })).status).toBe(400);
+    expect((await rec.call('POST', '/auth/recovery/questions/answer', { recoveryToken: token, answers: ['  moustache '] })).status).toBe(200);
+    expect((await rec.call('POST', '/auth/recovery/google', { recoveryToken: token })).status).toBe(200);
   });
 
   it('inscription par e-mail désactivée dès que Google est configuré ; configuration publique', async () => {
