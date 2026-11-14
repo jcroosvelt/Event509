@@ -140,3 +140,4 @@
 - 2026-11-14 : plus d'invitation PWA, déconnexion mobile dans le menu, lien APK dans les menus, vérification directe d'une organisation par l'admin.
 - 2026-11-14 : infrastructure OTP WhatsApp (Meta Cloud API) préparée et testée avec un faux serveur Meta ; en attente des identifiants Meta.
 - 2026-11-14 : refonte de l'authentification (Google, passkeys, récupération) préparée sur la branche auth-refonte ; en attente de la configuration Google Cloud et de l'autorisation de déployer.
+- 2026-11-14 : authentification Google et OTP déployés ; connexion Google dans l'application par navigateur + lien profond (PKCE). Google reste désactivé tant que `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` et `GOOGLE_REDIRECT_URI` ne sont pas vues par Vercel en Production (vérifier `/api/auth/config`).
