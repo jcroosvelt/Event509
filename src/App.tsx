@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  FileText, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  FileText, LifeBuoy, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
@@ -83,6 +83,12 @@ const UserDetail = lazy(() => import('@/pages/admin/UserDetail'));
 const Transactions = lazy(() => import('@/pages/admin/Transactions'));
 const AdminPayouts = lazy(() => import('@/pages/admin/AdminPayouts'));
 const AuditLog = lazy(() => import('@/pages/admin/AuditLog'));
+const RecoveryRequests = lazy(() => import('@/pages/admin/RecoveryRequests'));
+const AuthEntry = lazy(() => import('@/pages/auth/GoogleAuth'));
+const CompleteSignup = lazy(() => import('@/pages/auth/CompleteSignup'));
+const CompleteProfile = lazy(() => import('@/pages/auth/CompleteProfile'));
+const RecoverAccount = lazy(() => import('@/pages/auth/RecoverAccount'));
+const Security = lazy(() => import('@/pages/account/Security'));
 
 const O = '/organisateur';
 const A = '/admin';
@@ -121,8 +127,11 @@ export default function App() {
             <Route path="telecharger" element={<DownloadApp />} />
             <Route path="o/:slug" element={<OrganizerPage />} />
             <Route path="revente" element={<Resale />} />
-            <Route path="connexion" element={<Auth mode="login" />} />
-            <Route path="inscription" element={<Auth mode="signup" />} />
+            <Route path="connexion" element={<AuthEntry mode="login" />} />
+            <Route path="inscription" element={<AuthEntry mode="signup" />} />
+            <Route path="connexion/ancien" element={<Auth mode="login" />} />
+            <Route path="connexion/recuperation" element={<RecoverAccount />} />
+            <Route path="inscription/profil" element={<CompleteSignup />} />
             <Route path="mot-de-passe-oublie" element={<ForgotPassword />} />
             <Route path="reinitialiser" element={<ResetPassword />} />
             <Route path="verifier-email" element={<VerifyEmail />} />
@@ -140,6 +149,9 @@ export default function App() {
             <Route path="compte" element={auth(<Profile />)} />
             <Route path="compte/achats" element={auth(<Orders />)} />
             <Route path="compte/parametres" element={auth(<AccountSettings />)} />
+            <Route path="compte/securite" element={auth(<Security />)} />
+            <Route path="compte/appareils" element={auth(<Security />)} />
+            <Route path="compte/completer" element={auth(<CompleteProfile />)} />
             <Route path="*" element={<NotFound />} />
           </Route>
 
@@ -233,6 +245,7 @@ export default function App() {
                     { to: `${A}/moderation`, label: t('Modération'), icon: Flag, perm: 'admin', badge: String(pending.events + pending.reports || '') || undefined },
                     { to: `${A}/utilisateurs`, label: t('Utilisateurs'), icon: Users, perm: 'admin' },
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
+                    { to: `${A}/recuperations`, label: t('Récupérations de compte'), icon: LifeBuoy, perm: 'admin' },
                     { to: `${A}/programme-verifie`, label: t('Programme vérifié'), icon: BadgeCheck, perm: 'admin' },
                     { to: `${A}/support`, label: t('Support'), icon: Headphones, perm: 'admin' },
                     { to: `${A}/boosts`, label: t('Boosts'), icon: Rocket, perm: 'admin' },
@@ -262,6 +275,7 @@ export default function App() {
             <Route path="moderation" element={<Moderation />} />
             <Route path="utilisateurs" element={<AdminUsers />} />
             <Route path="verification" element={<Verification />} />
+            <Route path="recuperations" element={<RecoveryRequests />} />
             <Route path="programme-verifie" element={<PremiumSettings />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="boosts" element={<AdminBoosts />} />

@@ -39,7 +39,9 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
       ...init,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Session serveur par cookie HttpOnly (« cookie » = simple témoin local, jamais un secret) ; en-tête CSRF toujours envoyé
+        'X-E509-CSRF': '1',
+        ...(token && token !== 'cookie' && !token.startsWith('demo.') ? { Authorization: `Bearer ${token}` } : {}),
         ...init.headers,
       },
     });
@@ -143,7 +145,8 @@ export async function refreshCatalog() {
 }
 
 export interface Session_ {
-  token: string;
+  /** Absent avec les sessions par cookie (connexion Google, passkey, ancienne connexion). */
+  token?: string;
   user: AppUser;
 }
 export function signIn(email: string, password: string) {
@@ -175,6 +178,75 @@ export function resendVerification() {
 export function fetchMe() {
   return http<AppUser>('/auth/me');
 }
+
+// ---------- Connexion Google, passkeys, sécurité du compte (le serveur décide de tout) ----------
+
+export interface AuthConfig { google: boolean; passkeys: boolean; termsVersion?: string }
+export async function authConfig(): Promise<AuthConfig> {
+  if (DEMO) return { google: false, passkeys: false };
+  return http<AuthConfig>('/auth/config').catch(() => ({ google: false, passkeys: false }));
+}
+/** Adresse de départ de la connexion Google (navigation complète : le navigateur quitte le site puis revient). */
+export const googleUrl = (purpose: 'login' | 'link' | 'reauth', next?: string) => `${API_URL}/auth/google/start?purpose=${purpose}${next ? `&next=${encodeURIComponent(next)}` : ''}`;
+/** Ferme la session côté serveur (sans passer par http() pour ne pas relancer la déconnexion en cas de 401). */
+export function serverLogout() {
+  if (DEMO) return;
+  void fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { 'X-E509-CSRF': '1' } }).catch(() => {});
+}
+export interface SignupPending { pending: boolean; email?: string; givenName?: string; familyName?: string; picture?: string; country?: string; city?: string }
+export const signupPending = () => http<SignupPending>('/auth/signup/pending');
+export interface QuestionDraft { question: string; answer: string }
+export interface ProfileDraft { givenName: string; familyName: string; country: string; city: string; username?: string; orgName?: string; questions: QuestionDraft[]; acceptTerms: boolean; acceptPrivacy: boolean }
+export const signupComplete = (p: ProfileDraft) => http<Session_>('/auth/signup/complete', { method: 'POST', body: JSON.stringify(p) });
+export const profileComplete = (p: ProfileDraft) => http<{ user: AppUser }>('/auth/profile/complete', { method: 'POST', body: JSON.stringify(p) });
+
+export interface SecuritySummary {
+  recentAuth: boolean;
+  authComplete: boolean;
+  google: { email: string; since: string } | null;
+  canUndoGoogleChange: boolean;
+  passkeys: { id: string; name: string; createdAt: string; lastUsedAt: string | null; synced: boolean }[];
+  questions: { count: number; updatedAt: string | null };
+  recoveryCodes: { remaining: number };
+  events: { event: string; at: string; ip: string | null; detail: Record<string, unknown> }[];
+  recoveryRequests: { id: string; status: string; createdAt: string; executeAfter: string | null }[];
+}
+export interface DeviceSession { id: string; device: string; ip: string | null; method: string | null; createdAt: string; lastSeenAt: string; current: boolean }
+const jpost = <T,>(path: string, body: unknown = {}) => http<T>(path, { method: 'POST', body: JSON.stringify(body) });
+export const securitySummary = () => http<SecuritySummary>('/auth/security');
+export const listDeviceSessions = () => http<DeviceSession[]>('/auth/sessions');
+export const revokeDeviceSession = (id: string) => http<{ ok: true }>(`/auth/sessions/${id}`, { method: 'DELETE' });
+export const revokeOtherSessions = () => jpost<{ revoked: number }>('/auth/sessions/revoke-others');
+export const replaceQuestions = (questions: QuestionDraft[]) => jpost('/auth/security/questions', { questions });
+export const generateRecoveryCodes = () => jpost<{ codes: string[]; remaining: number }>('/auth/security/recovery-codes');
+export const revokeRecoveryCodes = () => jpost<{ revoked: number }>('/auth/security/recovery-codes/revoke');
+export const reauthWithCode = (code: string) => jpost('/auth/reauth/recovery-code', { code });
+export const reauthPasskeyOptions = () => jpost<{ options: unknown; challengeId: string }>('/auth/reauth/passkey/options');
+export const reauthPasskeyVerify = (challengeId: string, response: unknown) => jpost('/auth/reauth/passkey/verify', { challengeId, response });
+export const passkeyRegisterOptions = () => jpost<{ options: unknown; challengeId: string }>('/auth/passkeys/register/options');
+export const passkeyRegisterVerify = (challengeId: string, response: unknown, name: string) => jpost('/auth/passkeys/register/verify', { challengeId, response, name });
+export const deletePasskey = (id: string) => http<{ ok: true }>(`/auth/passkeys/${id}`, { method: 'DELETE' });
+export const passkeyLoginOptions = () => jpost<{ options: unknown; challengeId: string }>('/auth/passkeys/login/options');
+export const passkeyLoginVerify = (challengeId: string, response: unknown) => jpost<Session_>('/auth/passkeys/login/verify', { challengeId, response });
+export const linkPending = (token: string) => http<{ email: string }>(`/auth/google/link/pending?token=${encodeURIComponent(token)}`);
+export const linkConfirm = (token: string) => jpost<{ ok: true; authComplete: boolean }>('/auth/google/link/confirm', { token, confirm: true });
+export const linkUndo = () => jpost('/auth/google/link/undo');
+export const cancelRecoveryRequest = (id: string) => jpost(`/auth/security/recovery-requests/${id}/cancel`);
+
+// Récupération sans accès à Google
+export const recoveryStart = (identifier: string) => jpost<{ recoveryToken: string }>('/auth/recovery/start', { identifier });
+export const recoveryPasskeyOptions = (recoveryToken: string) => jpost<{ options: unknown; challengeId: string }>('/auth/recovery/passkey/options', { recoveryToken });
+export const recoveryPasskeyVerify = (recoveryToken: string, challengeId: string, response: unknown) => jpost('/auth/recovery/passkey/verify', { recoveryToken, challengeId, response });
+export const recoveryCode = (recoveryToken: string, code: string) => jpost('/auth/recovery/code', { recoveryToken, code });
+export const recoveryQuestions = (recoveryToken: string) => jpost<{ questions: string[] }>('/auth/recovery/questions/list', { recoveryToken });
+export const recoveryAnswers = (recoveryToken: string, answers: string[]) => jpost('/auth/recovery/questions/answer', { recoveryToken, answers });
+export const recoveryGoogle = (recoveryToken: string) => jpost<{ url: string }>('/auth/recovery/google', { recoveryToken });
+export const assistCreate = (identifier: string, reason: string, contact: string) => jpost<{ requestToken: string }>('/auth/recovery/assist', { identifier, reason, contact });
+export const assistStatus = (requestToken: string) => jpost<{ status: string; executeAfter: string | null; ready: boolean }>('/auth/recovery/assist/status', { requestToken });
+export const assistGoogle = (requestToken: string) => jpost<{ url: string }>('/auth/recovery/assist/google', { requestToken });
+export interface AdminRecoveryRequest { id: string; status: string; reason: string; contact: string | null; identifier: string; created_at: string; decided_at: string | null; execute_after: string | null; note: string | null; user_id: string | null; email: string | null; name: string | null; recent_events: string; decided_by: string | null }
+export const adminRecoveryRequests = () => http<AdminRecoveryRequest[]>('/admin/recovery-requests');
+export const adminDecideRecovery = (id: string, action: 'approve' | 'reject' | 'block', note: string) => jpost(`/admin/recovery-requests/${id}/decide`, { action, note });
 export function updateProfile(patch: Partial<Pick<AppUser, 'name' | 'phone' | 'city'>>) {
   return http<AppUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(patch) });
 }

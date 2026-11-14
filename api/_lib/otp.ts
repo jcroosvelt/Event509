@@ -348,7 +348,7 @@ export function otpRoutes(d: OtpDeps) {
     // Le motif contient l'identifiant de la vérification : on le lit sans vérifier, puis on contrôle la signature avec ce motif
     try {
       const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString()) as { p?: string };
-      const m = new RegExp(`^${prefix}:(otp_[A-Za-z0-9_]+)$`).exec(payload.p ?? '');
+      const m = new RegExp(`^${prefix}:(otp_[A-Za-z0-9_-]+)$`).exec(payload.p ?? '');
       if (!m) return null;
       const userId = readPurposeToken(token, payload.p!);
       return userId ? { userId, otpId: m[1]! } : null;

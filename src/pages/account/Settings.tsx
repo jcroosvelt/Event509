@@ -6,7 +6,7 @@ import { load, persist, useApp, type Theme } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { languages } from '@/lib/i18n';
 import { isEmail, isPhone, useForm } from '@/lib/form';
-import { Button, Card, Field, Input, Modal, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
+import { Button, ButtonLink, Card, Field, Input, Modal, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
 import { currencyName } from '@/lib/format';
 import { countryName } from '@/data/countries';
 import { PersonalizeModal } from '@/components/PersonalizeModal';
@@ -168,6 +168,7 @@ export default function Settings() {
           <h2 className="mb-2 font-bold">{t('Sécurité')}</h2>
           <p className="mb-4 text-sm text-ink-soft">{t('Connexion par email, Google ou téléphone.')}</p>
           <div className="flex flex-wrap gap-2">
+            <ButtonLink to="/compte/securite" variant="soft">{t('Sécurité du compte')}</ButtonLink>
             <Button variant="outline" onClick={async () => { setByOtp(user?.phoneVerified === true && (await otpEnabled())); setOtpToken(''); setOtpErr(''); setPwOpen(true); }}>{t('Changer le mot de passe')}</Button>
             <Button variant="danger" onClick={() => setDelOpen(true)}>{t('Supprimer mon compte')}</Button>
           </div>

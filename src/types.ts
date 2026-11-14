@@ -280,6 +280,11 @@ export interface AppUser {
   verified?: boolean;
   /** Faux tant que l'adresse email n'est pas confirmée (seulement quand l'envoi d'emails est configuré). */
   emailVerified?: boolean;
+  /** Faux tant que les questions de sécurité et l'acceptation des conditions ne sont pas enregistrées (comptes d'avant la refonte). */
+  authComplete?: boolean;
+  /** Un compte Google est associé (sinon : ancien compte à associer depuis la page Sécurité). */
+  hasGoogle?: boolean;
+  username?: string;
   /** Numéro WhatsApp confirmé par code (décidé par le serveur uniquement). */
   phoneVerified?: boolean;
   /** Rôle dans l'équipe d'un organisateur (organisateurs uniquement). */

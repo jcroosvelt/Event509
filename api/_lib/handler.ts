@@ -1,4 +1,7 @@
 import { readSession } from './auth.js';
+import { Respond } from './respond.js';
+import { loadSession, parseCookies, readCookie, SESSION_COOKIE, clearCookie, type SessionRow } from './session.js';
+import { siteUrl } from './mail.js';
 import { one } from './db.js';
 import { Binary, HttpError, refreshRate, routes, type Ctx, type UserRow } from './routes.js';
 
@@ -12,10 +15,19 @@ export interface ApiRequest {
   geo?: { country?: string; city?: string };
   /** Adresse IP de la connexion (limite de fréquence ; jamais gardée). */
   ip?: string;
+  /** En-tête Cookie brut (session serveur). */
+  cookie?: string;
+  /** En-têtes nécessaires à la protection CSRF et à la description de l'appareil. */
+  csrf?: string;
+  origin?: string;
+  host?: string;
+  userAgent?: string;
 }
 export interface ApiResponse {
   status: number;
   body: unknown;
+  /** En-têtes à ajouter (Set-Cookie, Location). */
+  headers?: Record<string, string | string[]>;
 }
 
 const compiled = routes.map(([method, pattern, handler]) => {
@@ -40,10 +52,32 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       let user = sess ? await one<UserRow>(`select * from users where id = $1`, [sess.sub]) : null;
       // Session ouverte avant le dernier changement de mot de passe : elle est fermée
       if (user && sess && user.sessions_valid_from && sess.iat < Math.floor(new Date(user.sessions_valid_from).getTime() / 1000)) user = null;
+      // Session serveur (cookie HttpOnly) : révocable, avec protection CSRF pour toute opération qui modifie des données
+      const cookies = parseCookies(req.cookie);
+      const cookieToken = readCookie(cookies, SESSION_COOKIE);
+      let session: SessionRow | null = null;
+      if (!user && cookieToken) {
+        session = await loadSession(cookieToken);
+        if (session) {
+          user = await one<UserRow>(`select * from users where id = $1`, [session.user_id]);
+          if (user?.status === 'suspended') user = null;
+          const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+          if (user && unsafe) {
+            // Un site tiers ne peut pas envoyer cet en-tête personnalisé ; l'origine, si elle est donnée, doit être celle du site
+            const site = (() => { try { return new URL(siteUrl() || `https://${req.host ?? ''}`).origin; } catch { return ''; } })();
+            const originOk = !req.origin || req.origin === site || req.origin === `https://${req.host}` || req.origin === `http://${req.host}`;
+            if (req.csrf !== '1' || !originOk) return { status: 403, body: { message: 'Requête refusée (protection CSRF)', code: 'csrf' } };
+          }
+          // Profil à compléter : seules les routes d'authentification restent accessibles
+          if (user && session.limited && !req.path.startsWith('/auth/')) return { status: 403, body: { message: 'Complétez votre profil pour continuer.', code: 'profile_incomplete' } };
+        }
+      }
       // Jeton présent mais invalide ou compte supprimé : la session est terminée
-      if (req.authorization && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/') && !req.path.startsWith('/app/') && !req.path.startsWith('/v1/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
-      const ctx: Ctx = { user, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, ip: req.ip, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
+      if ((req.authorization || cookieToken) && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/') && !req.path.startsWith('/app/') && !req.path.startsWith('/v1/'))
+        return { status: 401, body: { message: 'Session expirée, reconnectez-vous' }, ...(cookieToken ? { headers: { 'Set-Cookie': clearCookie(SESSION_COOKIE) } } : {}) };
+      const ctx: Ctx = { user, session, cookies, userAgent: req.userAgent, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, ip: req.ip, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
+      if (out instanceof Respond) return { status: out.status, body: out.body, headers: out.headers };
       if (out === null || out === undefined) return { status: 204, body: null };
       if (out instanceof Binary) return { status: 200, body: out };
       // Seul le diagnostic de /health est renvoyé en 503 quand le serveur est en panne ; ailleurs « ok: false »

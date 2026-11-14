@@ -10,6 +10,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useApp();
   const loc = useLocation();
   if (!user) return <Navigate to={`/connexion?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  // Compte Google dont le profil (questions de sécurité, conditions) reste à compléter : la session est limitée par le serveur
+  if (user.authComplete === false && user.hasGoogle && loc.pathname !== '/compte/completer') return <Navigate to="/compte/completer" replace />;
   return <>{children}</>;
 }
 

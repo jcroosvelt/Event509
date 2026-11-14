@@ -16,6 +16,11 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
     query,
     body: req.body,
     authorization: req.headers.authorization,
+    cookie: req.headers.cookie,
+    csrf: String(req.headers['x-e509-csrf'] ?? '') || undefined,
+    origin: String(req.headers.origin ?? '') || undefined,
+    host: String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '') || undefined,
+    userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) || undefined,
     ip: String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim() || undefined,
     geo: {
       country: String(req.headers['x-vercel-ip-country'] ?? '').toUpperCase() || undefined,
@@ -29,6 +34,11 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
     },
   });
   res.setHeader('Cache-Control', 'no-store');
+  for (const [k, v] of Object.entries(out.headers ?? {})) res.setHeader(k, v);
+  if (out.status >= 300 && out.status < 400) {
+    res.status(out.status).end();
+    return;
+  }
   if (out.body instanceof Binary) {
     const f = out.body;
     res.setHeader('Content-Type', f.mime);

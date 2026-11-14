@@ -8,7 +8,7 @@ import { AccessDenied } from '@/components/guards';
 import { BottomNav, NotificationsMenu, OfflineBanner, SkipLink } from './PublicLayout';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
-import { resendVerification } from '@/services/api';
+import { DEMO, resendVerification } from '@/services/api';
 import { ApkMenuLink } from '@/components/AppInstall';
 import { can, hasOrganizerAccess, teamRoleLabel, type Perm } from '@/lib/permissions';
 
@@ -218,6 +218,12 @@ export default function DashboardLayout({
 
       <main id="contenu" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-10">
         {user?.emailVerified === false && <VerifyBanner />}
+        {user && user.hasGoogle === false && !DEMO && (
+          <div role="status" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-brand-50 px-4 py-3 text-sm text-ink">
+            <span>{t('Associez votre compte Google pour sécuriser votre compte et vous connecter plus simplement.')}</span>
+            <Link to="/compte/securite" className="font-bold text-brand-ink underline">{t('Associer Google')}</Link>
+          </div>
+        )}
         <ErrorBoundary resetKey={loc.pathname}>
           <Outlet />
         </ErrorBoundary>

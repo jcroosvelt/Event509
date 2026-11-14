@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
-import { becomeOrganizer, claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, updateProfile, type Session_ } from '@/services/api';
+import { becomeOrganizer, claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, serverLogout, updateProfile, type Session_ } from '@/services/api';
 import { DEFAULT_PLACE, type Place, type TasteProfile } from '@/data/countries';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
@@ -223,7 +223,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const startSession = useCallback(
     async (s: Session_) => {
       try {
-        localStorage.setItem('e509.token', s.token);
+        // Session par cookie HttpOnly : le navigateur ne garde qu'un témoin local, jamais un secret
+        localStorage.setItem('e509.token', s.token ?? 'cookie');
       } catch {
         /* ignore */
       }
@@ -254,6 +255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     // Avant d'effacer la session : le serveur doit encore reconnaître le compte pour retirer l'appareil
     void unregisterPush();
+    serverLogout();
     persist('e509.user', null);
     setUser(null);
     if (!DEMO) {

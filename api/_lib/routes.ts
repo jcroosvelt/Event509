@@ -8,6 +8,10 @@ import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, sit
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { analyticsRoutes } from './analytics.js';
 import { consumeOtp, normalizePhone, otpConfigured, otpRoutes } from './otp.js';
+import { authFlowRoutes, hasGoogleIdentity } from './authflows.js';
+import { googleConfigured } from './google.js';
+import { createSession, type SessionRow } from './session.js';
+import { Respond } from './respond.js';
 import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
@@ -46,10 +50,17 @@ export interface UserRow {
   data: Partial<AppUser>;
   /** Sessions ouvertes avant cette date sont fermées (changement de mot de passe par code WhatsApp). */
   sessions_valid_from?: Date | string | null;
+  username?: string | null;
+  /** Faux pour les comptes d'avant la refonte : questions de sécurité et conditions restent à enregistrer. */
+  auth_complete?: boolean;
 }
 
 export interface Ctx {
   user: UserRow | null;
+  /** Session serveur (cookie) ; absente pour un ancien jeton ou sans connexion. */
+  session?: SessionRow | null;
+  cookies?: Record<string, string>;
+  userAgent?: string;
   method?: string;
   path?: string;
   authorization?: string;
@@ -75,6 +86,8 @@ export const toAppUser = (u: UserRow): AppUser & { organizerId?: string } => ({
   teamPerms: u.team_perms ?? undefined,
   status: u.status,
   organizerId: u.organizer_id ?? undefined,
+  username: u.username ?? undefined,
+  authComplete: u.auth_complete !== false,
 });
 
 const str = (v: unknown, max = 500) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -224,6 +237,8 @@ function requireVerified(u: UserRow) {
 }
 
 const signup: Handler = async (c) => {
+  // Les nouvelles inscriptions passent uniquement par Google dès qu'il est configuré
+  if (googleConfigured()) fail(410, 'L’inscription se fait désormais avec Google.', 'use_google');
   const name = str(c.body.name, 80);
   const email = str(c.body.email, 160).toLowerCase();
   const password = typeof c.body.password === 'string' ? c.body.password : '';
@@ -323,14 +338,22 @@ const resendVerification: Handler = async (c) => {
 const login: Handler = async (c) => {
   const email = str(c.body.email, 160).toLowerCase();
   const password = typeof c.body.password === 'string' ? c.body.password : '';
+  // Anti force brute : 20 essais par 15 minutes et par connexion
+  if (c.ip) await rateLimit(`login:${c.ip}`, 20, 15);
   const u = await one<UserRow>(`select * from users where email = $1`, [email]);
-  // Même message dans tous les cas : on ne révèle pas si le compte existe
-  if (!u || !(await verifyPassword(password, u.password_hash))) fail(401, 'Email ou mot de passe incorrect');
+  // Même message dans tous les cas : on ne révèle pas si le compte existe. Un compte associé à Google ne se connecte plus par mot de passe.
+  const hasGoogle = u ? !!(await one(`select 1 from auth_identities where user_id = $1 and provider = 'google' and status = 'active'`, [u.id])) : false;
+  if (!u || hasGoogle || !(await verifyPassword(password, u.password_hash))) fail(401, 'Email ou mot de passe incorrect');
   if (u!.status === 'suspended') fail(403, 'Ce compte est suspendu. Contactez le support.');
-  return session(u!);
+  // Session serveur (cookie HttpOnly) : aucun jeton n'est renvoyé au navigateur
+  const s = await createSession(u!.id, { method: 'password', userAgent: c.userAgent, ip: c.ip });
+  return Respond.json({ user: toAppUser(u!) }, [s.cookie]);
 };
 
-const me: Handler = async (c) => toAppUser(auth(c));
+const me: Handler = async (c) => {
+  const u = auth(c);
+  return { ...toAppUser(u), hasGoogle: await hasGoogleIdentity(u.id) };
+};
 
 const updateMe: Handler = async (c) => {
   const u = auth(c);
@@ -1969,6 +1992,7 @@ const runReminders: Handler = async (c) => {
 export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...premiumRoutes({ fail, str, auth, admin, org, audit }),
   ...otpRoutes({ fail, auth, checkPassword, hashPassword, rateLimit }),
+  ...authFlowRoutes({ fail, admin, rateLimit, toAppUser }),
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
   ...supportRoutes({ fail, str, auth, admin, org, audit }),

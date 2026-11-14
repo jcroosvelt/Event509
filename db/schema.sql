@@ -456,3 +456,175 @@ create index if not exists otp_security_log_at on otp_security_log(at);
 
 -- Sessions ouvertes avant cette date : fermées (après un changement de mot de passe par code)
 alter table users add column if not exists sessions_valid_from timestamptz;
+
+-- ====================================================================================================
+-- Authentification par Google (OpenID Connect), passkeys, récupération de compte. Migration additive :
+-- rien n'est supprimé ni modifié dans les comptes existants. Retour arrière : drop des tables ci-dessous.
+-- ====================================================================================================
+
+-- Identités d'authentification d'un compte EVENT509 (l'identifiant interne users.id ne change jamais).
+-- Google : « subject » = le « sub » stable de Google (jamais l'email). Plusieurs identités possibles par compte.
+create table if not exists auth_identities (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  provider text not null check (provider in ('google')),
+  subject text not null,
+  email text,
+  status text not null default 'active' check (status in ('active', 'replaced')),
+  created_at timestamptz not null default now(),
+  replaced_at timestamptz
+);
+-- Une identité Google active n'appartient qu'à un seul compte ; un seul Google actif par compte
+create unique index if not exists auth_identities_active_subject on auth_identities(provider, subject) where status = 'active';
+create unique index if not exists auth_identities_active_user on auth_identities(user_id, provider) where status = 'active';
+
+-- Départ d'une connexion Google : état, nonce et vérificateur PKCE (usage unique, 10 minutes)
+create table if not exists oauth_states (
+  state_hash text primary key,
+  nonce text not null,
+  code_verifier text not null,
+  purpose text not null check (purpose in ('login', 'link', 'reauth', 'recover')),
+  user_id text references users(id) on delete cascade,
+  recovery_id text,
+  next_path text,
+  browser_hash text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+-- Inscription provisoire : pas encore un compte. Expire seule (24 h) ; supprimée à la création du compte.
+create table if not exists pending_signups (
+  id_hash text primary key,
+  google_sub text not null,
+  email text not null,
+  given_name text,
+  family_name text,
+  picture text,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists pending_signups_sub on pending_signups(google_sub);
+
+-- Nouveau compte Google en attente de confirmation explicite (changement de compte Google)
+create table if not exists pending_links (
+  id_hash text primary key,
+  user_id text not null references users(id) on delete cascade,
+  google_sub text not null,
+  email text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+-- Questions de sécurité (3 par compte, formulées par l'utilisateur). Réponses : Argon2id, jamais en clair.
+create table if not exists security_questions (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  position int not null check (position between 1 and 3),
+  question text not null,
+  answer_hash text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, position)
+);
+
+-- Passkeys (WebAuthn / FIDO2) : seule la clé publique est gardée
+create table if not exists webauthn_credentials (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  credential_id text not null unique,
+  public_key text not null,
+  counter bigint not null default 0,
+  transports text[],
+  device_type text,
+  backed_up boolean not null default false,
+  name text not null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create index if not exists webauthn_credentials_user on webauthn_credentials(user_id);
+
+-- Défis WebAuthn (usage unique, 5 minutes)
+create table if not exists auth_challenges (
+  id_hash text primary key,
+  purpose text not null,
+  challenge text not null,
+  user_id text references users(id) on delete cascade,
+  recovery_id text,
+  expires_at timestamptz not null
+);
+
+-- Codes de récupération : seule l'empreinte est gardée, un code ne sert qu'une fois
+create table if not exists recovery_codes (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  code_hash text not null unique,
+  batch text not null,
+  used_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists recovery_codes_user on recovery_codes(user_id);
+
+-- Sessions (cookie HttpOnly) : l'identifiant du cookie n'est jamais stocké, seulement son empreinte
+create table if not exists auth_sessions (
+  id_hash text primary key,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  recent_auth_at timestamptz not null default now(),
+  limited boolean not null default false,
+  user_agent text,
+  device_label text,
+  ip_masked text,
+  method text
+);
+create index if not exists auth_sessions_user on auth_sessions(user_id);
+
+-- Parcours « je n'ai plus accès à mon compte Google » : facteurs validés pour une tentative donnée
+create table if not exists recovery_sessions (
+  id_hash text primary key,
+  user_id text references users(id) on delete cascade,
+  factors text[] not null default '{}',
+  attempts int not null default 0,
+  locked_until timestamptz,
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  request_id text,
+  created_at timestamptz not null default now()
+);
+
+-- Demandes de récupération avec assistance de l'administration
+create table if not exists recovery_requests (
+  id text primary key,
+  token_hash text not null unique,
+  user_id text references users(id) on delete cascade,
+  identifier text not null,
+  reason text not null,
+  contact text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'blocked', 'cancelled', 'completed')),
+  decided_by text references users(id) on delete set null,
+  decided_at timestamptz,
+  note text,
+  execute_after timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists recovery_requests_status on recovery_requests(status, created_at);
+
+-- Historique des opérations de sécurité (jamais de secret, de code ni de réponse)
+create table if not exists security_events (
+  id text primary key,
+  user_id text references users(id) on delete cascade,
+  event text not null,
+  detail jsonb not null default '{}'::jsonb,
+  ip_masked text,
+  at timestamptz not null default now()
+);
+create index if not exists security_events_user on security_events(user_id, at desc);
+
+-- Profil de compte
+alter table users add column if not exists username text;
+create unique index if not exists users_username_lower on users (lower(username)) where username is not null;
+-- Faux tant que les questions de sécurité et l'acceptation des conditions ne sont pas enregistrées (comptes d'avant la refonte)
+alter table users add column if not exists auth_complete boolean not null default false;
+alter table recovery_sessions add column if not exists request_id text;
