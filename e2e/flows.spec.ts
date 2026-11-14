@@ -323,6 +323,19 @@ test.describe('événements près de l’utilisateur', () => {
   });
 });
 
+test.describe('vérification directe par l’administrateur', () => {
+  test('l’admin vérifie une organisation sans demande, puis retire la vérification', async ({ page }) => {
+    await loginAs(page, /Admin plateforme/);
+    await page.goto('/admin/utilisateurs/u4');
+    const main = page.locator('#contenu');
+    await expect(main.getByText(/non vérifié|not verified/)).toBeVisible();
+    await main.getByRole('button', { name: /Vérifier sans demande|Verify without a request/ }).click();
+    await expect(main.getByText(/· (vérifié|verified) ·/)).toBeVisible();
+    await main.getByRole('button', { name: /Retirer la vérification|Remove verification/ }).click();
+    await expect(main.getByText(/non vérifié|not verified/)).toBeVisible();
+  });
+});
+
 test.describe('recherche par pays et par ville', () => {
   test('on filtre par pays du monde et on cherche une grande ville', async ({ page }) => {
     await fresh(page, '/explorer?sort=date');

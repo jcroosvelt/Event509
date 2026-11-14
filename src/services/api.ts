@@ -1199,6 +1199,16 @@ export async function decideVerification(
   audit(status === 'approved' ? 'Organisateur vérifié' : status === 'docs_requested' ? 'Documents demandés' : 'Vérification mise à jour', v.name);
 }
 
+/** L'administrateur vérifie (ou retire la vérification d') une organisation directement, sans demande ni paiement. */
+export async function setOrganizerVerified(organizerId: string, verified: boolean) {
+  if (!DEMO) return void (await http(`/admin/organizers/${organizerId}/verification`, { method: 'POST', body: JSON.stringify({ verified }) }));
+  await wait(200);
+  const o = db.organizers.find((x) => x.id === organizerId);
+  if (!o) return;
+  o.verified = verified;
+  audit(verified ? 'Organisateur vérifié directement' : 'Vérification retirée', o.name);
+}
+
 export async function listDisputes() {
   if (!DEMO) return http<Dispute[]>('/admin/disputes');
   await wait(); return clone(db.disputes);

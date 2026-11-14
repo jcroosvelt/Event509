@@ -352,6 +352,8 @@ export interface VerificationRequest {
   note?: string;
   application?: Partial<VerificationApplication>;
   approvedAt?: string;
+  /** Vérifiée directement par l'administration, sans demande ni paiement. */
+  directByAdmin?: boolean;
   /** Recours de l'organisateur après un refus. */
   appeal?: { message: string; at: string };
   /** Contrôles faits par l'administration au moment de la décision. */

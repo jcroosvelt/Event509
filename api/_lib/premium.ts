@@ -496,6 +496,45 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     return { refundDue: refund, by: a.id };
   };
 
+  /**
+   * L'administrateur vérifie (ou retire la vérification d') une organisation directement, sans demande ni paiement :
+   * la demande est créée déjà approuvée et un abonnement offert est ouvert pour la durée de validité du programme.
+   * Le badge reste calculé par recompute() ; retirer la vérification passe par le même chemin qu'une révocation.
+   */
+  const adminSetVerified: Handler = async (c) => {
+    admin(c);
+    const orgId = c.params.id!;
+    const want = c.body.verified === true;
+    const note = str(c.body.note, 500);
+    const o = await one<{ data: { name?: string; city?: string } }>(`select data from organizers where id = $1`, [orgId]);
+    if (!o) fail(404, 'Organisation introuvable');
+    const owner = await one<{ email: string; data: { name?: string } }>(`select email, data from users where organizer_id = $1 order by (team_role = 'admin') desc, created_at limit 1`, [orgId]);
+    const base = { name: o!.data.name ?? '', owner: owner?.data.name ?? '', email: owner?.email ?? '', city: o!.data.city ?? '' };
+    const cfg = await getConfig();
+    await tx(async (q) => {
+      if (want) {
+        const now = new Date().toISOString();
+        await patchRequest(orgId, { status: 'approved', approvedAt: now, submittedAt: now, note: undefined, directByAdmin: true, checklist: { identity: true, email: true, phone: true, presence: true } }, base, q);
+        await q.query(`update verification_requests set status = 'approved' where organizer_id = $1`, [orgId]);
+        await q.query(
+          `insert into premium_subscriptions (id, organizer_id, plan, status, started_at, expires_at)
+           values ($1, $2, 'yearly', 'active', now(), now() + ($3 || ' days')::interval)
+           on conflict (organizer_id) do update set plan = 'yearly', status = 'active', started_at = now(), expires_at = now() + ($3 || ' days')::interval, cancel_at_period_end = false`,
+          [newId('sub'), orgId, String(cfg.validityDays)]);
+        await logEntry(orgId, actorName(c), 'Vérifié directement par l’administration', note || 'Sans demande ni paiement', false, q);
+      } else {
+        const req = await getReq(orgId, q);
+        if (req) await q.query(`update verification_requests set status = 'rejected', data = data || $2::jsonb where id = $1`, [req.id, JSON.stringify({ status: 'rejected', note: note || undefined })]);
+        await q.query(`update premium_subscriptions set status = 'canceled', expires_at = now() where organizer_id = $1 and status = 'active'`, [orgId]);
+        await logEntry(orgId, actorName(c), 'Vérification retirée par l’administration', note || undefined, false, q);
+      }
+      await recompute(orgId, q);
+    });
+    await audit(c, want ? 'Organisateur vérifié directement' : 'Vérification retirée', base.name);
+    if (cfg.notify.onDecision) await tell(orgId, want ? 'Organisateur vérifié' : 'Vérification retirée', want ? 'Votre organisation est vérifiée par l’administration : votre badge est visible.' : 'La vérification de votre organisation a été retirée.');
+    return { verified: want };
+  };
+
   const adminLog: Handler = async (c) => {
     admin(c);
     const row = await one<{ organizer_id: string }>(`select organizer_id from verification_requests where id = $1`, [c.params.id]);
@@ -598,6 +637,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     ['POST', '/org/premium/cancel', setCancel(true)],
     ['POST', '/org/premium/resume', setCancel(false)],
     ['GET', '/org/premium/payments/:id/invoice', invoice],
+    ['POST', '/admin/organizers/:id/verification', adminSetVerified],
     ['GET', '/admin/verifications', adminList],
     ['POST', '/admin/verifications/:id', decide],
     ['GET', '/admin/verifications/:id/log', adminLog],
