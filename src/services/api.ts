@@ -52,7 +52,8 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
+    const b = body as { message?: string; code?: string };
+    throw new ApiError(res.status, b.message ?? res.statusText, undefined, b.code);
   }
   return res.status === 204 ? (undefined as T) : (res.json() as Promise<T>);
 }
@@ -149,6 +150,8 @@ export function signIn(email: string, password: string) {
   return http<Session_>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 export interface SignUpInput {
+  /** Preuve signée par le serveur que le numéro a été confirmé par code WhatsApp. */
+  phoneProof?: string;
   name: string;
   email: string;
   password: string;
@@ -571,6 +574,25 @@ export async function deleteAccount() {
   if (!DEMO) return void (await http('/auth/me', { method: 'DELETE' }));
   await wait(600);
 }
+
+// ---------- Codes WhatsApp (OTP) : toutes les décisions sont prises par le serveur ----------
+
+export interface OtpSent { sent: true; expiresInSeconds: number; requestsLeft?: number; phoneMasked?: string }
+const post = <T,>(path: string, body: unknown = {}) => http<T>(path, { method: 'POST', body: JSON.stringify(body) });
+
+/** Le service WhatsApp est-il configuré côté serveur ? (jamais vrai en démonstration) */
+export async function otpEnabled() {
+  if (DEMO) return false;
+  return http<{ enabled: boolean }>('/auth/otp/status').then((r) => r.enabled).catch(() => false);
+}
+export const otpRegisterSend = (phone: string) => post<OtpSent>('/auth/otp/register/send', { phone });
+export const otpRegisterVerify = (phone: string, code: string) => post<{ verified: true; phone: string; proof: string }>('/auth/otp/register/verify', { phone, code });
+export const otpForgotSend = (phone: string) => post<OtpSent>('/auth/otp/forgot-password/send', { phone });
+export const otpForgotVerify = (phone: string, code: string) => post<{ verified: true; resetToken: string }>('/auth/otp/forgot-password/verify', { phone, code });
+export const otpResetPassword = (resetToken: string, password: string) => post<{ ok: true }>('/auth/otp/reset-password', { resetToken, password });
+export const otpChangeSend = () => post<OtpSent>('/auth/otp/change-password/send');
+export const otpChangeVerify = (code: string) => post<{ verified: true; changeToken: string }>('/auth/otp/change-password/verify', { code });
+export const otpChangeConfirm = (changeToken: string, password: string) => post<{ ok: true; token: string }>('/auth/otp/change-password/confirm', { changeToken, password });
 
 export async function requestPasswordReset(email: string) {
   if (!DEMO) throw new ApiError(501, 'La réinitialisation par email n’est pas encore disponible. Écrivez au support.');

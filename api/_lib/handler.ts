@@ -1,4 +1,4 @@
-import { readToken } from './auth.js';
+import { readSession } from './auth.js';
 import { one } from './db.js';
 import { Binary, HttpError, refreshRate, routes, type Ctx, type UserRow } from './routes.js';
 
@@ -36,8 +36,10 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       pathMatched = true;
       if (r.method !== req.method) continue;
       const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1]!)]));
-      const userId = readToken(req.authorization?.replace(/^Bearer\s+/i, ''));
-      const user = userId ? await one<UserRow>(`select * from users where id = $1`, [userId]) : null;
+      const sess = readSession(req.authorization?.replace(/^Bearer\s+/i, ''));
+      let user = sess ? await one<UserRow>(`select * from users where id = $1`, [sess.sub]) : null;
+      // Session ouverte avant le dernier changement de mot de passe : elle est fermée
+      if (user && sess && user.sessions_valid_from && sess.iat < Math.floor(new Date(user.sessions_valid_from).getTime() / 1000)) user = null;
       // Jeton présent mais invalide ou compte supprimé : la session est terminée
       if (req.authorization && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/') && !req.path.startsWith('/app/') && !req.path.startsWith('/v1/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
       const ctx: Ctx = { user, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, ip: req.ip, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
@@ -51,7 +53,7 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
     }
     return pathMatched ? { status: 405, body: { message: 'Méthode non autorisée' } } : { status: 404, body: { message: 'Route inconnue' } };
   } catch (e) {
-    if (e instanceof HttpError) return { status: e.status, body: { message: e.message } };
+    if (e instanceof HttpError) return { status: e.status, body: { message: e.message, ...(e.code ? { code: e.code } : {}) } };
     const ref = Math.random().toString(36).slice(2, 8).toUpperCase();
     console.error(`[api ${ref}]`, e);
     return { status: 500, body: { message: 'Erreur du serveur', ref } };

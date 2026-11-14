@@ -7,6 +7,7 @@ import { hashPassword, newAccessKey, newId, newTicketCode, readPurposeToken, sam
 import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, siteUrl } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { analyticsRoutes } from './analytics.js';
+import { consumeOtp, normalizePhone, otpConfigured, otpRoutes } from './otp.js';
 import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
@@ -20,7 +21,7 @@ import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './fil
 import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATES, isDisplayCurrency, RATES, round as roundCur, setRates, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public code?: string) {
     super(message);
   }
 }
@@ -29,8 +30,8 @@ export class Binary {
   constructor(public mime: string, public data: Buffer, public cache: string, public name: string) {}
 }
 
-const fail = (status: number, message: string): never => {
-  throw new HttpError(status, message);
+const fail = (status: number, message: string, code?: string): never => {
+  throw new HttpError(status, message, code);
 };
 
 export interface UserRow {
@@ -43,6 +44,8 @@ export interface UserRow {
   organizer_id: string | null;
   status: AppUser['status'];
   data: Partial<AppUser>;
+  /** Sessions ouvertes avant cette date sont fermées (changement de mot de passe par code WhatsApp). */
+  sessions_valid_from?: Date | string | null;
 }
 
 export interface Ctx {
@@ -234,8 +237,18 @@ const signup: Handler = async (c) => {
   const country = str(c.body.country, 2).toUpperCase();
   if (country && !/^[A-Z]{2}$/.test(country)) fail(422, 'Pays invalide');
   const kind = ORG_KINDS.includes(str(c.body.kind) as (typeof ORG_KINDS)[number]) ? str(c.body.kind) : 'individual';
-  const phone = str(c.body.phone, 30);
+  let phone = str(c.body.phone, 30);
   if (phone && !/^\+?[0-9 ().-]{6,20}$/.test(phone)) fail(422, 'Numéro de téléphone invalide');
+  // Vérification WhatsApp (dès que le service est configuré) : le numéro doit avoir été confirmé par code, preuve signée du serveur
+  let phoneOtpId: string | null = null;
+  if (otpConfigured()) {
+    const e164 = normalizePhone(phone);
+    if (!e164) fail(422, 'Indiquez votre numéro WhatsApp et confirmez-le par code', 'phone_required');
+    phoneOtpId = readPurposeToken(typeof c.body.phoneProof === 'string' ? c.body.phoneProof : '', `phone:${e164}`);
+    if (!phoneOtpId) fail(422, 'Confirmez votre numéro WhatsApp avec le code reçu', 'phone_unverified');
+    if (await one(`select 1 from users where data->>'phone' = $1 and (data->>'phoneVerified')::boolean is true`, [e164])) fail(409, 'Ce numéro est déjà utilisé par un autre compte');
+    phone = e164!;
+  }
   if (await one(`select 1 from users where email = $1`, [email])) fail(409, 'Un compte existe déjà avec cet email');
   // 5 inscriptions par heure et par connexion
   if (c.ip) await rateLimit(`signup:${c.ip}`, 5, 60);
@@ -269,6 +282,7 @@ const signup: Handler = async (c) => {
     const data = {
       name, avatar: initials(name), city: '', joinedAt: new Date().toISOString().slice(0, 10),
       ...(phone ? { phone } : {}),
+      ...(phoneOtpId ? { phoneVerified: true } : {}),
       // Preuve de l'acceptation (version et date) ; adresse à confirmer dès que l'envoi d'emails est configuré
       terms: { version: TERMS_VERSION, at: new Date().toISOString() },
       ...(mailConfigured() ? { emailVerified: false } : {}),
@@ -277,6 +291,8 @@ const signup: Handler = async (c) => {
       `insert into users (id, email, password_hash, role, team_role, organizer_id, data, team_perms) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
       [id, email, await hashPassword(password), role, teamRole, organizerId, JSON.stringify(data), invitePerms ? JSON.stringify(invitePerms) : null],
     );
+    // La preuve du numéro ne sert qu'une fois
+    if (phoneOtpId && !(await consumeOtp(phoneOtpId, 'register', q))) fail(422, 'Confirmez votre numéro WhatsApp avec le code reçu', 'phone_unverified');
     const u = (await one<UserRow>(`select * from users where id = $1`, [id], q))!;
     return u;
   }).then(async (u) => {
@@ -320,6 +336,8 @@ const updateMe: Handler = async (c) => {
   const u = auth(c);
   const patch: Record<string, string> = {};
   for (const k of ['name', 'phone', 'city'] as const) if (typeof c.body[k] === 'string') patch[k] = str(c.body[k], 120);
+  // Un numéro confirmé par code ne se change pas ici (sinon la vérification serait contournée)
+  if (u.data.phoneVerified === true) delete patch.phone;
   if (patch.name) patch.avatar = initials(patch.name);
   await db().query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify(patch)]);
   return toAppUser((await one<UserRow>(`select * from users where id = $1`, [u.id]))!);
@@ -346,6 +364,8 @@ const becomeOrganizer: Handler = async (c) => {
 
 const changePassword: Handler = async (c) => {
   const u = auth(c);
+  // Numéro WhatsApp vérifié et service actif : le changement passe obligatoirement par un code (pas de contournement par cette route)
+  if (otpConfigured() && u.data.phoneVerified === true) fail(403, 'Pour votre sécurité, le changement de mot de passe se fait avec un code WhatsApp.', 'otp_required');
   const next = typeof c.body.next === 'string' ? c.body.next : '';
   if (!(await verifyPassword(String(c.body.current ?? ''), u.password_hash))) fail(422, 'Mot de passe actuel incorrect');
   if (next.length < 8) fail(422, 'Mot de passe trop court');
@@ -1948,6 +1968,7 @@ const runReminders: Handler = async (c) => {
 
 export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...premiumRoutes({ fail, str, auth, admin, org, audit }),
+  ...otpRoutes({ fail, auth, checkPassword, hashPassword, rateLimit }),
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
   ...supportRoutes({ fail, str, auth, admin, org, audit }),

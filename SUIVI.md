@@ -87,6 +87,7 @@
 - **Pays et villes du monde (fait)** : tous les pays (code ISO) dans l'éditeur, l'inscription et Explorer ; ~245 grandes villes (`src/data/worldCities.ts`) pour la recherche par ville (liste qui suit le pays) et le rattachement du GPS. Les villes hors liste restent saisissables à la main.
 - **Vérification directe (fait)** : l'administrateur peut vérifier une organisation sans demande ni paiement (fiche utilisateur > Organisation > « Vérifier sans demande »). Demande créée déjà approuvée (`directByAdmin`), abonnement offert pour la durée de validité du programme, badge et avantages ouverts ; « Retirer la vérification » l'annule. Route `POST /api/admin/organizers/:id/verification`, journalisée.
 - **Installation (fait)** : plus de manifeste web, donc plus aucune invitation PWA du navigateur ; seul l'APK est proposé (fenêtre du site). Déconnexion retirée de la barre du haut sur mobile (menu seulement) ; lien « Télécharger l'application » dans les menus.
+- **Codes WhatsApp (OTP) via Meta Cloud API (préparé, non activé)** : inscription (numéro vérifié), mot de passe oublié, changement de mot de passe ; 6 chiffres, 5 min, 3 demandes / 24 h partagées, 5 essais, verrou anti-simultanéité, hachage HMAC, journal sans codes, sessions fermées après changement. Désactivé tant que `META_ACCESS_TOKEN` et `META_PHONE_NUMBER_ID` manquent. Détails, étapes Meta et coût : `docs/OTP-WHATSAPP.md`. **À faire par Joseph :** application Meta, numéro, jeton permanent, modèle `event509_otp` approuvé, variables Vercel, webhook.
 
 ## À faire ensuite
 
@@ -136,3 +137,4 @@
 - 2026-11-13 : première version de l'application (1.0.21) publiée dans public/app/ ; le workflow de l'application garde l'APK le plus récent dans sa branche apk-release.
 - 2026-11-14 : inscription renforcée (2 étapes, mot de passe, conditions, limite, confirmation d'email), libellé du rôle clarifié, tous les pays et grandes villes du monde pour la recherche.
 - 2026-11-14 : plus d'invitation PWA, déconnexion mobile dans le menu, lien APK dans les menus, vérification directe d'une organisation par l'admin.
+- 2026-11-14 : infrastructure OTP WhatsApp (Meta Cloud API) préparée et testée avec un faux serveur Meta ; en attente des identifiants Meta.

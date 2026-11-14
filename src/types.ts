@@ -280,6 +280,8 @@ export interface AppUser {
   verified?: boolean;
   /** Faux tant que l'adresse email n'est pas confirmée (seulement quand l'envoi d'emails est configuré). */
   emailVerified?: boolean;
+  /** Numéro WhatsApp confirmé par code (décidé par le serveur uniquement). */
+  phoneVerified?: boolean;
   /** Rôle dans l'équipe d'un organisateur (organisateurs uniquement). */
   teamRole?: TeamRole;
   /** Organisation dont l'utilisateur fait partie (fournie par le serveur). */

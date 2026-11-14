@@ -420,3 +420,39 @@ create table if not exists rate_events (
   at timestamptz not null default now()
 );
 create index if not exists rate_events_key on rate_events(key, at);
+
+-- Codes à usage unique (OTP) envoyés sur WhatsApp : seule l'empreinte du code est gardée.
+-- La limite (3 demandes par 24 h glissantes, tous motifs confondus) se calcule sur cette table, sous verrou consultatif.
+create table if not exists otp_verifications (
+  id text primary key,
+  user_id text references users(id) on delete cascade,
+  phone_number text not null,
+  otp_hash text not null,
+  purpose text not null check (purpose in ('register', 'forgot_password', 'change_password')),
+  expires_at timestamptz not null,
+  attempts int not null default 0,
+  verified_at timestamptz,
+  consumed_at timestamptz,
+  created_at timestamptz not null default now(),
+  send_failed boolean not null default false,
+  wamid text,
+  delivery_status text
+);
+create index if not exists otp_verifications_phone on otp_verifications(phone_number, created_at);
+create index if not exists otp_verifications_user on otp_verifications(user_id, created_at);
+create index if not exists otp_verifications_wamid on otp_verifications(wamid);
+
+-- Journal de sécurité : jamais de code, numéros masqués. Conservé 90 jours.
+create table if not exists otp_security_log (
+  id text primary key,
+  at timestamptz not null default now(),
+  event text not null,
+  purpose text,
+  user_id text,
+  phone_masked text,
+  detail jsonb not null default '{}'::jsonb
+);
+create index if not exists otp_security_log_at on otp_security_log(at);
+
+-- Sessions ouvertes avant cette date : fermées (après un changement de mot de passe par code)
+alter table users add column if not exists sessions_valid_from timestamptz;

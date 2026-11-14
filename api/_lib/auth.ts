@@ -30,7 +30,8 @@ function secret() {
 /** Jeton de session signé (HS256), valable 30 jours. */
 export function signToken(userId: string) {
   const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + 30 * 86400 }));
+  const now = Math.floor(Date.now() / 1000);
+  const payload = b64(JSON.stringify({ sub: userId, iat: now, exp: now + 30 * 86400 }));
   const sig = createHmac('sha256', secret()).update(`${header}.${payload}`).digest('base64url');
   return `${header}.${payload}.${sig}`;
 }
@@ -58,7 +59,13 @@ export function readPurposeToken(token: string | undefined, purpose: string): st
   }
 }
 
+/** Identifiant du compte d'un jeton de session valide. */
 export function readToken(token: string | undefined): string | null {
+  return readSession(token)?.sub ?? null;
+}
+
+/** Jeton de session valide : compte et date d'émission (0 pour les anciens jetons), pour fermer les sessions après un changement de mot de passe. */
+export function readSession(token: string | undefined): { sub: string; iat: number } | null {
   if (!token) return null;
   const [header, payload, sig] = token.split('.');
   if (!header || !payload || !sig) return null;
@@ -66,9 +73,9 @@ export function readToken(token: string | undefined): string | null {
   const given = Buffer.from(sig, 'base64url');
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
-    const p = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub: string; exp: number; p?: string };
+    const p = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub: string; exp: number; iat?: number; p?: string };
     // Un jeton à usage précis (confirmation d'email…) n'ouvre jamais une session
-    return !p.p && p.exp > Date.now() / 1000 ? p.sub : null;
+    return !p.p && p.exp > Date.now() / 1000 ? { sub: p.sub, iat: p.iat ?? 0 } : null;
   } catch {
     return null;
   }

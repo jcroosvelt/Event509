@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { changePassword, deleteAccount } from '@/services/api';
+import { changePassword, deleteAccount, otpChangeConfirm, otpChangeSend, otpChangeVerify, otpEnabled } from '@/services/api';
+import { OtpChallenge, otpErrorMessage } from '@/components/otp/OtpChallenge';
 import { load, persist, useApp, type Theme } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { languages } from '@/lib/i18n';
@@ -27,6 +28,11 @@ export default function Settings() {
     persist(NOTIF_KEY, next);
   };
   const [pwOpen, setPwOpen] = useState(false);
+  // Numéro WhatsApp vérifié et service actif : le changement se fait avec un code (le serveur refuse l'ancienne méthode)
+  const [byOtp, setByOtp] = useState(false);
+  const [otpToken, setOtpToken] = useState('');
+  const [otpPw, setOtpPw] = useState({ next: '', confirm: '' });
+  const [otpErr, setOtpErr] = useState('');
   const [delOpen, setDelOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -52,6 +58,26 @@ export default function Settings() {
     if (!profile.validate()) return;
     updateUser(profile.values);
     toast(t('Profil mis à jour'));
+  };
+
+  const saveOtpPassword = async () => {
+    if (otpPw.next.length < 8 || !/[A-Za-zÀ-ÿ]/.test(otpPw.next) || !/\d/.test(otpPw.next)) return setOtpErr(t('Au moins 8 caractères, avec une lettre et un chiffre'));
+    if (otpPw.next !== otpPw.confirm) return setOtpErr(t('Les deux mots de passe doivent être identiques'));
+    setBusy(true);
+    setOtpErr('');
+    try {
+      const r = await otpChangeConfirm(otpToken, otpPw.next);
+      // Les autres sessions sont fermées par le serveur ; celle-ci continue avec le nouveau jeton
+      localStorage.setItem('e509.token', r.token);
+      setPwOpen(false);
+      setOtpToken('');
+      setOtpPw({ next: '', confirm: '' });
+      toast(t('Mot de passe modifié'));
+    } catch (e) {
+      setOtpErr(otpErrorMessage(e, t));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const savePassword = async () => {
@@ -142,18 +168,36 @@ export default function Settings() {
           <h2 className="mb-2 font-bold">{t('Sécurité')}</h2>
           <p className="mb-4 text-sm text-ink-soft">{t('Connexion par email, Google ou téléphone.')}</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setPwOpen(true)}>{t('Changer le mot de passe')}</Button>
+            <Button variant="outline" onClick={async () => { setByOtp(user?.phoneVerified === true && (await otpEnabled())); setOtpToken(''); setOtpErr(''); setPwOpen(true); }}>{t('Changer le mot de passe')}</Button>
             <Button variant="danger" onClick={() => setDelOpen(true)}>{t('Supprimer mon compte')}</Button>
           </div>
         </Card>
       </div>
 
-      <Modal open={pwOpen} onClose={() => setPwOpen(false)} title={t('Changer le mot de passe')} size="sm" footer={<Button className="flex-1" onClick={savePassword} loading={busy}>{t('Enregistrer')}</Button>}>
+      <Modal open={pwOpen} onClose={() => setPwOpen(false)} title={t('Changer le mot de passe')} size="sm" footer={byOtp ? (otpToken ? <Button className="flex-1" onClick={saveOtpPassword} loading={busy}>{t('Enregistrer')}</Button> : undefined) : <Button className="flex-1" onClick={savePassword} loading={busy}>{t('Enregistrer')}</Button>}>
+        {byOtp ? (
+          otpToken ? (
+            <form noValidate onSubmit={(e) => { e.preventDefault(); void saveOtpPassword(); }} className="space-y-4">
+              <Field label={t('Nouveau mot de passe')} hint={t('8 caractères minimum, avec une lettre et un chiffre')} required><Input type="password" autoComplete="new-password" value={otpPw.next} onChange={(e) => setOtpPw({ ...otpPw, next: e.target.value })} /></Field>
+              <Field label={t('Confirmer le mot de passe')} error={otpErr} required><Input type="password" autoComplete="new-password" value={otpPw.confirm} onChange={(e) => setOtpPw({ ...otpPw, confirm: e.target.value })} /></Field>
+            </form>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-ink-soft">{t('Pour votre sécurité, nous confirmons votre identité avec un code envoyé sur votre WhatsApp.')}</p>
+              <OtpChallenge
+                send={otpChangeSend}
+                verify={async (code) => setOtpToken((await otpChangeVerify(code)).changeToken)}
+                onVerified={() => undefined}
+              />
+            </div>
+          )
+        ) : (
         <form noValidate onSubmit={(e) => { e.preventDefault(); savePassword(); }} className="space-y-4">
           <Field label={t('Mot de passe actuel')} error={pw.errors.current} required><Input type="password" autoComplete="current-password" {...pw.bind('current')} /></Field>
           <Field label={t('Nouveau mot de passe')} error={pw.errors.next} hint={t('8 caractères minimum')} required><Input type="password" autoComplete="new-password" {...pw.bind('next')} /></Field>
           <Field label={t('Confirmer le mot de passe')} error={pw.errors.confirm} required><Input type="password" autoComplete="new-password" {...pw.bind('confirm')} /></Field>
         </form>
+        )}
       </Modal>
 
       <Modal

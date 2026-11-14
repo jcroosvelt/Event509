@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
 import { useApp } from '@/store/app';
@@ -8,7 +8,8 @@ import { hasOrganizerAccess } from '@/lib/permissions';
 import { Button, ButtonLink, Card, Field, Input, Segmented, Select } from '@/components/ui';
 import { COUNTRIES, countryName } from '@/data/countries';
 import type { AppUser } from '@/types';
-import { DEMO, signIn, signUp } from '@/services/api';
+import { DEMO, otpEnabled, otpRegisterSend, otpRegisterVerify, signIn, signUp } from '@/services/api';
+import { OtpChallenge, PhoneField } from '@/components/otp/OtpChallenge';
 import { ApiError } from '@/lib/errors';
 
 function GoogleIcon() {
@@ -44,6 +45,12 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   // Inscription en 2 étapes (mode serveur) : 1 = le compte, 2 = l'organisation et les conditions
   const [step, setStep] = useState<1 | 2>(1);
   const [org, setOrg] = useState({ orgName: '', kind: 'individual', country: place.country, phone: '', terms: false, website: '' });
+  // Vérification du numéro par WhatsApp : active seulement si le serveur est configuré ; la preuve vient du serveur
+  const [otpOn, setOtpOn] = useState(false);
+  const [phoneProof, setPhoneProof] = useState('');
+  useEffect(() => {
+    if (!DEMO && signup) void otpEnabled().then(setOtpOn);
+  }, [signup]);
   const [orgErr, setOrgErr] = useState<{ orgName?: string; phone?: string; terms?: string }>({});
 
   const form = useForm(
@@ -77,7 +84,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
         ? await signUp({
             name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password,
             orgName: org.orgName.trim() || undefined, kind: org.kind as 'individual' | 'company' | 'association', country: org.country,
-            phone: org.phone.trim() || undefined, acceptTerms: org.terms, website: org.website,
+            phone: org.phone.trim() || undefined, phoneProof: phoneProof || undefined, acceptTerms: org.terms, website: org.website,
           })
         : await signIn(form.values.email.trim(), form.values.password);
       await startSession(s);
@@ -172,6 +179,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
               const err: typeof orgErr = {};
               if (org.orgName.trim() && org.orgName.trim().length < 2) err.orgName = t('Indiquez le nom de votre organisation');
               if (org.phone.trim() && !isPhone(org.phone)) err.phone = t('Saisissez un numéro comme +509 3712 3456');
+              else if (otpOn && !phoneProof) err.phone = t('Confirmez votre numéro WhatsApp avec le code reçu');
               if (!org.terms) err.terms = t('Vous devez accepter les conditions pour continuer');
               setOrgErr(err);
               if (Object.keys(err).length) return;
@@ -207,9 +215,23 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
                   {[...COUNTRIES].sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang)).map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
                 </Select>
               </Field>
-              <Field label={t('Téléphone')} error={orgErr.phone} hint={t('Facultatif')}>
-                <Input type="tel" inputMode="tel" placeholder="+509 3712 3456" autoComplete="tel" value={org.phone} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
-              </Field>
+              {otpOn ? (
+                <div className="space-y-3">
+                  <PhoneField value={org.phone} onChange={(v) => { setOrg({ ...org, phone: v }); setPhoneProof(''); }} error={orgErr.phone} disabled={!!phoneProof} />
+                  {isPhone(org.phone) && (
+                    <OtpChallenge
+                      key={org.phone}
+                      send={() => otpRegisterSend(org.phone)}
+                      verify={async (code) => setPhoneProof((await otpRegisterVerify(org.phone, code)).proof)}
+                      onVerified={() => setOrgErr((e) => ({ ...e, phone: undefined }))}
+                    />
+                  )}
+                </div>
+              ) : (
+                <Field label={t('Téléphone')} error={orgErr.phone} hint={t('Facultatif')}>
+                  <Input type="tel" inputMode="tel" placeholder="+509 3712 3456" autoComplete="tel" value={org.phone} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
+                </Field>
+              )}
               {/* Champ piège : invisible, hors du parcours au clavier ; seul un robot le remplit */}
               <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden>
                 <label>Website<input tabIndex={-1} autoComplete="off" value={org.website} onChange={(e) => setOrg({ ...org, website: e.target.value })} /></label>
