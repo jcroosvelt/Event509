@@ -10,6 +10,7 @@ import {
 } from '@/services/api';
 import { passkeyCancelled, passkeysSupported, getPasskeyAssertion } from '@/lib/webauthn';
 import { Button, Card, Field, Input } from '@/components/ui';
+import { inApp, postApp } from '@/lib/appBridge';
 
 const KEY = 'e509.assist';
 
@@ -121,7 +122,12 @@ export default function RecoverAccount() {
             )}
 
             {factors.first && factors.questions && (
-              <Button size="lg" className="w-full" onClick={toGoogle} loading={busy}>{t('Associer un nouveau compte Google')}</Button>
+              inApp() ? (
+                <div className="rounded-2xl bg-canvas p-3 text-sm text-ink-soft">
+                  <p>{t('Pour associer un nouveau compte Google, ouvrez cette page dans le navigateur du téléphone (Google ne s’ouvre pas dans l’application), puis refaites les vérifications.')}</p>
+                  <Button className="mt-2" variant="outline" onClick={() => postApp(`browser:open:${location.origin}/connexion/recuperation`)}>{t('Ouvrir dans le navigateur')}</Button>
+                </div>
+              ) : <Button size="lg" className="w-full" onClick={toGoogle} loading={busy}>{t('Associer un nouveau compte Google')}</Button>
             )}
           </div>
         )}
@@ -132,7 +138,7 @@ export default function RecoverAccount() {
             <div className="mt-2 space-y-2 rounded-2xl bg-canvas p-4" role="status">
               {status.status === 'pending' && <p>{t('Votre demande est en cours d’examen par l’équipe EVENT509.')}</p>}
               {status.status === 'approved' && !status.ready && <p>{t('Votre demande est approuvée. Par sécurité, elle ne sera utilisable qu’à partir du {date}.', { date: status.executeAfter ? new Date(status.executeAfter).toLocaleString() : '' })}</p>}
-              {status.status === 'approved' && status.ready && <><p>{t('Votre demande est approuvée et utilisable.')}</p><Button onClick={continueAssist} loading={busy}>{t('Associer un nouveau compte Google')}</Button></>}
+              {status.status === 'approved' && status.ready && <><p>{t('Votre demande est approuvée et utilisable.')}</p>{inApp() ? <Button variant="outline" onClick={() => postApp(`browser:open:${location.origin}/connexion/recuperation`)}>{t('Ouvrir dans le navigateur')}</Button> : <Button onClick={continueAssist} loading={busy}>{t('Associer un nouveau compte Google')}</Button>}</>}
               {['rejected', 'cancelled'].includes(status.status) && <p>{t('Votre demande n’a pas été acceptée. Vous pouvez en déposer une autre avec plus de précisions.')}</p>}
               {status.status === 'completed' && <p>{t('Cette demande a déjà été utilisée.')}</p>}
               <Button variant="ghost" size="sm" onClick={() => { try { localStorage.removeItem(KEY); } catch { /* ignoré */ } setRequest(''); setStatus(null); }}>{t('Faire une nouvelle demande')}</Button>

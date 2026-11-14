@@ -12,6 +12,7 @@ import {
 } from '@/services/api';
 import { createPasskey, passkeyCancelled, passkeysSupported, getPasskeyAssertion } from '@/lib/webauthn';
 import { Badge, Button, Card, Field, Input, Loading, Modal, PageHeader } from '@/components/ui';
+import { inApp, postApp } from '@/lib/appBridge';
 
 /** Libellés du journal (écrits avec t('…') pour être traduits). */
 const eventLabels = (t: (s: string) => string): Record<string, string> => ({
@@ -128,15 +129,16 @@ export default function Security() {
         {s.google ? (
           <>
             <p className="text-sm text-ink-soft">{t('Compte Google associé : {email}', { email: s.google.email })} · {t('depuis le {date}', { date: dateShort(s.google.since, lang) })}</p>
+            {inApp() && <BrowserNote />}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => (s.recentAuth ? location.assign(googleUrl('link')) : setReauthFor(() => async () => location.assign(googleUrl('link'))))}>{t('Changer mon compte Google')}</Button>
+              {!inApp() && <Button variant="outline" onClick={() => (s.recentAuth ? location.assign(googleUrl('link')) : setReauthFor(() => async () => location.assign(googleUrl('link'))))}>{t('Changer mon compte Google')}</Button>}
               {s.canUndoGoogleChange && <Button variant="ghost" onClick={() => run(async () => { await linkUndo(); toast(t('Changement annulé')); reload(); })}>{t('Annuler le dernier changement')}</Button>}
             </div>
           </>
         ) : (
           <>
             <p className="text-sm text-ink-soft">{t('Aucun compte Google n’est associé. Associez-en un pour vous connecter avec Google : toutes vos données (billets, événements, rôles) sont conservées.')}</p>
-            <Button className="mt-3" onClick={() => (s.recentAuth ? location.assign(googleUrl('link')) : setReauthFor(() => async () => location.assign(googleUrl('link'))))}>{t('Associer mon compte Google')}</Button>
+            {inApp() ? <BrowserNote /> : <Button className="mt-3" onClick={() => (s.recentAuth ? location.assign(googleUrl('link')) : setReauthFor(() => async () => location.assign(googleUrl('link'))))}>{t('Associer mon compte Google')}</Button>}
           </>
         )}
       </Card>
@@ -246,6 +248,17 @@ export default function Security() {
   );
 }
 
+/** Dans l'application, Google ne peut pas s'ouvrir (WebView refusée) : ces actions se font dans le navigateur du téléphone. */
+function BrowserNote() {
+  const { t } = useApp();
+  return (
+    <div className="mt-3 rounded-2xl bg-canvas p-3 text-sm text-ink-soft">
+      <p>{t('Dans l’application, associer ou changer le compte Google se fait dans le navigateur du téléphone.')}</p>
+      <Button size="sm" variant="outline" className="mt-2" onClick={() => postApp(`browser:open:${location.origin}/compte/securite`)}>{t('Ouvrir dans le navigateur')}</Button>
+    </div>
+  );
+}
+
 /** Confirmation d'identité récente : Google, passkey ou code de récupération. */
 function ReauthModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const { t, toast } = useApp();
@@ -277,7 +290,7 @@ function ReauthModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   return (
     <Modal open onClose={onClose} title={t('Confirmez votre identité')} description={t('Cette opération est sensible : prouvez que c’est bien vous.')} size="sm">
       <div className="space-y-4">
-        <a href={googleUrl('reauth', '/compte/securite')} className="flex h-11 items-center justify-center rounded-full border border-line text-sm font-bold hover:bg-canvas">{t('Confirmer avec Google')}</a>
+        {!inApp() && <a href={googleUrl('reauth', '/compte/securite')} className="flex h-11 items-center justify-center rounded-full border border-line text-sm font-bold hover:bg-canvas">{t('Confirmer avec Google')}</a>}
         {passkeysSupported() && <Button variant="outline" className="w-full" onClick={withPasskey} loading={busy}><KeyRound className="h-4 w-4" aria-hidden /> {t('Confirmer avec une passkey')}</Button>}
         <form onSubmit={(e) => { e.preventDefault(); void withCode(); }} className="space-y-2">
           <Field label={t('Ou un code de récupération')}><Input value={code} autoComplete="off" placeholder="XXXX-XXXX-XXXX" onChange={(e) => setCode(e.target.value)} /></Field>

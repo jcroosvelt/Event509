@@ -46,13 +46,17 @@ describe('page de connexion et d’inscription', () => {
 });
 
 describe('application Android (WebView)', () => {
-  it('ne propose pas le bouton Google (refusé par Google dans une application) mais garde les autres accès', async () => {
+  it('le bouton Google demande à l’application d’ouvrir la connexion dans le navigateur du téléphone', async () => {
     vi.mocked(api.authConfig).mockResolvedValue({ google: true, passkeys: true });
-    (window as unknown as { AppBridge: unknown }).AppBridge = { postMessage: () => undefined };
+    const postMessage = vi.fn();
+    (window as unknown as { AppBridge: unknown }).AppBridge = { postMessage };
     try {
-      wrap(<AuthEntry mode="login" />);
-      await screen.findByRole('status');
+      wrap(<AuthEntry mode="login" />, '/connexion?next=/organisateur');
+      const btn = await screen.findByRole('button', { name: /Continuer avec Google|Continue with Google/ });
+      // Ce n'est pas un lien : la WebView ne doit jamais ouvrir Google elle-même
       expect(screen.queryByRole('link', { name: /Continuer avec Google|Continue with Google/ })).toBeNull();
+      fireEvent.click(btn);
+      expect(postMessage).toHaveBeenCalledWith('auth-google:{"next":"/organisateur"}');
       expect(screen.getByRole('link', { name: /ancien compte|older account/i })).toBeTruthy();
     } finally {
       delete (window as unknown as { AppBridge?: unknown }).AppBridge;

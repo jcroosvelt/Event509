@@ -168,8 +168,8 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
       return out;
     }
     /** Parcours Google complet : départ, retour de Google (faux serveur), callback. */
-    async google(purpose: string, claims: Record<string, unknown>, o: { next?: string; tamper?: (u: URL) => void; dropBrowser?: boolean; claimsOverride?: (c: Record<string, unknown>, nonce: string) => Record<string, unknown>; token?: (c: Record<string, unknown>) => string } = {}) {
-      const start = await this.call('GET', '/auth/google/start', undefined, { query: { purpose, ...(o.next ? { next: o.next } : {}) } });
+    async google(purpose: string, claims: Record<string, unknown>, o: { appChallenge?: string; next?: string; tamper?: (u: URL) => void; dropBrowser?: boolean; claimsOverride?: (c: Record<string, unknown>, nonce: string) => Record<string, unknown>; token?: (c: Record<string, unknown>) => string } = {}) {
+      const start = await this.call('GET', '/auth/google/start', undefined, { query: { purpose, ...(o.next ? { next: o.next } : {}), ...(o.appChallenge ? { app_challenge: o.appChallenge } : {}) } });
       expect(start.status).toBe(302);
       const loc = new URL(String(start.headers!.Location));
       if (loc.host !== 'accounts.google.test') return { start, cb: start };
@@ -848,6 +848,99 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     const done = await b.call('POST', '/auth/signup/complete', profile());
     expect(done.status).toBe(410);
     expect((await pool.query(`select 1 from users where email = $1`, [claims.email])).rowCount).toBe(0);
+  });
+
+  // ---- Application Android : connexion Google dans le navigateur du téléphone, retour par lien profond
+
+  const pkce = () => {
+    const verifier = randomBytes(32).toString('base64url');
+    return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') };
+  };
+  const appCode = (o: Out) => {
+    const l = String(o.headers?.Location ?? '');
+    expect(l.startsWith('event509://auth?')).toBe(true);
+    return new URL(l).searchParams;
+  };
+
+  it('21. application : connexion Google dans le navigateur, session créée seulement dans la WebView avec le bon secret', async () => {
+    const { claims, id } = await newAccount();
+    const { verifier, challenge } = pkce();
+    const tab = new Browser('Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36'); // onglet du navigateur (Custom Tab)
+    const r = await tab.google('login', claims, { appChallenge: challenge, next: '/organisateur/evenements' });
+    const q = appCode(r.cb);
+    const code = q.get('code')!;
+    expect(code.length).toBeGreaterThan(30);
+    // Aucune session n'est créée dans le navigateur : seul le code retourne à l'application
+    expect([...tab.jar.keys()].some((k) => k.includes('e509_session'))).toBe(false);
+    expect((await tab.call('GET', '/auth/me')).status).toBe(401);
+    // Mauvais secret : refusé, et le code est détruit (un seul essai)
+    const wv = new Browser('Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36');
+    const bad = await wv.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier: pkce().verifier } });
+    expect(loc(bad)).toContain('/connexion?error=');
+    const afterBad = await wv.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } });
+    expect(loc(afterBad)).toContain('/connexion?error=');
+    expect((await wv.call('GET', '/auth/me')).status).toBe(401);
+    // Bon secret avec un code neuf : session dans la WebView, destination interne respectée
+    const again = await new Browser().google('login', claims, { appChallenge: challenge, next: '/organisateur/evenements' });
+    const ok = await wv.call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(again.cb).get('code')!, verifier } });
+    expect(loc(ok)).toBe('/organisateur/evenements');
+    expect((await wv.call('GET', '/auth/me')).body.id).toBe(id);
+    // Le code ne sert qu'une fois
+    const replay = await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(again.cb).get('code')!, verifier } });
+    expect(loc(replay)).toContain('error=');
+    expect((await wv.call('GET', '/auth/sessions')).body.some((x: { device: string }) => /Android/.test(x.device))).toBe(true);
+    expect(await events(id)).toContain('login');
+  });
+
+  it('21b. application : code expiré, sans secret, défi invalide ; une destination externe est ignorée', async () => {
+    const { claims } = await newAccount();
+    const { verifier, challenge } = pkce();
+    const r = await new Browser().google('login', claims, { appChallenge: challenge, next: 'https://evil.example' });
+    const code = appCode(r.cb).get('code')!;
+    const wv = new Browser();
+    expect(loc(await wv.call('GET', '/auth/app/exchange', undefined, { query: { code } }))).toContain('error=');
+    await pool.query(`update app_handoffs set expires_at = now() - interval '1 second'`);
+    expect(loc(await wv.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } }))).toContain('error=');
+    // Défi mal formé : ignoré, la connexion reste celle du navigateur (pas de lien profond)
+    const web = new Browser();
+    const w = await web.google('login', claims, { appChallenge: 'trop-court' });
+    expect(loc(w.cb)).toBe('/organisateur');
+    // Destination externe : retour au tableau de bord
+    const r2 = await new Browser().google('login', claims, { appChallenge: challenge, next: 'https://evil.example' });
+    const ok = await wv.call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(r2.cb).get('code')!, verifier } });
+    expect(loc(ok)).toBe('/organisateur');
+  });
+
+  it('21c. application : inscription d’un nouvel utilisateur par la même voie', async () => {
+    const { verifier, challenge } = pkce();
+    const claims = google(120);
+    const tab = new Browser();
+    const r = await tab.google('login', claims, { appChallenge: challenge });
+    const code = appCode(r.cb).get('code')!;
+    expect([...tab.jar.keys()].some((k) => k.includes('e509_signup'))).toBe(false); // rien dans le navigateur
+    expect((await pool.query(`select 1 from users where email = $1`, [claims.email])).rowCount).toBe(0);
+    const wv = new Browser();
+    const ex = await wv.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } });
+    expect(loc(ex)).toBe('/inscription/profil');
+    expect((await wv.call('GET', '/auth/signup/pending')).body).toMatchObject({ pending: true, email: claims.email });
+    const done = await wv.call('POST', '/auth/signup/complete', profile());
+    expect(done.status).toBe(200);
+    expect((await wv.call('GET', '/auth/me')).body.email).toBe(claims.email);
+    // Un code d'inscription ne sert qu'une fois non plus
+    expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } }))).toContain('error=');
+  });
+
+  it('21d. application : une erreur de Google retourne à l’application par lien profond', async () => {
+    const { challenge } = pkce();
+    const b = new Browser();
+    const r = await b.google('login', google(121), { appChallenge: challenge, claimsOverride: (c, nonce) => ({ iss: 'https://accounts.google.com', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600, nonce, email_verified: false, ...c }) });
+    expect(loc(r.cb)).toBe('event509://auth?error=email_not_verified');
+    const c2 = new Browser();
+    const r2 = await c2.google('login', google(122), { appChallenge: challenge, token: () => 'abc.def' });
+    expect(loc(r2.cb)).toBe('event509://auth?error=google');
+    // Sans l'application : page de connexion du site, comme avant
+    const r3 = await new Browser().google('login', google(123), { claimsOverride: (c, nonce) => ({ iss: 'https://evil.example', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600, nonce, email_verified: true, ...c }) });
+    expect(loc(r3.cb)).toContain('/connexion?error=');
   });
 
   it('inscription par e-mail désactivée dès que Google est configuré ; configuration publique', async () => {

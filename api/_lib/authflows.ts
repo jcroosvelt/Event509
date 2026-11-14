@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import type { AppUser, Organizer, TeamMember, TeamRole } from '../../src/types.js';
 import { all, db, one, tx, upsert, type Q } from './db.js';
@@ -31,6 +32,8 @@ export interface AuthFlowDeps {
 }
 
 const TERMS_VERSION = '2026-11';
+/** Lien profond de l'application Android (déclaré dans son manifeste). */
+const APP_SCHEME = 'event509';
 const SIGNUP_COOKIE = 'e509_signup';
 const OAUTH_COOKIE = 'e509_oauth';
 const RECOVERY_DELAY_HOURS = 48;
@@ -108,23 +111,38 @@ export function authFlowRoutes(d: AuthFlowDeps) {
       if (purpose === 'link' && !isRecent(c.session)) return err('reauth_required', '/compte/securite');
       userId = c.user.id;
     } else if (c.ip) await d.rateLimit(`gstart:${c.ip}`, 40, 60);
-    const g = await startGoogle({ purpose: purpose as 'login' | 'link' | 'reauth', userId, next });
+    // Application Android : défi PKCE (SHA-256 en base64url) du secret que seule l'application connaît ; connexion et inscription seulement
+    const appChallenge = purpose === 'login' && typeof c.query.app_challenge === 'string' && /^[A-Za-z0-9_-]{43}$/.test(c.query.app_challenge) ? c.query.app_challenge : null;
+    const g = await startGoogle({ purpose: purpose as 'login' | 'link' | 'reauth', userId, next, appChallenge });
     return Respond.redirect(g.url, [setCookie(OAUTH_COOKIE, g.browser, 600)]);
   };
 
   const googleCallback: Handler = async (c) => {
     const clear = clearCookie(OAUTH_COOKIE);
-    const bad = (e: string, to = '/connexion') => Respond.redirect(`${to}?error=${e}`, [clear]);
+    let fromApp = false;
+    // Dans le navigateur du téléphone, une erreur retourne à l'application (lien profond) ; sinon, page de connexion du site
+    const bad = (e: string, to = '/connexion') => (fromApp ? Respond.redirect(`${APP_SCHEME}://auth?error=${e}`, [clear]) : Respond.redirect(`${to}?error=${e}`, [clear]));
     if (c.query.error) return bad('cancelled');
     let res;
     try {
       res = await finishGoogle({ code: str(c.query.code, 2000), state: str(c.query.state, 200), browser: readCookie(c.cookies ?? {}, OAUTH_COOKIE) });
     } catch (e) {
-      await logSecurity(null, 'oauth_failed', { reason: e instanceof OAuthError ? e.reason : 'error' }, c.ip);
+      fromApp = e instanceof OAuthError && e.app;
+      await logSecurity(null, 'oauth_failed', { reason: e instanceof OAuthError ? e.reason : 'error', app: fromApp }, c.ip);
       return bad(e instanceof OAuthError && e.reason === 'email_not_verified' ? 'email_not_verified' : 'google');
     }
     const { claims, state } = res;
+    fromApp = !!state.app_challenge;
     const next = safeNext(state.next_path);
+    /** Application : aucune session n'est créée dans le navigateur ; un code à usage unique (2 min) retourne à l'application. */
+    const toApp = async (kind: 'session' | 'signup', o: { userId?: string; pendingHash?: string }, extraCookies: string[] = []) => {
+      const code = randomToken(32);
+      await db().query(`delete from app_handoffs where expires_at < now()`);
+      await db().query(
+        `insert into app_handoffs (code_hash, kind, user_id, pending_hash, challenge, next_path, expires_at) values ($1,$2,$3,$4,$5,$6, now() + interval '2 minutes')`,
+        [sha256(code), kind, o.userId ?? null, o.pendingHash ?? null, state.app_challenge, next]);
+      return Respond.redirect(`${APP_SCHEME}://auth?code=${code}`, [clear, ...extraCookies]);
+    };
     const active = await one<{ user_id: string }>(`select user_id from auth_identities where provider = 'google' and subject = $1 and status = 'active'`, [claims.sub]);
 
     // ---- Connexion / inscription
@@ -132,6 +150,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
       if (active) {
         const u = await one<UserRow>(`select * from users where id = $1`, [active.user_id]);
         if (!u || u.status === 'suspended') return bad('suspended');
+        if (state.app_challenge) return toApp('session', { userId: u.id });
         const s = await createSession(u.id, { method: 'google', userAgent: c.userAgent, ip: c.ip, limited: !u.auth_complete });
         await logSecurity(u.id, 'login', { method: 'google', device: deviceLabel(c.userAgent) }, c.ip);
         return Respond.redirect(u.auth_complete ? dest(u, next) : '/compte/completer', [clear, s.cookie]);
@@ -143,6 +162,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
       await db().query(
         `insert into pending_signups (id_hash, google_sub, email, given_name, family_name, picture, expires_at) values ($1,$2,$3,$4,$5,$6, now() + interval '24 hours')`,
         [sha256(token), claims.sub, claims.email, claims.givenName ?? null, claims.familyName ?? null, claims.picture ?? null]);
+      if (state.app_challenge) return toApp('signup', { pendingHash: sha256(token) });
       return Respond.redirect('/inscription/profil', [clear, setCookie(SIGNUP_COOKIE, token, 86400)]);
     }
 
@@ -207,6 +227,38 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     await q.query(`update auth_identities set status = 'replaced', replaced_at = now() where user_id = $1 and provider = 'google' and status = 'active'`, [userId]);
     await q.query(`insert into auth_identities (id, user_id, provider, subject, email) values ($1,$2,'google',$3,$4)`, [newId('idn'), userId, claims.sub, claims.email]);
   }
+
+  /**
+   * Application Android : échange du code à usage unique contre une vraie session, DANS la WebView de l'application.
+   * Il faut présenter le secret (verifier) dont le défi a été donné au départ : un code intercepté seul ne sert à rien.
+   * Un seul essai par code (il est supprimé dès qu'on le présente).
+   */
+  const appExchange: Handler = async (c) => {
+    const fail302 = () => Respond.redirect('/connexion?error=google');
+    if (c.ip) await d.rateLimit(`appx:${c.ip}`, 30, 60);
+    const code = str(c.query.code, 100);
+    const verifier = str(c.query.verifier, 200);
+    if (!code || !verifier) return fail302();
+    const h = await one<{ kind: string; user_id: string | null; pending_hash: string | null; challenge: string; next_path: string | null; ok: boolean }>(
+      `delete from app_handoffs where code_hash = $1 returning kind, user_id, pending_hash, challenge, next_path, expires_at > now() as ok`, [sha256(code)]);
+    const want = createHash('sha256').update(verifier).digest('base64url');
+    if (!h || !h.ok || want.length !== h.challenge.length || !timingSafeEqual(Buffer.from(want), Buffer.from(h.challenge))) {
+      await logSecurity(null, 'app_exchange_failed', {}, c.ip);
+      return fail302();
+    }
+    if (h.kind === 'session') {
+      const u = await one<UserRow>(`select * from users where id = $1`, [h.user_id]);
+      if (!u || u.status === 'suspended') return fail302();
+      const s = await createSession(u.id, { method: 'google', userAgent: c.userAgent, ip: c.ip, limited: !u.auth_complete });
+      await logSecurity(u.id, 'login', { method: 'google', device: deviceLabel(c.userAgent) }, c.ip);
+      return Respond.redirect(u.auth_complete ? dest(u, safeNext(h.next_path)) : '/compte/completer', [s.cookie]);
+    }
+    // Inscription : le jeton de l'inscription provisoire est renouvelé (rien n'est gardé en clair) et remis à la WebView
+    const fresh = randomToken(32);
+    const r = await db().query(`update pending_signups set id_hash = $2 where id_hash = $1 and expires_at > now() returning id_hash`, [h.pending_hash, sha256(fresh)]);
+    if (r.rowCount !== 1) return fail302();
+    return Respond.redirect('/inscription/profil', [setCookie(SIGNUP_COOKIE, fresh, 86400)]);
+  };
 
   // ---------- Inscription progressive ----------
 
@@ -724,6 +776,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     ['GET', '/auth/config', config],
     ['GET', '/auth/google/start', googleStartRoute],
     ['GET', '/auth/google/callback', googleCallback],
+    ['GET', '/auth/app/exchange', appExchange],
     ['GET', '/auth/signup/pending', signupPending],
     ['POST', '/auth/signup/complete', signupComplete],
     ['POST', '/auth/profile/complete', profileComplete],

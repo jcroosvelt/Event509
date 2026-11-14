@@ -628,3 +628,19 @@ create unique index if not exists users_username_lower on users (lower(username)
 -- Faux tant que les questions de sécurité et l'acceptation des conditions ne sont pas enregistrées (comptes d'avant la refonte)
 alter table users add column if not exists auth_complete boolean not null default false;
 alter table recovery_sessions add column if not exists request_id text;
+
+-- Connexion Google depuis l'application Android : Google refuse les WebView, la connexion se fait dans le navigateur du téléphone
+-- (Chrome Custom Tab) puis revient dans l'application avec un code à usage unique (2 min) échangé contre une vraie session,
+-- à condition de présenter le secret (PKCE) que seule l'application connaît.
+alter table oauth_states add column if not exists app_challenge text;
+create table if not exists app_handoffs (
+  code_hash text primary key,
+  kind text not null check (kind in ('session', 'signup')),
+  user_id text references users(id) on delete cascade,
+  pending_hash text,
+  challenge text not null,
+  next_path text,
+  method text not null default 'google',
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);

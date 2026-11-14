@@ -34,16 +34,16 @@ export interface GoogleClaims {
 }
 
 /** Prépare la redirection vers Google ; renvoie l'adresse et le secret qui lie la demande à ce navigateur. */
-export async function startGoogle(o: { purpose: OAuthPurpose; userId?: string; recoveryId?: string; next?: string | null }) {
+export async function startGoogle(o: { purpose: OAuthPurpose; userId?: string; recoveryId?: string; next?: string | null; appChallenge?: string | null }) {
   const state = randomToken(32);
   const nonce = randomToken(24);
   const verifier = randomToken(48);
   const browser = randomToken(24);
   await db().query(`delete from oauth_states where expires_at < now()`);
   await db().query(
-    `insert into oauth_states (state_hash, nonce, code_verifier, purpose, user_id, recovery_id, next_path, browser_hash, expires_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8, now() + interval '10 minutes')`,
-    [sha256(state), nonce, verifier, o.purpose, o.userId ?? null, o.recoveryId ?? null, o.next ?? null, sha256(browser)]);
+    `insert into oauth_states (state_hash, nonce, code_verifier, purpose, user_id, recovery_id, next_path, browser_hash, app_challenge, expires_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9, now() + interval '10 minutes')`,
+    [sha256(state), nonce, verifier, o.purpose, o.userId ?? null, o.recoveryId ?? null, o.next ?? null, sha256(browser), o.appChallenge ?? null]);
   const p = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
@@ -65,9 +65,13 @@ export interface OAuthState {
   user_id: string | null;
   recovery_id: string | null;
   next_path: string | null;
+  /** Défi PKCE de l'application Android (la connexion s'est faite dans le navigateur du téléphone). */
+  app_challenge: string | null;
 }
 
 export class OAuthError extends Error {
+  /** La demande venait de l'application Android : l'erreur doit y être renvoyée par lien profond. */
+  app = false;
   constructor(public reason: string) {
     super(reason);
   }
@@ -131,9 +135,18 @@ export async function finishGoogle(o: { code: string; state: string; browser: st
   if (!o.code || !o.state || o.code.length > 2000 || o.state.length > 200) throw new OAuthError('params');
   // Consommation atomique : un état ne sert qu'une fois
   const row = await one<OAuthState & { nonce: string; code_verifier: string; browser_hash: string; expired: boolean }>(
-    `delete from oauth_states where state_hash = $1 returning nonce, code_verifier, purpose, user_id, recovery_id, next_path, browser_hash, expires_at <= now() as expired`,
+    `delete from oauth_states where state_hash = $1 returning nonce, code_verifier, purpose, user_id, recovery_id, next_path, app_challenge, browser_hash, expires_at <= now() as expired`,
     [sha256(o.state)]);
   if (!row || row.expired) throw new OAuthError('state');
+  try {
+    return await exchange(o, row);
+  } catch (e) {
+    if (e instanceof OAuthError) e.app = !!row.app_challenge;
+    throw e;
+  }
+}
+
+async function exchange(o: { code: string; browser: string | undefined }, row: OAuthState & { nonce: string; code_verifier: string; browser_hash: string }): Promise<{ claims: GoogleClaims; state: OAuthState }> {
   if (!o.browser || !timingSafeEqual(Buffer.from(sha256(o.browser)), Buffer.from(row.browser_hash))) throw new OAuthError('browser');
   const res = await fetch(tokenUrl(), {
     method: 'POST',
@@ -148,5 +161,5 @@ export async function finishGoogle(o: { code: string; state: string; browser: st
   const tok = (await res.json().catch(() => ({}))) as { id_token?: string };
   if (!tok.id_token) throw new OAuthError('exchange');
   const claims = await verifyIdToken(tok.id_token, row.nonce);
-  return { claims, state: { purpose: row.purpose, user_id: row.user_id, recovery_id: row.recovery_id, next_path: row.next_path } };
+  return { claims, state: { purpose: row.purpose, user_id: row.user_id, recovery_id: row.recovery_id, next_path: row.next_path, app_challenge: row.app_challenge } };
 }

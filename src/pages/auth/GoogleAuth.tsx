@@ -5,7 +5,7 @@ import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { authConfig, googleUrl, passkeyLoginOptions, passkeyLoginVerify } from '@/services/api';
 import { passkeyCancelled, passkeysSupported, getPasskeyAssertion } from '@/lib/webauthn';
-import { inApp } from '@/lib/appBridge';
+import { inApp, postApp } from '@/lib/appBridge';
 import { Button, Card, Loading } from '@/components/ui';
 import Auth from '@/pages/public/Auth';
 
@@ -62,8 +62,14 @@ function GoogleAuthPage() {
         <p className="mt-1 text-sm text-ink-soft">{t('Connexion et création de compte se font avec le même bouton. Pour acheter un billet, aucun compte n’est nécessaire.')}</p>
         {err && <p role="alert" className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{errors[err] ?? t('Une erreur est survenue. Réessayez.')}</p>}
         {inApp() ? (
-          // Google refuse la connexion dans une WebView d'application : le bouton n'est pas proposé ici (aucun contournement)
-          <p role="status" className="mt-6 rounded-2xl bg-canvas px-4 py-3 text-sm text-ink-soft">{t('Google n’autorise pas la connexion dans une application. Utilisez une passkey ou votre ancienne connexion, ou ouvrez EVENT509 dans votre navigateur pour vous connecter avec Google.')}</p>
+          // Google refuse la connexion dans une WebView : l'application ouvre la connexion dans le navigateur du téléphone
+          // (onglet Chrome), puis revient ici avec une session. Aucun contournement du navigateur de la WebView.
+          <>
+            <button type="button" onClick={() => postApp(`auth-google:${JSON.stringify({ next: next ?? null })}`)} className="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line bg-surface text-sm font-bold shadow-sm transition hover:bg-canvas">
+              <GoogleIcon /> {t('Continuer avec Google')}
+            </button>
+            <p className="mt-2 text-center text-xs text-ink-muted">{t('La connexion Google s’ouvre dans votre navigateur, puis vous revenez dans l’application.')}</p>
+          </>
         ) : (
           <a href={googleUrl('login', next)} className="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line bg-surface text-sm font-bold shadow-sm transition hover:bg-canvas">
             <GoogleIcon /> {t('Continuer avec Google')}

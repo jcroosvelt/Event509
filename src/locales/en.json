@@ -2194,5 +2194,8 @@
   "Quel était le surnom que j’utilisais pendant mon enfance ?": "What was the nickname I used as a child?",
   "Quel était le nom de mon premier projet personnel ?": "What was the name of my first personal project?",
   "Quel était le nom de mon premier événement organisé ?": "What was the name of the first event I organized?",
-  "Google n’autorise pas la connexion dans une application. Utilisez une passkey ou votre ancienne connexion, ou ouvrez EVENT509 dans votre navigateur pour vous connecter avec Google.": "Google doesn't allow sign-in inside an app. Use a passkey or your old sign-in, or open EVENT509 in your browser to sign in with Google."
+  "La connexion Google s’ouvre dans votre navigateur, puis vous revenez dans l’application.": "Google sign-in opens in your browser, then you come back to the app.",
+  "Dans l’application, associer ou changer le compte Google se fait dans le navigateur du téléphone.": "In the app, linking or changing the Google account is done in the phone's browser.",
+  "Ouvrir dans le navigateur": "Open in the browser",
+  "Pour associer un nouveau compte Google, ouvrez cette page dans le navigateur du téléphone (Google ne s’ouvre pas dans l’application), puis refaites les vérifications.": "To link a new Google account, open this page in the phone's browser (Google doesn't open inside the app), then redo the checks."
 }
