@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { BellRing, CloudOff, Download, Fingerprint, ScanLine, ShieldAlert, X } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { APK_PATH, fetchRelease, isAndroidBrowser, isNewer, promptAllowed, rememberInstalled, rememberLater, sizeMo, type AppRelease } from '@/lib/appRelease';
-import { postApp, useAppBuild } from '@/lib/appBridge';
+import { inApp, postApp, useAppBuild } from '@/lib/appBridge';
 import { Button, Modal } from '@/components/ui';
 
 /** Dernière version publiée de l'application (null tant qu'elle n'est pas connue, ou si aucun APK n'est publié). */
@@ -177,5 +177,17 @@ export function AppUpdateBanner() {
         <X className="h-4 w-4" aria-hidden />
       </button>
     </section>
+  );
+}
+
+/** Lien « Télécharger l'application » pour les menus : absent dans l'application elle-même ou tant qu'aucun APK n'est publié. */
+export function ApkMenuLink({ className, children }: { className: string; children: (label: string) => React.ReactNode }) {
+  const { t } = useApp();
+  const release = useRelease();
+  if (inApp() || !release) return null;
+  return (
+    <a href={APK_PATH} download className={className}>
+      {children(t('Télécharger l’application ({size})', { size: sizeMo(release.size) }))}
+    </a>
   );
 }

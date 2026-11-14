@@ -8,6 +8,9 @@ import { AppProvider } from './store/app';
 import { DEMO, hydrate } from './services/api';
 import { initPush } from './lib/push';
 
+// Jamais d'invitation PWA du navigateur : seule l'application Android (APK) est proposée, par le site lui-même
+window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
+
 /** Au passage démo → serveur, les données de démonstration gardées sur l'appareil sont effacées. */
 function resetDemoStorage() {
   try {

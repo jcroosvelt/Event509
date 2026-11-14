@@ -12,31 +12,14 @@ if (process.env.VERCEL_ENV === 'production' && !process.env.VITE_API_URL) {
 export default defineConfig({
   plugins: [
     react(),
-    // Application installable et utilisable hors ligne : l'interface, les polices et
+    // Cache hors ligne (sans installation PWA) : l'interface, les polices et
     // les images sont mises en cache ; les billets sont déjà stockés sur l'appareil.
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo-mark.png', 'logo-full.png'],
-      manifest: {
-        name: 'Event509',
-        short_name: 'Event509',
-        description: 'Découvrez des événements. Obtenez votre billet. Soyez là.',
-        lang: 'fr',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        background_color: '#F1F3F8',
-        theme_color: '#1F5EFF',
-        icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-        shortcuts: [
-          { name: 'Mes billets', url: '/billets', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
-          { name: 'Check-in', url: '/organisateur/checkin', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
-        ],
-      },
+      // Pas de manifeste web : sans lui, les navigateurs ne proposent pas d'« installer l'application » (PWA).
+      // L'application proposée est uniquement l'APK (fenêtre du site, page /telecharger). Le cache hors ligne reste actif.
+      manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         navigateFallback: '/index.html',

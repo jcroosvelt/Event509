@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Bell, Compass, Heart, Home, LayoutDashboard, LogOut, Megaphone, Moon, Receipt, Repeat2, Search, Settings, ShieldCheck, Sun, Ticket, User, WifiOff, type LucideIcon,
+  Bell, Compass, Download, Heart, Home, LayoutDashboard, LogOut, Megaphone, Moon, Receipt, Repeat2, Search, Settings, ShieldCheck, Sun, Ticket, User, WifiOff, type LucideIcon,
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
+import { ApkMenuLink } from '@/components/AppInstall';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ambassadors } from '@/data/mock';
 import { useApp } from '@/store/app';
@@ -140,6 +141,9 @@ function UserMenu() {
               </Link>
             ))}
           </nav>
+          <ApkMenuLink className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium hover:bg-canvas">
+            {(label) => <><Download className="h-4 w-4 text-ink-soft" aria-hidden /> {label}</>}
+          </ApkMenuLink>
           <button
             type="button"
             onClick={() => {
