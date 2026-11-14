@@ -856,11 +856,17 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     const verifier = randomBytes(32).toString('base64url');
     return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') };
   };
-  const appCode = (o: Out) => {
-    const l = String(o.headers?.Location ?? '');
-    expect(l.startsWith('event509://auth?')).toBe(true);
-    return new URL(l).searchParams;
+  /** Lien profond contenu dans la page de retour vers l'application. */
+  const deeplink = (o: Out) => {
+    expect(o.status).toBe(200);
+    expect(String(o.headers?.['Content-Type'])).toContain('text/html');
+    expect(String(o.headers?.['Content-Security-Policy'])).toContain("default-src 'none'");
+    const m = /<a href="(event509:\/\/auth\?[^"]*)">Ouvrir EVENT509<\/a>/.exec(String(o.body));
+    expect(m).toBeTruthy();
+    expect(String(o.body)).toContain(`url=${m![1]}`);
+    return m![1]!;
   };
+  const appCode = (o: Out) => new URL(deeplink(o)).searchParams;
 
   it('21. application : connexion Google dans le navigateur, session créée seulement dans la WebView avec le bon secret', async () => {
     const { claims, id } = await newAccount();
@@ -934,10 +940,10 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     const { challenge } = pkce();
     const b = new Browser();
     const r = await b.google('login', google(121), { appChallenge: challenge, claimsOverride: (c, nonce) => ({ iss: 'https://accounts.google.com', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600, nonce, email_verified: false, ...c }) });
-    expect(loc(r.cb)).toBe('event509://auth?error=email_not_verified');
+    expect(deeplink(r.cb)).toBe('event509://auth?error=email_not_verified');
     const c2 = new Browser();
     const r2 = await c2.google('login', google(122), { appChallenge: challenge, token: () => 'abc.def' });
-    expect(loc(r2.cb)).toBe('event509://auth?error=google');
+    expect(deeplink(r2.cb)).toBe('event509://auth?error=google');
     // Sans l'application : page de connexion du site, comme avant
     const r3 = await new Browser().google('login', google(123), { claimsOverride: (c, nonce) => ({ iss: 'https://evil.example', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600, nonce, email_verified: true, ...c }) });
     expect(loc(r3.cb)).toContain('/connexion?error=');

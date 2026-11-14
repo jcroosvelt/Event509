@@ -47,6 +47,19 @@ const maskEmail = (e: string) => {
   return `${l.slice(0, 2)}${'•'.repeat(Math.max(2, l.length - 2))}@${d}`;
 };
 const isUnique = (e: unknown) => (e as { code?: string })?.code === '23505';
+/**
+ * Retour vers l'application Android depuis le navigateur du téléphone : une page avec un bouton (geste de l'utilisateur, accepté par
+ * tous les navigateurs) et une redirection automatique vers le lien profond. Les paramètres sont tirés d'un jeu de caractères sûr.
+ */
+function backToApp(query: string, cookies: string[]) {
+  const url = `${APP_SCHEME}://auth?${query.replace(/[^A-Za-z0-9_=&-]/g, '')}`;
+  return Respond.html(
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${url}"><title>EVENT509</title>` +
+      `<style>body{font-family:system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#F1F3F8;color:#0B1533;text-align:center;padding:24px}a{display:inline-block;margin-top:16px;background:#1F5EFF;color:#fff;padding:14px 28px;border-radius:999px;font-weight:700;text-decoration:none}</style></head>` +
+      `<body><main><h1>Retour dans EVENT509</h1><p>Si l’application ne s’ouvre pas toute seule, touchez le bouton.</p><a href="${url}">Ouvrir EVENT509</a></main></body></html>`,
+    cookies,
+  );
+}
 const dummyWork = () => sha256(randomToken(16)); // temps comparable pour un compte inconnu
 
 /** Le compte a-t-il une identité Google active ? (l'interface en déduit s'il faut proposer l'association) */
@@ -121,7 +134,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     const clear = clearCookie(OAUTH_COOKIE);
     let fromApp = false;
     // Dans le navigateur du téléphone, une erreur retourne à l'application (lien profond) ; sinon, page de connexion du site
-    const bad = (e: string, to = '/connexion') => (fromApp ? Respond.redirect(`${APP_SCHEME}://auth?error=${e}`, [clear]) : Respond.redirect(`${to}?error=${e}`, [clear]));
+    const bad = (e: string, to = '/connexion') => (fromApp ? backToApp(`error=${e}`, [clear]) : Respond.redirect(`${to}?error=${e}`, [clear]));
     if (c.query.error) return bad('cancelled');
     let res;
     try {
@@ -141,7 +154,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
       await db().query(
         `insert into app_handoffs (code_hash, kind, user_id, pending_hash, challenge, next_path, expires_at) values ($1,$2,$3,$4,$5,$6, now() + interval '2 minutes')`,
         [sha256(code), kind, o.userId ?? null, o.pendingHash ?? null, state.app_challenge, next]);
-      return Respond.redirect(`${APP_SCHEME}://auth?code=${code}`, [clear, ...extraCookies]);
+      return backToApp(`code=${code}`, [clear, ...extraCookies]);
     };
     const active = await one<{ user_id: string }>(`select user_id from auth_identities where provider = 'google' and subject = $1 and status = 'active'`, [claims.sub]);
 
