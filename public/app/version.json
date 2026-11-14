@@ -1,9 +1,9 @@
 {
-  "versionCode": 21,
-  "versionName": "1.0.21",
-  "size": 24850050,
-  "sha256": "6903c58603d4a0c8abd861dc4979e49ed30d77b18da60b05f0a4ebd9e73c02f8",
-  "date": "2026-11-13",
+  "versionCode": 23,
+  "versionName": "1.0.23",
+  "size": 24885922,
+  "sha256": "15b6509f818773e9af36dfdd17acbd915162a3c4918deab795d2407f130fb645",
+  "date": "2026-11-14",
   "minAndroid": "7.0",
   "file": "/app/event509.apk"
 }
