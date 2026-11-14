@@ -25,6 +25,7 @@ const Resale = lazy(() => import('@/pages/public/Resale'));
 const Auth = lazy(() => import('@/pages/public/Auth'));
 const ForgotPassword = lazy(() => import('@/pages/public/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/public/ResetPassword'));
+const VerifyEmail = lazy(() => import('@/pages/public/VerifyEmail'));
 const Legal = lazy(() => import('@/pages/public/Legal'));
 const Ambassador = lazy(() => import('@/pages/public/Ambassador'));
 const NotFound = lazy(() => import('@/pages/public/NotFound'));
@@ -124,6 +125,7 @@ export default function App() {
             <Route path="inscription" element={<Auth mode="signup" />} />
             <Route path="mot-de-passe-oublie" element={<ForgotPassword />} />
             <Route path="reinitialiser" element={<ResetPassword />} />
+            <Route path="verifier-email" element={<VerifyEmail />} />
             <Route path="cgu" element={<Legal page="terms" />} />
             <Route path="confidentialite" element={<Legal page="privacy" />} />
             <Route path="remboursement" element={<Legal page="refund" />} />

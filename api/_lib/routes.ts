@@ -3,8 +3,8 @@ import type {
   PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, VerificationRequest,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
-import { hashPassword, newAccessKey, newId, newTicketCode, sameKey, signToken, verifyPassword } from './auth.js';
-import { sendNoticeEmail, sendTicketsEmail } from './mail.js';
+import { hashPassword, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
+import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, siteUrl } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { analyticsRoutes } from './analytics.js';
 import { multiEventRoutes } from './multi.js';
@@ -51,6 +51,8 @@ export interface Ctx {
   path?: string;
   authorization?: string;
   geo?: { country?: string; city?: string };
+  /** Adresse IP de la connexion (limite de fréquence uniquement). */
+  ip?: string;
   params: Record<string, string>;
   query: Record<string, string>;
   body: Record<string, unknown>;
@@ -183,14 +185,60 @@ async function session(u: UserRow) {
   return { token: signToken(u.id), user: toAppUser(u) };
 }
 
+/** Limite de fréquence : refuse (429) au-delà de `max` actions par fenêtre pour une clé donnée, sinon enregistre l'action. */
+async function rateLimit(key: string, max: number, windowMinutes: number, q?: Q) {
+  const r = await one<{ n: string }>(`select count(*)::text as n from rate_events where key = $1 and at > now() - ($2 || ' minutes')::interval`, [key, String(windowMinutes)], q);
+  if (Number(r?.n ?? 0) >= max) fail(429, 'Trop de tentatives. Réessayez plus tard.');
+  await (q ?? db()).query(`insert into rate_events (key) values ($1)`, [key]);
+  // Ménage : les anciens événements ne servent plus
+  await (q ?? db()).query(`delete from rate_events where at < now() - interval '2 days'`);
+}
+
+const COMMON_PASSWORDS = new Set(['12345678', '123456789', '1234567890', 'password', 'password1', 'motdepasse', 'azertyuiop', 'qwertyuiop', 'azerty123', 'qwerty123', 'iloveyou1', 'haiti509509']);
+
+/** Mot de passe acceptable : 8 caractères au moins, une lettre et un chiffre, ni courant ni proche de l'email ou du nom. */
+function checkPassword(password: string, email: string, name: string) {
+  if (password.length < 8) fail(422, 'Mot de passe trop court (8 caractères au minimum)');
+  if (password.length > 200) fail(422, 'Mot de passe trop long');
+  if (!/[A-Za-zÀ-ÿ]/.test(password) || !/\d/.test(password)) fail(422, 'Le mot de passe doit contenir au moins une lettre et un chiffre');
+  const low = password.toLowerCase();
+  if (COMMON_PASSWORDS.has(low) || low === email.split('@')[0] || low === email || low === name.toLowerCase()) fail(422, 'Ce mot de passe est trop courant : choisissez-en un autre');
+}
+
+const TERMS_VERSION = '2026-11';
+const ORG_KINDS = ['individual', 'company', 'association'] as const;
+
+/** Envoie le lien de confirmation d'adresse (sans effet tant que l'envoi d'emails n'est pas configuré). */
+async function sendVerification(u: UserRow) {
+  if (!mailConfigured()) return false;
+  const token = signPurposeToken('verify-email', u.id, 7 * 24 * 3600);
+  return sendVerifyEmail(u.email, (u.data.name as string) || u.email, `${siteUrl()}/verifier-email?token=${encodeURIComponent(token)}`);
+}
+
+/** Les actions sensibles (publier, se faire verser) exigent une adresse confirmée, dès que l'envoi d'emails est configuré. */
+function requireVerified(u: UserRow) {
+  if (u.data.emailVerified === false) fail(403, 'Confirmez votre adresse email pour continuer (lien envoyé à votre inscription)');
+}
+
 const signup: Handler = async (c) => {
   const name = str(c.body.name, 80);
   const email = str(c.body.email, 160).toLowerCase();
   const password = typeof c.body.password === 'string' ? c.body.password : '';
-  if (!name) fail(422, 'Indiquez votre nom');
+  // Champ piège invisible pour les personnes : un robot le remplit
+  if (str(c.body.website)) fail(422, 'Inscription refusée');
+  if (name.length < 2 || !/\p{L}/u.test(name)) fail(422, 'Indiquez votre nom complet');
   if (!isEmail(email)) fail(422, 'Adresse email invalide');
-  if (password.length < 8) fail(422, 'Mot de passe trop court');
+  checkPassword(password, email, name);
+  if (c.body.acceptTerms !== true) fail(422, 'Vous devez accepter les conditions d’utilisation');
+  const orgName = str(c.body.orgName, 80) || name;
+  const country = str(c.body.country, 2).toUpperCase();
+  if (country && !/^[A-Z]{2}$/.test(country)) fail(422, 'Pays invalide');
+  const kind = ORG_KINDS.includes(str(c.body.kind) as (typeof ORG_KINDS)[number]) ? str(c.body.kind) : 'individual';
+  const phone = str(c.body.phone, 30);
+  if (phone && !/^\+?[0-9 ().-]{6,20}$/.test(phone)) fail(422, 'Numéro de téléphone invalide');
   if (await one(`select 1 from users where email = $1`, [email])) fail(409, 'Un compte existe déjà avec cet email');
+  // 5 inscriptions par heure et par connexion
+  if (c.ip) await rateLimit(`signup:${c.ip}`, 5, 60);
 
   return tx(async (q) => {
     const id = newId('u');
@@ -211,21 +259,49 @@ const signup: Handler = async (c) => {
       role = 'organizer';
       teamRole = 'admin';
       organizerId = newId('org');
-      let slug = slugify(name);
+      let slug = slugify(orgName);
       if (await one(`select 1 from organizers where slug = $1`, [slug], q)) slug = `${slug}-${organizerId.slice(-4).toLowerCase()}`;
-      const o: Organizer = { id: organizerId, slug, name, verified: false, avatar: initials(name), followers: 0, eventsCount: 0, city: '' };
+      const o: Organizer = { id: organizerId, slug, name: orgName, verified: false, avatar: initials(orgName), followers: 0, eventsCount: 0, city: '', ...(country ? { country } : {}), kind };
       await upsert('organizers', { id: o.id, slug: o.slug, data: o }, q);
       const mid = newId('m');
       await upsert('team_members', { id: mid, organizer_id: o.id, email, data: { id: mid, name, email, role: 'admin', status: 'active' } satisfies TeamMember }, q);
     }
-    const data = { name, avatar: initials(name), city: '', joinedAt: new Date().toISOString().slice(0, 10) };
+    const data = {
+      name, avatar: initials(name), city: '', joinedAt: new Date().toISOString().slice(0, 10),
+      ...(phone ? { phone } : {}),
+      // Preuve de l'acceptation (version et date) ; adresse à confirmer dès que l'envoi d'emails est configuré
+      terms: { version: TERMS_VERSION, at: new Date().toISOString() },
+      ...(mailConfigured() ? { emailVerified: false } : {}),
+    };
     await q.query(
       `insert into users (id, email, password_hash, role, team_role, organizer_id, data, team_perms) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
       [id, email, await hashPassword(password), role, teamRole, organizerId, JSON.stringify(data), invitePerms ? JSON.stringify(invitePerms) : null],
     );
     const u = (await one<UserRow>(`select * from users where id = $1`, [id], q))!;
+    return u;
+  }).then(async (u) => {
+    // Hors transaction : un échec d'envoi ne doit pas annuler l'inscription
+    await sendVerification(u).catch(() => false);
     return session(u);
   });
+};
+
+/** Lien reçu par email : confirme l'adresse. */
+const verifyEmail: Handler = async (c) => {
+  const id = readPurposeToken(str(c.body.token, 1000), 'verify-email');
+  if (!id) fail(400, 'Lien invalide ou expiré');
+  const u = await one<UserRow>(`select * from users where id = $1`, [id]);
+  if (!u) fail(400, 'Lien invalide ou expiré');
+  await db().query(`update users set data = data || '{"emailVerified":true}'::jsonb where id = $1`, [id]);
+  return { ok: true };
+};
+
+/** Renvoie le lien de confirmation (3 par heure). */
+const resendVerification: Handler = async (c) => {
+  const u = auth(c);
+  if (u.data.emailVerified !== false) return { sent: false };
+  await rateLimit(`verify:${u.id}`, 3, 60);
+  return { sent: await sendVerification(u) };
 };
 
 const login: Handler = async (c) => {
@@ -723,6 +799,7 @@ const orgEvents: Handler = async (c) => docs<EventItem>(`select data from events
 
 const saveEvent: Handler = async (c) => {
   const orgId = org(c, 'events');
+  requireVerified(c.user!);
   const e = c.body as unknown as EventItem;
   if (!str(e.title) || !Array.isArray(e.tickets)) fail(422, 'Événement incomplet');
   const existing = await one<{ organizer_id: string; data: EventItem }>(`select organizer_id, data from events where id = $1`, [e.id]);
@@ -1243,6 +1320,7 @@ function checkDestination(method: Payout['method'], raw: unknown): Payout['desti
 
 const requestPayout: Handler = async (c) => {
   const orgId = org(c, 'payouts');
+  requireVerified(c.user!);
   const amount = num(c.body.amount);
   const currency = c.body.currency as Currency;
   const method = c.body.method as Payout['method'];
@@ -1888,6 +1966,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   }],
   ['GET', '/bootstrap', bootstrap],
   ['POST', '/auth/signup', signup],
+  ['POST', '/auth/verify-email', verifyEmail],
+  ['POST', '/auth/resend-verification', resendVerification],
   ['POST', '/auth/login', login],
   ['GET', '/auth/me', me],
   ['PATCH', '/auth/me', updateMe],

@@ -21,7 +21,7 @@ export const permLabel: Record<string, string> = {
 };
 
 export const teamRoleLabel: Record<TeamRole, string> = {
-  admin: 'Administrateur',
+  admin: 'Responsable de l’organisation',
   manager: 'Gestionnaire',
   lead: 'Responsable de contrôle',
   staff: 'Agent de contrôle',

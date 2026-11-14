@@ -35,6 +35,29 @@ export function signToken(userId: string) {
   return `${header}.${payload}.${sig}`;
 }
 
+/** Jeton à usage précis (ex. « verify-email »), signé, à durée limitée ; il ne sert jamais de jeton de session. */
+export function signPurposeToken(purpose: string, userId: string, ttlSeconds: number) {
+  const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64(JSON.stringify({ sub: userId, p: purpose, exp: Math.floor(Date.now() / 1000) + ttlSeconds }));
+  const sig = createHmac('sha256', secret()).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${sig}`;
+}
+
+export function readPurposeToken(token: string | undefined, purpose: string): string | null {
+  if (!token) return null;
+  const [header, payload, sig] = token.split('.');
+  if (!header || !payload || !sig) return null;
+  const expected = createHmac('sha256', secret()).update(`${header}.${payload}`).digest();
+  const given = Buffer.from(sig, 'base64url');
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub: string; p?: string; exp: number };
+    return p.p === purpose && p.exp > Date.now() / 1000 ? p.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readToken(token: string | undefined): string | null {
   if (!token) return null;
   const [header, payload, sig] = token.split('.');
@@ -43,8 +66,9 @@ export function readToken(token: string | undefined): string | null {
   const given = Buffer.from(sig, 'base64url');
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
-    const p = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub: string; exp: number };
-    return p.exp > Date.now() / 1000 ? p.sub : null;
+    const p = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub: string; exp: number; p?: string };
+    // Un jeton à usage précis (confirmation d'email…) n'ouvre jamais une session
+    return !p.p && p.exp > Date.now() / 1000 ? p.sub : null;
   } catch {
     return null;
   }
