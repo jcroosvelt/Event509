@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarPlus, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Download, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar, Badge, Button, EmptyState, IconButton } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -9,6 +9,7 @@ import { BottomNav, NotificationsMenu, OfflineBanner, SkipLink } from './PublicL
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
 import { resendVerification } from '@/services/api';
+import { ApkMenuLink } from '@/components/AppInstall';
 import { can, hasOrganizerAccess, teamRoleLabel, type Perm } from '@/lib/permissions';
 
 export interface NavItem {
@@ -164,6 +165,9 @@ export default function DashboardLayout({
         <Link to="/" className="mt-4 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-ink-soft hover:bg-canvas">
           <ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour au site')}
         </Link>
+        <ApkMenuLink className="mt-1 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-brand-ink hover:bg-canvas">
+          {(label) => <><Download className="h-4 w-4" aria-hidden /> {label}</>}
+        </ApkMenuLink>
         {user && (
           <Link to="/compte" className="mt-2 flex items-center gap-3 rounded-2xl bg-canvas p-3 hover:bg-line/60">
             <Avatar name={user.name} size={36} />
@@ -183,9 +187,6 @@ export default function DashboardLayout({
         <Logo to={base} />
         <div className="flex items-center gap-2">
           {user && <NotificationsMenu />}
-          <IconButton label={t('Déconnexion')} tone="soft" onClick={signOut}>
-            <LogOut className="h-5 w-5 text-red-600" aria-hidden />
-          </IconButton>
           <IconButton label={t('Ouvrir le menu')} onClick={() => setOpen(true)} aria-expanded={open}>
             <Menu className="h-5 w-5" aria-hidden />
           </IconButton>
@@ -205,9 +206,12 @@ export default function DashboardLayout({
             <Link to="/" className="mt-6 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-ink-soft">
               <ArrowLeft className="h-4 w-4" aria-hidden /> {t('Retour au site')}
             </Link>
-            <button type="button" onClick={signOut} className="mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
-          <LogOut className="h-4 w-4" aria-hidden /> {t('Déconnexion')}
-        </button>
+            <ApkMenuLink className="mt-1 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-brand-ink">
+              {(label) => <><Download className="h-4 w-4" aria-hidden /> {label}</>}
+            </ApkMenuLink>
+            <button type="button" onClick={signOut} className="mt-1 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+              <LogOut className="h-4 w-4" aria-hidden /> {t('Déconnexion')}
+            </button>
           </div>
         </div>
       )}

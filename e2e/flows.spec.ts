@@ -374,6 +374,30 @@ test.describe('installation de l’application Android (APK)', () => {
     await ctx.close();
   });
 
+  test('aucune installation PWA n’est proposée : pas de manifeste web, seul l’APK est offert', async ({ browser }) => {
+    const ctx = await newCtx(browser, { userAgent: ANDROID });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+    expect((await page.request.get('/manifest.webmanifest')).headers()['content-type'] ?? '').not.toContain('manifest+json');
+    await expect(page.getByRole('dialog').getByRole('link', { name: /Télécharger|Download/ }).or(page.getByRole('button', { name: /Installer|Install/ })).first()).toBeVisible();
+    await ctx.close();
+  });
+
+  test('sur mobile, la déconnexion n’est que dans le menu, avec le lien de l’APK', async ({ browser }) => {
+    const ctx = await newCtx(browser, { userAgent: ANDROID, viewport: { width: 390, height: 800 } });
+    const page = await ctx.newPage();
+    await loginAs(page, /Organisateur \(admin\)/);
+    await page.goto('/organisateur');
+    const header = page.locator('header').first();
+    await expect(header.getByRole('button', { name: /Déconnexion|Sign out|Log out/ })).toHaveCount(0);
+    await header.getByRole('button', { name: /Ouvrir le menu|Open menu/ }).click();
+    const menu = page.getByRole('dialog');
+    await expect(menu.getByRole('link', { name: /Télécharger l’application|Download the app/ })).toBeVisible();
+    await expect(menu.getByRole('button', { name: /Déconnexion|Sign out|Log out/ })).toBeVisible();
+    await ctx.close();
+  });
+
   test('« Plus tard » masque l’invitation, qui ne revient pas au rechargement', async ({ browser }) => {
     const ctx = await newCtx(browser, { userAgent: ANDROID, viewport: { width: 390, height: 800 } });
     const page = await ctx.newPage();

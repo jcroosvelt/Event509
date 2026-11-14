@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, Heart, LayoutDashboard, LogOut, Megaphone, Receipt, Repeat2, Settings, ShieldCheck, Ticket } from 'lucide-react';
+import { Bell, ChevronRight, Download, Heart, LayoutDashboard, LogOut, Megaphone, Receipt, Repeat2, Settings, ShieldCheck, Ticket } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { can, hasOrganizerAccess, teamRoleLabel } from '@/lib/permissions';
 import { Avatar, Badge, Card, IconBadge, StatCard, type Tone } from '@/components/ui';
+import { ApkMenuLink } from '@/components/AppInstall';
 
 export default function Profile() {
   const { user, tickets, favorites, orders, logout, t } = useApp();
@@ -76,6 +77,16 @@ export default function Profile() {
               </Link>
             </li>
           )}
+          <li>
+            <ApkMenuLink className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-canvas">
+              {(label) => (
+                <>
+                  <IconBadge tone="ink" size="sm"><Download className="h-4 w-4" /></IconBadge>
+                  <span className="flex-1 text-sm font-semibold">{label}</span>
+                </>
+              )}
+            </ApkMenuLink>
+          </li>
           <li>
             <button type="button" onClick={() => { logout(); nav('/'); }} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-red-600 hover:bg-red-50">
               <IconBadge tone="red" size="sm"><LogOut className="h-4 w-4" /></IconBadge>
