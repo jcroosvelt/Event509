@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Receipt, Wallet } from 'lucide-react';
 import { events } from '@/data/mock';
-import { getUserDetail, setUserRole, setUserStatus } from '@/services/api';
+import { getUserDetail, setOrganizerVerified, setUserRole, setUserStatus } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateNumeric, moneyRaw, num } from '@/lib/format';
@@ -39,6 +39,14 @@ export default function UserDetail() {
     reload();
   };
 
+  const toggleVerified = async () => {
+    if (!organization) return;
+    const next = !organization.verified;
+    await setOrganizerVerified(organization.id, next);
+    toast(next ? t('{name} est vérifié', { name: organization.name }) : t('Vérification retirée à {name}', { name: organization.name }));
+    reload();
+  };
+
   return (
     <div className="space-y-6">
       <Link to="/admin/utilisateurs" className="inline-flex items-center gap-2 text-sm font-semibold text-ink-soft"><ArrowLeft className="h-4 w-4" aria-hidden /> {t('Utilisateurs')}</Link>
@@ -67,9 +75,12 @@ export default function UserDetail() {
       {organization && (
         <Card>
           <h2 className="mb-1 font-bold">{t('Organisation')}</h2>
-          <p className="mb-4 text-sm text-ink-soft">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink-soft">
             <Link to={`/o/${organization.slug}`} className="font-semibold text-brand-ink">{organization.name}</Link> · {organization.verified ? t('vérifié') : t('non vérifié')} · {t('{n} abonnés', { n: num(organization.followers, lang) })}
           </p>
+          <Button size="sm" variant={organization.verified ? 'outline' : 'soft'} onClick={toggleVerified}>{organization.verified ? t('Retirer la vérification') : t('Vérifier sans demande')}</Button>
+          </div>
           <Table caption={t('Événements de l’organisation')} head={[t('Événement'), t('Date'), t('Statut'), t('Billets vendus')]}>
             {data.events.map((e) => (
               <tr key={e.id}>

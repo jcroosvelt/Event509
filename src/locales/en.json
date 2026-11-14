@@ -1968,5 +1968,9 @@
   "Adresse confirmée": "Address confirmed",
   "Merci ! Vous pouvez maintenant publier vos événements et demander vos versements.": "Thank you! You can now publish your events and request payouts.",
   "Aller à mon espace": "Go to my dashboard",
-  "Connectez-vous et demandez un nouveau lien depuis votre espace organisateur.": "Sign in and request a new link from your organizer dashboard."
+  "Connectez-vous et demandez un nouveau lien depuis votre espace organisateur.": "Sign in and request a new link from your organizer dashboard.",
+  "{name} est vérifié": "{name} is verified",
+  "Vérification retirée à {name}": "Verification removed from {name}",
+  "Retirer la vérification": "Remove verification",
+  "Vérifier sans demande": "Verify without a request"
 }

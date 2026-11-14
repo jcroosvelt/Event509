@@ -85,6 +85,8 @@
 
 - **Inscription renforcée (fait)** : 2 étapes (compte, puis organisation : nom, nature, pays, téléphone facultatif) ; mot de passe d'au moins 8 caractères avec lettre et chiffre, hors mots de passe courants ; conditions acceptées (version et date gardées) ; champ piège anti-robots ; 5 inscriptions par heure et par connexion (table `rate_events`) ; confirmation de l'adresse par email (jeton signé 7 jours, `/verifier-email`, renvoi limité à 3 par heure) — tant que l'envoi d'emails (Resend) n'est pas configuré, l'adresse n'est pas exigée. Publier un événement et demander un versement exigent l'adresse confirmée. Libellé « Administrateur » remplacé par « Responsable de l'organisation » (ne pas confondre avec « Admin plateforme »).
 - **Pays et villes du monde (fait)** : tous les pays (code ISO) dans l'éditeur, l'inscription et Explorer ; ~245 grandes villes (`src/data/worldCities.ts`) pour la recherche par ville (liste qui suit le pays) et le rattachement du GPS. Les villes hors liste restent saisissables à la main.
+- **Vérification directe (fait)** : l'administrateur peut vérifier une organisation sans demande ni paiement (fiche utilisateur > Organisation > « Vérifier sans demande »). Demande créée déjà approuvée (`directByAdmin`), abonnement offert pour la durée de validité du programme, badge et avantages ouverts ; « Retirer la vérification » l'annule. Route `POST /api/admin/organizers/:id/verification`, journalisée.
+- **Installation (fait)** : plus de manifeste web, donc plus aucune invitation PWA du navigateur ; seul l'APK est proposé (fenêtre du site). Déconnexion retirée de la barre du haut sur mobile (menu seulement) ; lien « Télécharger l'application » dans les menus.
 
 ## À faire ensuite
 
@@ -133,3 +135,4 @@
 - 2026-11-13 : invitation à installer l'APK sur le site, fenêtre d'informations, page /telecharger, mises à jour (publication automatique et notification).
 - 2026-11-13 : première version de l'application (1.0.21) publiée dans public/app/ ; le workflow de l'application garde l'APK le plus récent dans sa branche apk-release.
 - 2026-11-14 : inscription renforcée (2 étapes, mot de passe, conditions, limite, confirmation d'email), libellé du rôle clarifié, tous les pays et grandes villes du monde pour la recherche.
+- 2026-11-14 : plus d'invitation PWA, déconnexion mobile dans le menu, lien APK dans les menus, vérification directe d'une organisation par l'admin.
