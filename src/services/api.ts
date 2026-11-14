@@ -12,7 +12,7 @@ import type {
 } from '@/types';
 import { convert, RATES, setRates, setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { defaultSiteInfo, type SiteInfo } from '@/lib/legalDoc';
-import { browserCountry, DEFAULT_PLACE, EMPTY_PROFILE, nearestKnownCity, proximityTier, tasteScore, tasteWeights, type Place, type TasteProfile } from '@/data/countries';
+import { browserCountry, countryOfEvent, DEFAULT_PLACE, EMPTY_PROFILE, nearestKnownCity, norm, proximityTier, tasteScore, tasteWeights, type Place, type TasteProfile } from '@/data/countries';
 import type { LegalDoc } from '@/data/legalDefaults';
 import { DEFAULT_FEES, type FeeSettings } from '@/lib/fees';
 import { ApiError } from '@/lib/errors';
@@ -148,8 +148,26 @@ export interface Session_ {
 export function signIn(email: string, password: string) {
   return http<Session_>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
-export function signUp(input: { name: string; email: string; password: string }) {
+export interface SignUpInput {
+  name: string;
+  email: string;
+  password: string;
+  orgName?: string;
+  kind?: 'individual' | 'company' | 'association';
+  country?: string;
+  phone?: string;
+  acceptTerms?: boolean;
+  /** Champ piège (doit rester vide). */
+  website?: string;
+}
+export function signUp(input: SignUpInput) {
   return http<Session_>('/auth/signup', { method: 'POST', body: JSON.stringify(input) });
+}
+export function verifyEmail(token: string) {
+  return http<{ ok: true }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+}
+export function resendVerification() {
+  return http<{ sent: boolean }>('/auth/resend-verification', { method: 'POST' });
 }
 export function fetchMe() {
   return http<AppUser>('/auth/me');
@@ -172,6 +190,8 @@ export function fetchMyOrders() {
 export interface EventFilters {
   q?: string;
   city?: string;
+  /** Pays du lieu (code à 2 lettres). */
+  country?: string;
   category?: CategoryId | '';
   when?: '' | 'today' | 'weekend' | 'week' | 'month';
   price?: '' | 'free' | 'paid';
@@ -231,7 +251,8 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
       [e.title, e.description, e.venue?.city, e.venue?.name, ...(e.tags ?? [])].some((s) => s?.toLowerCase().includes(q)),
     );
   }
-  if (f.city) list = list.filter((e) => e.venue?.city === f.city);
+  if (f.country) list = list.filter((e) => countryOfEvent(e) === f.country);
+  if (f.city) list = list.filter((e) => e.venue && norm(e.venue.city) === norm(f.city!));
   if (f.category) list = list.filter((e) => e.categories.includes(f.category as CategoryId));
   if (f.online) list = list.filter((e) => !!e.online);
   if (f.price === 'free') list = list.filter((e) => e.tickets.some((t) => t.price === 0));

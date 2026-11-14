@@ -5,7 +5,8 @@ import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { hasOrganizerAccess } from '@/lib/permissions';
-import { Button, ButtonLink, Card, Field, Input, Segmented } from '@/components/ui';
+import { Button, ButtonLink, Card, Field, Input, Segmented, Select } from '@/components/ui';
+import { COUNTRIES, countryName } from '@/data/countries';
 import type { AppUser } from '@/types';
 import { DEMO, signIn, signUp } from '@/services/api';
 import { ApiError } from '@/lib/errors';
@@ -31,7 +32,7 @@ const demoAccounts = [
 ];
 
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
-  const { login, startSession, updateUser, toast, t } = useApp();
+  const { login, startSession, updateUser, toast, t, lang, place } = useApp();
   const signup = mode === 'signup';
   useTitle(signup ? t('Créer un compte organisateur') : t('Connexion organisateur'));
   const nav = useNavigate();
@@ -40,13 +41,24 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Inscription en 2 étapes (mode serveur) : 1 = le compte, 2 = l'organisation et les conditions
+  const [step, setStep] = useState<1 | 2>(1);
+  const [org, setOrg] = useState({ orgName: '', kind: 'individual', country: place.country, phone: '', terms: false, website: '' });
+  const [orgErr, setOrgErr] = useState<{ orgName?: string; phone?: string; terms?: string }>({});
 
   const form = useForm(
     { name: '', email: '', password: '', phone: '', otp: '' },
     {
       name: (v) => (signup && !String(v).trim() ? t('Indiquez votre nom') : undefined),
       email: (v) => (via === 'email' && !isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined),
-      password: (v) => (via === 'email' && (signup ? String(v).length < 8 : !v) ? (signup ? t('Choisissez au moins 8 caractères') : t('Saisissez votre mot de passe')) : undefined),
+      password: (v) => {
+        if (via !== 'email') return undefined;
+        if (!signup) return v ? undefined : t('Saisissez votre mot de passe');
+        const p = String(v);
+        if (p.length < 8) return t('Choisissez au moins 8 caractères');
+        if (!/[A-Za-zÀ-ÿ]/.test(p) || !/\d/.test(p)) return t('Ajoutez au moins une lettre et un chiffre');
+        return undefined;
+      },
       phone: (v) => (via === 'phone' && !isPhone(v) ? t('Saisissez un numéro comme +509 3712 3456') : undefined),
       otp: (v) => (via === 'phone' && otpSent && !/^\d{6}$/.test(String(v)) ? t('Saisissez les 6 chiffres reçus par SMS') : undefined),
     },
@@ -62,7 +74,11 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
     setLoading(true);
     try {
       const s = signup
-        ? await signUp({ name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password })
+        ? await signUp({
+            name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password,
+            orgName: org.orgName.trim() || undefined, kind: org.kind as 'individual' | 'company' | 'association', country: org.country,
+            phone: org.phone.trim() || undefined, acceptTerms: org.terms, website: org.website,
+          })
         : await signIn(form.values.email.trim(), form.values.password);
       await startSession(s);
       finish(s.user);
@@ -71,6 +87,12 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
       if (status === 401) form.setErrors({ password: t('Email ou mot de passe incorrect') });
       else if (status === 409) form.setErrors({ email: t('Un compte existe déjà avec cet email. Connectez-vous.') });
       else if (status === 403) toast(t('Ce compte est suspendu. Contactez le support.'), 'error');
+      else if (status === 429) toast(t('Trop de tentatives. Réessayez plus tard.'), 'error');
+      else if (status === 422 && signup) {
+        const msg = e instanceof ApiError ? e.message : '';
+        if (/mot de passe/i.test(msg)) { setStep(1); form.setErrors({ password: t('Choisissez un mot de passe plus solide (8 caractères, une lettre, un chiffre)') }); }
+        else toast(t('Vérifiez les informations saisies.'), 'error');
+      }
       else toast(t('La connexion a échoué. Vérifiez votre réseau et réessayez.'), 'error');
     } finally {
       setLoading(false);
@@ -145,6 +167,17 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
           onSubmit={(e) => {
             e.preventDefault();
             if (!form.validate()) return;
+            if (!DEMO && signup) {
+              if (step === 1) { setStep(2); return; }
+              const err: typeof orgErr = {};
+              if (org.orgName.trim() && org.orgName.trim().length < 2) err.orgName = t('Indiquez le nom de votre organisation');
+              if (org.phone.trim() && !isPhone(org.phone)) err.phone = t('Saisissez un numéro comme +509 3712 3456');
+              if (!org.terms) err.terms = t('Vous devez accepter les conditions pour continuer');
+              setOrgErr(err);
+              if (Object.keys(err).length) return;
+              void submitReal();
+              return;
+            }
             if (via === 'phone' && !otpSent) {
               setOtpSent(true);
               toast(t('Code envoyé par SMS au {phone}', { phone: form.values.phone }), 'info');
@@ -154,11 +187,49 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
             else void submitReal();
           }}
         >
+          {!DEMO && signup && (
+            <p className="text-xs font-semibold text-ink-muted" aria-live="polite">{t('Étape {n} sur 2', { n: String(step) })} — {step === 1 ? t('Votre compte') : t('Votre organisation')}</p>
+          )}
+          {!DEMO && signup && step === 2 ? (
+            <>
+              <Field label={t('Nom de l’organisation ou de l’événement')} error={orgErr.orgName} hint={t('Affiché sur votre page publique. Par défaut : votre nom.')}>
+                <Input autoComplete="organization" value={org.orgName} onChange={(e) => setOrg({ ...org, orgName: e.target.value })} />
+              </Field>
+              <Field label={t('Vous êtes')}>
+                <Select value={org.kind} onChange={(e) => setOrg({ ...org, kind: e.target.value })}>
+                  <option value="individual">{t('Organisateur indépendant')}</option>
+                  <option value="company">{t('Entreprise')}</option>
+                  <option value="association">{t('Association')}</option>
+                </Select>
+              </Field>
+              <Field label={t('Pays')}>
+                <Select value={org.country} onChange={(e) => setOrg({ ...org, country: e.target.value })}>
+                  {[...COUNTRIES].sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang)).map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
+                </Select>
+              </Field>
+              <Field label={t('Téléphone')} error={orgErr.phone} hint={t('Facultatif')}>
+                <Input type="tel" inputMode="tel" placeholder="+509 3712 3456" autoComplete="tel" value={org.phone} onChange={(e) => setOrg({ ...org, phone: e.target.value })} />
+              </Field>
+              {/* Champ piège : invisible, hors du parcours au clavier ; seul un robot le remplit */}
+              <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden>
+                <label>Website<input tabIndex={-1} autoComplete="off" value={org.website} onChange={(e) => setOrg({ ...org, website: e.target.value })} /></label>
+              </div>
+              <label className="flex items-start gap-2.5 text-sm">
+                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand" checked={org.terms} onChange={(e) => setOrg({ ...org, terms: e.target.checked })} />
+                <span>
+                  {t('J’accepte les')} <Link to="/cgu" target="_blank" className="font-semibold text-brand-ink underline">{t('conditions d’utilisation')}</Link> {t('et la')} <Link to="/confidentialite" target="_blank" className="font-semibold text-brand-ink underline">{t('politique de confidentialité')}</Link>
+                </span>
+              </label>
+              {orgErr.terms && <p role="alert" className="-mt-2 text-xs font-semibold text-red-600">{orgErr.terms}</p>}
+              <button type="button" onClick={() => setStep(1)} className="text-sm font-semibold text-brand-ink">{t('← Retour')}</button>
+            </>
+          ) : (
+            <>
           {signup && <Field label={t('Nom complet')} error={form.errors.name} required><Input autoComplete="name" {...form.bind('name')} /></Field>}
           {via === 'email' ? (
             <>
               <Field label={t('Email')} error={form.errors.email} required><Input type="email" inputMode="email" autoComplete="email" {...form.bind('email')} /></Field>
-              <Field label={t('Mot de passe')} error={form.errors.password} hint={signup ? t('8 caractères minimum') : undefined} required>
+              <Field label={t('Mot de passe')} error={form.errors.password} hint={signup ? t('8 caractères minimum, avec une lettre et un chiffre') : undefined} required>
                 <Input type="password" autoComplete={signup ? 'new-password' : 'current-password'} {...form.bind('password')} />
               </Field>
               {!signup && <Link to="/mot-de-passe-oublie" className="inline-block text-sm font-semibold text-brand-ink">{t('Mot de passe oublié ?')}</Link>}
@@ -173,8 +244,10 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
               )}
             </>
           )}
+            </>
+          )}
           <Button type="submit" size="lg" className="w-full" loading={loading}>
-            {via === 'phone' && !otpSent ? t('Recevoir un code') : signup ? t('Créer mon compte') : t('Se connecter')}
+            {via === 'phone' && !otpSent ? t('Recevoir un code') : !DEMO && signup && step === 1 ? t('Continuer') : signup ? t('Créer mon compte') : t('Se connecter')}
           </Button>
         </form>
 

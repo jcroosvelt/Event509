@@ -8,6 +8,7 @@ import { AccessDenied } from '@/components/guards';
 import { BottomNav, NotificationsMenu, OfflineBanner, SkipLink } from './PublicLayout';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
+import { resendVerification } from '@/services/api';
 import { can, hasOrganizerAccess, teamRoleLabel, type Perm } from '@/lib/permissions';
 
 export interface NavItem {
@@ -24,6 +25,29 @@ export interface NavItem {
  * La navigation n'affiche que les pages autorisées pour l'utilisateur, et une
  * page ouverte sans permission redirige vers la première page autorisée.
  */
+/** Rappel tant que l'adresse email n'est pas confirmée (publication et versements bloqués côté serveur). */
+function VerifyBanner() {
+  const { t, toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  const resend = async () => {
+    setBusy(true);
+    try {
+      const r = await resendVerification();
+      toast(r.sent ? t('Lien envoyé. Vérifiez votre boîte email.') : t('Envoi impossible pour le moment.'), r.sent ? 'success' : 'error');
+    } catch {
+      toast(t('Trop de demandes. Réessayez plus tard.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div role="status" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <span>{t('Confirmez votre adresse email pour publier des événements et demander vos versements.')}</span>
+      <Button size="sm" variant="outline" onClick={resend} loading={busy}>{t('Renvoyer le lien')}</Button>
+    </div>
+  );
+}
+
 export default function DashboardLayout({
   title, base, sections, bottom, center,
 }: {
@@ -189,6 +213,7 @@ export default function DashboardLayout({
       )}
 
       <main id="contenu" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-10">
+        {user?.emailVerified === false && <VerifyBanner />}
         <ErrorBoundary resetKey={loc.pathname}>
           <Outlet />
         </ErrorBoundary>

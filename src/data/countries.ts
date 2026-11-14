@@ -4,13 +4,12 @@
  */
 import type { EventItem } from '@/types';
 import type { Lang } from '@/types';
+import { WORLD_CITIES } from './worldCities';
 
-/** Pays proposés (Haïti d'abord, puis Amériques, Europe, Afrique, reste du monde). */
-export const COUNTRIES = [
-  'HT', 'US', 'CA', 'DO', 'FR', 'JM', 'BS', 'CU', 'PR', 'MX', 'BR', 'CO', 'CL', 'AR', 'PA', 'GP', 'MQ', 'GF',
-  'BE', 'CH', 'GB', 'DE', 'ES', 'IT', 'PT', 'NL', 'LU', 'CD', 'CM', 'CI', 'SN', 'MA', 'DZ', 'TN', 'BJ', 'TG', 'GA', 'BF',
-  'ML', 'GN', 'NG', 'GH', 'ZA', 'AU', 'JP', 'CN', 'IN', 'AE', 'LB', 'IL', 'TR', 'RU',
-] as const;
+/** Tous les pays (codes ISO) : Haïti d'abord, puis les pays les plus liés à la diaspora, puis le reste du monde. */
+const PRIORITY = ['HT', 'US', 'CA', 'DO', 'FR', 'JM', 'BS', 'CU', 'PR', 'MX', 'BR', 'GP', 'MQ', 'GF', 'BE', 'CH', 'GB'] as const;
+const OTHERS = `AF AL DZ AD AO AG AR AM AU AT AZ BH BD BB BY BZ BJ BT BO BA BW BN BG BF BI KH CM CV CF TD CL CN CO KM CG CD CR CI HR CY CZ DK DJ DM EC EG SV GQ ER EE SZ ET FJ FI GA GM GE DE GH GR GD GT GN GW GY HN HK HU IS IN ID IR IQ IE IL IT JP JO KZ KE KI KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MR MU MD MC MN ME MA MZ MM NA NP NL NC NZ NI NE NG MK NO OM PK PA PG PY PE PH PL PT PF QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA KR SS ES LK SD SR SE SY TW TJ TZ TH TL TG TO TT TN TR TM UG UA AE UY UZ VU VE VN YE ZM ZW`.split(' ');
+export const COUNTRIES: string[] = [...PRIORITY, ...OTHERS.filter((c) => !(PRIORITY as readonly string[]).includes(c))];
 export const DEFAULT_COUNTRY = 'HT';
 
 /** Villes connues dont le pays n'est pas Haïti. */
@@ -58,7 +57,7 @@ export function proximityTier(e: Pick<EventItem, 'venue'>, place: Place): 0 | 1 
 export function browserCountry(): string | null {
   try {
     const r = new Intl.Locale(navigator.language).region;
-    return r && (COUNTRIES as readonly string[]).includes(r) ? r : null;
+    return r && COUNTRIES.includes(r) ? r : null;
   } catch {
     return null;
   }
@@ -98,6 +97,9 @@ export const KNOWN_CITIES: { city: string; country: string; lat: number; lng: nu
   { city: 'Cayenne', country: 'GF', lat: 4.9224, lng: -52.3135 },
   { city: 'Bruxelles', country: 'BE', lat: 50.8503, lng: 4.3517 },
 ];
+
+// Les grandes villes du monde complètent la liste (les villes haïtiennes et de la diaspora ci-dessus restent prioritaires)
+for (const w of WORLD_CITIES) if (!KNOWN_CITIES.some((k) => k.country === w.country && norm(k.city) === norm(w.city))) KNOWN_CITIES.push(w);
 
 /** Distance à vol d'oiseau en kilomètres. */
 export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {

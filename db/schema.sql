@@ -413,3 +413,10 @@ create table if not exists webhook_deliveries (
   error text
 );
 create index if not exists webhook_deliveries_hook on webhook_deliveries(webhook_id, at desc);
+
+-- Limite de fréquence (créations de compte, renvois de lien de confirmation) : un événement par action.
+create table if not exists rate_events (
+  key text not null,
+  at timestamptz not null default now()
+);
+create index if not exists rate_events_key on rate_events(key, at);

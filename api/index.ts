@@ -16,6 +16,7 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
     query,
     body: req.body,
     authorization: req.headers.authorization,
+    ip: String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim() || undefined,
     geo: {
       country: String(req.headers['x-vercel-ip-country'] ?? '').toUpperCase() || undefined,
       city: (() => {

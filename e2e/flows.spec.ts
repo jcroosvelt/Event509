@@ -323,6 +323,25 @@ test.describe('événements près de l’utilisateur', () => {
   });
 });
 
+test.describe('recherche par pays et par ville', () => {
+  test('on filtre par pays du monde et on cherche une grande ville', async ({ page }) => {
+    await fresh(page, '/explorer?sort=date');
+    // Tous les pays du monde sont proposés (le filtre existe aussi dans le panneau masqué sur mobile)
+    const nb = await page.locator('aside select').first().evaluate((el) => (el as HTMLSelectElement).options.length);
+    expect(nb).toBeGreaterThan(190);
+    // Haïti : des événements ; Japon : aucun
+    await page.goto('/explorer?sort=date&country=HT');
+    await expect(page.locator('a[href^="/e/"]').first()).toBeVisible();
+    await page.goto('/explorer?sort=date&country=JP');
+    await expect(page.getByText(/Aucun événement ne correspond|No matching events/)).toBeVisible();
+    await expect(page.locator('a[href^="/e/"]')).toHaveCount(0);
+    // La liste des villes suit le pays choisi
+    const villes = await page.locator('#explore-cities option').evaluateAll((o) => o.map((x) => (x as HTMLOptionElement).value));
+    expect(villes).toContain('Tokyo');
+    expect(villes).not.toContain('Paris');
+  });
+});
+
 test.describe('installation de l’application Android (APK)', () => {
   const ANDROID = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
   // Fiche de version simulée : ces tests ne dépendent pas du vrai fichier APK

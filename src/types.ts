@@ -105,6 +105,9 @@ export interface Organizer {
   followers: number;
   eventsCount: number;
   city: string;
+  /** Pays et nature de l'organisation (renseignés à l'inscription). */
+  country?: string;
+  kind?: string;
   /** Réservés aux organisateurs vérifiés (avantage « page professionnelle ») : fixés par le serveur. */
   brandColor?: string;
   socials?: { facebook?: string; tiktok?: string; youtube?: string; linkedin?: string; x?: string };
@@ -275,6 +278,8 @@ export interface AppUser {
   status: 'active' | 'suspended';
   joinedAt: string;
   verified?: boolean;
+  /** Faux tant que l'adresse email n'est pas confirmée (seulement quand l'envoi d'emails est configuré). */
+  emailVerified?: boolean;
   /** Rôle dans l'équipe d'un organisateur (organisateurs uniquement). */
   teamRole?: TeamRole;
   /** Organisation dont l'utilisateur fait partie (fournie par le serveur). */

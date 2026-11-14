@@ -152,3 +152,21 @@ async function sendWithHeaders(to: string, subject: string, html: string, header
     return false;
   }
 }
+
+/** Email de confirmation d'adresse : un lien à usage unique (valable 7 jours) vers le site. */
+export async function sendVerifyEmail(to: string, name: string, link: string): Promise<boolean> {
+  if (!mailConfigured()) return false;
+  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
+<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#93B3FF">509</span></td></tr>
+<tr><td style="padding:28px">
+<p style="margin:0 0 12px">Bonjour ${esc(name)},</p>
+<p style="margin:0 0 18px;line-height:1.5">Confirmez votre adresse email pour publier vos événements et demander vos versements.</p>
+<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1F5EFF;color:#fff;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:bold;display:inline-block">Confirmer mon adresse</a></p>
+<p style="margin:0;color:#4A5573;font-size:13px;line-height:1.5">Ce lien est valable 7 jours. Si vous n'avez pas créé de compte Event509, ignorez cet email.</p>
+</td></tr>
+<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
+</table></td></tr></table></body></html>`;
+  return send(to, 'Confirmez votre adresse email', html);
+}

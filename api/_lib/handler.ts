@@ -10,6 +10,8 @@ export interface ApiRequest {
   authorization?: string;
   /** Pays et ville de la connexion, fournis par l'hébergeur (jamais enregistrés). */
   geo?: { country?: string; city?: string };
+  /** Adresse IP de la connexion (limite de fréquence ; jamais gardée). */
+  ip?: string;
 }
 export interface ApiResponse {
   status: number;
@@ -38,7 +40,7 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       const user = userId ? await one<UserRow>(`select * from users where id = $1`, [userId]) : null;
       // Jeton présent mais invalide ou compte supprimé : la session est terminée
       if (req.authorization && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/') && !req.path.startsWith('/app/') && !req.path.startsWith('/v1/')) return { status: 401, body: { message: 'Session expirée, reconnectez-vous' } };
-      const ctx: Ctx = { user, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
+      const ctx: Ctx = { user, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, ip: req.ip, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
       if (out === null || out === undefined) return { status: 204, body: null };
       if (out instanceof Binary) return { status: 200, body: out };

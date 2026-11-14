@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, SearchX, SlidersHorizontal } from 'lucide-react';
-import { categories, cities } from '@/data/mock';
+import { categories } from '@/data/mock';
 import { listEvents, type EventFilters } from '@/services/api';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
-import { countryName } from '@/data/countries';
+import { COUNTRIES, KNOWN_CITIES, countryName } from '@/data/countries';
 import { PersonalizeModal } from '@/components/PersonalizeModal';
 import { cx } from '@/lib/format';
 import { Button, Chip, EmptyState, Field, Input, Modal, Segmented, Select, Skeleton, Toggle } from '@/components/ui';
@@ -24,6 +24,7 @@ export default function Explore() {
   const f: EventFilters = {
     q: params.get('q') ?? '',
     city: params.get('city') ?? '',
+    country: params.get('country') ?? '',
     category: (params.get('category') ?? '') as CategoryId | '',
     when: (params.get('when') ?? '') as EventFilters['when'],
     price: (params.get('price') ?? '') as EventFilters['price'],
@@ -40,16 +41,22 @@ export default function Explore() {
     setParams(p, { replace: true });
   };
   const { data, loading } = useAsync(() => listEvents(f), [params.toString(), place.country, place.city, profile.tastes.join(), profile.favorites.join(), profile.purchased.join(), profile.viewed.join()]);
-  const activeCount = ['city', 'category', 'when', 'price', 'online'].filter((k) => params.get(k)).length;
+  const activeCount = ['country', 'city', 'category', 'when', 'price', 'online'].filter((k) => params.get(k)).length;
   const count = data?.length ?? 0;
 
   const Filters = (
     <div className="space-y-5">
-      <Field label={t('Ville')}>
-        <Select value={f.city} onChange={(e) => set('city', e.target.value)}>
-          <option value="">{t('Toutes les villes')}</option>
-          {cities.map((c) => <option key={c}>{c}</option>)}
+      <Field label={t('Pays')}>
+        <Select value={f.country} onChange={(e) => set('country', e.target.value)}>
+          <option value="">{t('Tous les pays')}</option>
+          {[...COUNTRIES].sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang)).map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
         </Select>
+      </Field>
+      <Field label={t('Ville')} hint={t('Tapez pour chercher parmi les grandes villes du monde')}>
+        <Input list="explore-cities" value={f.city} onChange={(e) => set('city', e.target.value)} placeholder={t('Toutes les villes')} autoComplete="off" />
+        <datalist id="explore-cities">
+          {KNOWN_CITIES.filter((k) => !f.country || k.country === f.country).map((k) => <option key={`${k.country}-${k.city}`} value={k.city} />)}
+        </datalist>
       </Field>
       <Field label={t('Catégorie')}>
         <Select value={f.category} onChange={(e) => set('category', e.target.value)}>

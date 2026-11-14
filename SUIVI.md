@@ -83,6 +83,9 @@
 - [x] Tests mis à jour et lancés
 - [x] Déploiement sur `main`
 
+- **Inscription renforcée (fait)** : 2 étapes (compte, puis organisation : nom, nature, pays, téléphone facultatif) ; mot de passe d'au moins 8 caractères avec lettre et chiffre, hors mots de passe courants ; conditions acceptées (version et date gardées) ; champ piège anti-robots ; 5 inscriptions par heure et par connexion (table `rate_events`) ; confirmation de l'adresse par email (jeton signé 7 jours, `/verifier-email`, renvoi limité à 3 par heure) — tant que l'envoi d'emails (Resend) n'est pas configuré, l'adresse n'est pas exigée. Publier un événement et demander un versement exigent l'adresse confirmée. Libellé « Administrateur » remplacé par « Responsable de l'organisation » (ne pas confondre avec « Admin plateforme »).
+- **Pays et villes du monde (fait)** : tous les pays (code ISO) dans l'éditeur, l'inscription et Explorer ; ~245 grandes villes (`src/data/worldCities.ts`) pour la recherche par ville (liste qui suit le pays) et le rattachement du GPS. Les villes hors liste restent saisissables à la main.
+
 ## À faire ensuite
 
 0. **À faire par vous** : créer un compte Resend, vérifier un domaine d'envoi, puis ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel (Production) pour que les billets partent par email.
@@ -129,3 +132,4 @@
 - 2026-11-13 : événements proches (ville, pays) et selon les goûts, position détectée ou choisie, pays du lieu dans l'éditeur.
 - 2026-11-13 : invitation à installer l'APK sur le site, fenêtre d'informations, page /telecharger, mises à jour (publication automatique et notification).
 - 2026-11-13 : première version de l'application (1.0.21) publiée dans public/app/ ; le workflow de l'application garde l'APK le plus récent dans sa branche apk-release.
+- 2026-11-14 : inscription renforcée (2 étapes, mot de passe, conditions, limite, confirmation d'email), libellé du rôle clarifié, tous les pays et grandes villes du monde pour la recherche.
