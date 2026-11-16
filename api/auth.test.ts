@@ -776,6 +776,21 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(r2.cb).get('code')!, verifier: pkce().verifier } }))).toContain('error=');
   });
 
+  it('17d. application : si le lien profond n’ouvre pas l’application, le secret seul termine la connexion (une seule fois)', async () => {
+    const { verifier, challenge } = pkce();
+    const wv = new Browser();
+    expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier } })).body).toEqual({ ready: false });
+    await new Browser().google('login', google(150), { appChallenge: challenge, dropBrowser: true });
+    expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier: pkce().verifier } })).body).toEqual({ ready: false });
+    expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier } })).body).toEqual({ ready: true });
+    expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier } })).body).toEqual({ ready: true }); // ne consomme rien
+    // Sans le bon secret : refusé, et la connexion reste disponible
+    expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { verifier: pkce().verifier } }))).toContain('error=');
+    expect(loc(await wv.call('GET', '/auth/app/exchange', undefined, { query: { verifier } }))).toBe('/inscription/profil');
+    expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { verifier } }))).toContain('error=');
+    expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier } })).body).toEqual({ ready: false });
+  });
+
   it('17b. protections : CSRF, réauthentification, droits, profil incomplet, anciens comptes', async () => {
     const { b, id } = await newAccount();
     // CSRF : sans l'en-tête personnalisé, ou depuis un autre site, une action modifiant des données est refusée
