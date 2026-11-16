@@ -133,11 +133,18 @@ export async function verifyIdToken(idToken: string, nonce: string): Promise<Goo
  */
 export async function finishGoogle(o: { code: string; state: string; browser: string | undefined }): Promise<{ claims: GoogleClaims; state: OAuthState }> {
   if (!o.code || !o.state || o.code.length > 2000 || o.state.length > 200) throw new OAuthError('params');
-  // Consommation atomique : un état ne sert qu'une fois
+  const hash = sha256(o.state);
   const row = await one<OAuthState & { nonce: string; code_verifier: string; browser_hash: string; expired: boolean }>(
-    `delete from oauth_states where state_hash = $1 returning nonce, code_verifier, purpose, user_id, recovery_id, next_path, app_challenge, browser_hash, expires_at <= now() as expired`,
-    [sha256(o.state)]);
+    `select nonce, code_verifier, purpose, user_id, recovery_id, next_path, app_challenge, browser_hash, expires_at <= now() as expired from oauth_states where state_hash = $1`, [hash]);
   if (!row || row.expired) throw new OAuthError('state');
+  // Liaison au navigateur (protège contre un lien de retour piégé qui ferait entrer la victime dans le compte d'un tiers) :
+  // vérifiée AVANT de consommer l'état, donc une requête sans le bon cookie (doublon, aperçu, tiers) ne détruit pas la connexion en cours.
+  // Application Android : aucune session n'est créée dans le navigateur, le retour exige le secret PKCE que seule l'application détient ;
+  // le cookie n'est donc pas exigé (certains onglets de navigateur ne le renvoient pas toujours).
+  if (!row.app_challenge && (!o.browser || !timingSafeEqual(Buffer.from(sha256(o.browser)), Buffer.from(row.browser_hash)))) throw new OAuthError('browser');
+  // Consommation atomique : un état ne sert qu'une fois (si deux requêtes arrivent ensemble, une seule passe)
+  const taken = await one<{ ok: number }>(`delete from oauth_states where state_hash = $1 returning 1 as ok`, [hash]);
+  if (!taken) throw new OAuthError('state');
   try {
     return await exchange(o, row);
   } catch (e) {
@@ -146,8 +153,7 @@ export async function finishGoogle(o: { code: string; state: string; browser: st
   }
 }
 
-async function exchange(o: { code: string; browser: string | undefined }, row: OAuthState & { nonce: string; code_verifier: string; browser_hash: string }): Promise<{ claims: GoogleClaims; state: OAuthState }> {
-  if (!o.browser || !timingSafeEqual(Buffer.from(sha256(o.browser)), Buffer.from(row.browser_hash))) throw new OAuthError('browser');
+async function exchange(o: { code: string }, row: OAuthState & { nonce: string; code_verifier: string }): Promise<{ claims: GoogleClaims; state: OAuthState }> {
   const res = await fetch(tokenUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

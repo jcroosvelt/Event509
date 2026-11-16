@@ -746,6 +746,36 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect(loc(await p.callback(u2.searchParams.get('state')!, u2.searchParams.get('nonce')!, 'mauvais-defi', google(72)))).toContain('error=google');
   });
 
+  it('17c. une requête de retour sans le bon cookie ne détruit pas la connexion en cours ; l’application n’exige pas ce cookie', async () => {
+    // Navigateur : un doublon sans cookie échoue, mais la vraie requête réussit ensuite
+    const b = new Browser();
+    const claims = google(140);
+    const start = await b.call('GET', '/auth/google/start', undefined, { query: { purpose: 'login' } });
+    const u = new URL(String(start.headers!.Location));
+    const [state, nonce, ch] = [u.searchParams.get('state')!, u.searchParams.get('nonce')!, u.searchParams.get('code_challenge')!];
+    const stranger = new Browser();
+    expect(loc(await stranger.callback(state, nonce, ch, claims))).toContain('error=google');
+    expect((await pool.query(`select 1 from oauth_states where state_hash = $1`, [createHash('sha256').update(state).digest('hex')])).rowCount).toBe(1);
+    expect(loc(await b.callback(state, nonce, ch, claims))).toBe('/inscription/profil');
+    // Deux requêtes simultanées : une seule passe
+    const b2 = new Browser();
+    const s2 = await b2.call('GET', '/auth/google/start', undefined, { query: { purpose: 'login' } });
+    const u2 = new URL(String(s2.headers!.Location));
+    const args = [u2.searchParams.get('state')!, u2.searchParams.get('nonce')!, u2.searchParams.get('code_challenge')!] as const;
+    const both = await Promise.all([b2.callback(...args, google(141)), b2.callback(...args, google(141))]);
+    expect(both.filter((r) => loc(r) === '/inscription/profil')).toHaveLength(1);
+    // Application : le retour fonctionne même sans le cookie de liaison du navigateur
+    const { verifier, challenge } = pkce();
+    const tab = new Browser();
+    const r = await tab.google('login', google(142), { appChallenge: challenge, dropBrowser: true });
+    const code = appCode(r.cb).get('code')!;
+    const wv = new Browser();
+    expect(loc(await wv.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } }))).toBe('/inscription/profil');
+    // Mais sans le secret de l'application, ce retour ne sert à rien
+    const r2 = await new Browser().google('login', google(143), { appChallenge: challenge, dropBrowser: true });
+    expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(r2.cb).get('code')!, verifier: pkce().verifier } }))).toContain('error=');
+  });
+
   it('17b. protections : CSRF, réauthentification, droits, profil incomplet, anciens comptes', async () => {
     const { b, id } = await newAccount();
     // CSRF : sans l'en-tête personnalisé, ou depuis un autre site, une action modifiant des données est refusée
