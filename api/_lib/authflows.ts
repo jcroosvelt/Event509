@@ -251,10 +251,15 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (c.ip) await d.rateLimit(`appx:${c.ip}`, 30, 60);
     const code = str(c.query.code, 100);
     const verifier = str(c.query.verifier, 200);
-    if (!code || !verifier) return fail302();
-    const h = await one<{ kind: string; user_id: string | null; pending_hash: string | null; challenge: string; next_path: string | null; ok: boolean }>(
-      `delete from app_handoffs where code_hash = $1 returning kind, user_id, pending_hash, challenge, next_path, expires_at > now() as ok`, [sha256(code)]);
+    if (!verifier) return fail302();
     const want = createHash('sha256').update(verifier).digest('base64url');
+    // Avec le code reçu par le lien profond, ou, si ce lien n'a pas ouvert l'application, grâce au seul secret PKCE
+    // (l'application le vérifie via /auth/app/ready) : dans les deux cas, le secret que seule l'application détient est exigé.
+    const h = await one<{ kind: string; user_id: string | null; pending_hash: string | null; challenge: string; next_path: string | null; ok: boolean }>(
+      code
+        ? `delete from app_handoffs where code_hash = $1 returning kind, user_id, pending_hash, challenge, next_path, expires_at > now() as ok`
+        : `delete from app_handoffs where code_hash = (select code_hash from app_handoffs where challenge = $1 and expires_at > now() order by created_at desc limit 1) returning kind, user_id, pending_hash, challenge, next_path, expires_at > now() as ok`,
+      [code ? sha256(code) : want]);
     if (!h || !h.ok || want.length !== h.challenge.length || !timingSafeEqual(Buffer.from(want), Buffer.from(h.challenge))) {
       await logSecurity(null, 'app_exchange_failed', {}, c.ip);
       return fail302();
@@ -271,6 +276,16 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     const r = await db().query(`update pending_signups set id_hash = $2 where id_hash = $1 and expires_at > now() returning id_hash`, [h.pending_hash, sha256(fresh)]);
     if (r.rowCount !== 1) return fail302();
     return Respond.redirect('/inscription/profil', [setCookie(SIGNUP_COOKIE, fresh, 86400)]);
+  };
+
+  /** L'application demande si la connexion faite dans le navigateur est terminée (le lien profond peut ne pas s'ouvrir : cette vérification le remplace). Ne consomme rien. */
+  const appReady: Handler = async (c) => {
+    if (c.ip) await d.rateLimit(`appready:${c.ip}`, 120, 60);
+    const verifier = str(c.query.verifier, 200);
+    if (!verifier) return { ready: false };
+    const want = createHash('sha256').update(verifier).digest('base64url');
+    const r = await one<{ ok: number }>(`select 1 as ok from app_handoffs where challenge = $1 and expires_at > now() limit 1`, [want]);
+    return { ready: !!r };
   };
 
   // ---------- Inscription progressive ----------
@@ -790,6 +805,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     ['GET', '/auth/google/start', googleStartRoute],
     ['GET', '/auth/google/callback', googleCallback],
     ['GET', '/auth/app/exchange', appExchange],
+    ['GET', '/auth/app/ready', appReady],
     ['GET', '/auth/signup/pending', signupPending],
     ['POST', '/auth/signup/complete', signupComplete],
     ['POST', '/auth/profile/complete', profileComplete],
