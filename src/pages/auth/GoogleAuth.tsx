@@ -6,6 +6,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { authConfig, googleUrl, passkeyLoginOptions, passkeyLoginVerify } from '@/services/api';
 import { passkeyCancelled, passkeysSupported, getPasskeyAssertion } from '@/lib/webauthn';
 import { inApp, postApp } from '@/lib/appBridge';
+import { safeInternalPath } from '@/lib/safeUrl';
 import { Button, Card, Loading } from '@/components/ui';
 import Auth from '@/pages/public/Auth';
 
@@ -26,7 +27,7 @@ function GoogleAuthPage() {
   useTitle(t('Continuer avec Google'));
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const next = params.get('next') ?? undefined;
+  const next = safeInternalPath(params.get('next'));
   const err = params.get('error');
   const [busy, setBusy] = useState(false);
 

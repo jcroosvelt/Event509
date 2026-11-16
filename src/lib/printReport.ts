@@ -10,7 +10,9 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:6px 8px;b
 @media print{body{margin:0}}</style></head><body>
 <h1>Event509 — ${esc(title)}</h1><p class="muted">${esc(subtitle)}</p>
 ${sections.map((s) => `<h2>${esc(s.title)}</h2><table><tr>${s.head.map((h, i) => `<th class="${i ? 'n' : ''}">${esc(h)}</th>`).join('')}</tr>${s.rows.map((r) => `<tr>${r.map((v, i) => `<td class="${i ? 'n' : ''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</table>`).join('')}
-<script>window.onload=function(){window.print()}</script></body></html>`;
+</body></html>`;
   const w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
   if (!w) throw new Error('popup');
+  // Impression lancée d'ici (pas de script dans la page : la politique de sécurité du site l'interdit)
+  w.addEventListener('load', () => w.print());
 }

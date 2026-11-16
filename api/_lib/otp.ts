@@ -1,6 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { all, db, one, tx, type Q } from './db.js';
 import { newId, readPurposeToken, signPurposeToken, signToken } from './auth.js';
+import { revokeSessions } from './session.js';
 import type { Ctx, UserRow } from './routes.js';
 
 /**
@@ -334,11 +335,13 @@ export function otpRoutes(d: OtpDeps) {
     return { verified: true, resetToken: signPurposeToken(`otp-reset:${(o as { id: string }).id}`, u.id, 10 * 60) };
   };
 
-  const finishSession = async (u: UserRow, newHash: string, otpId: string, purpose: OtpPurpose) => {
+  const finishSession = async (u: UserRow, newHash: string, otpId: string, purpose: OtpPurpose, keepSession?: string) => {
     await tx(async (q) => {
       if (!(await consumeOtp(otpId, purpose, q))) fail(400, 'Cette autorisation n’est plus valable. Recommencez.', 'otp_invalid');
       // Toutes les sessions ouvertes avant ce moment deviennent invalides
       await q.query(`update users set password_hash = $2, sessions_valid_from = now() where id = $1`, [u.id, newHash]);
+      // Sessions par cookie : toutes fermées (sauf celle qui vient de confirmer le changement), comme les anciens jetons
+      await revokeSessions(u.id, keepSession ? { exceptIdHash: keepSession } : {}, q);
     });
     await log('password_changed', purpose, (u.data.phone as string) ?? null, u.id);
   };
@@ -403,9 +406,10 @@ export function otpRoutes(d: OtpDeps) {
     if (!g || g.userId !== u.id) fail(400, 'Cette autorisation n’est plus valable. Recommencez.', 'otp_invalid');
     const next = typeof c.body.password === 'string' ? c.body.password : '';
     d.checkPassword(next, u.email, (u.data.name as string) ?? '');
-    await finishSession(u, await d.hashPassword(next), g!.otpId, 'change_password');
+    await finishSession(u, await d.hashPassword(next), g!.otpId, 'change_password', c.session?.id_hash);
     // Les autres sessions sont fermées ; celle-ci continue avec un jeton émis après le changement
-    return { ok: true, token: signToken(u.id) };
+    // Session par cookie : aucun jeton n'est renvoyé au navigateur ; ancien jeton : un nouveau, émis après le changement
+    return c.session ? { ok: true } : { ok: true, token: signToken(u.id) };
   };
 
   return [

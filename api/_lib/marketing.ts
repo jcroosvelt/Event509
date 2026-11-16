@@ -17,7 +17,7 @@ const unsubToken = (orgId: string, email: string) => createHmac('sha256', secret
  * consentement à l'achat (et qui ne se sont pas désinscrits), désinscription en un clic.
  */
 export function marketingRoutes(h: PremiumDeps): [string, string, Handler][] {
-  const { fail, str, org } = h;
+  const { fail, str, org, rateLimit } = h;
   const need = async (orgId: string) => {
     if (!(await benefitsFor(orgId)).includes('marketing')) fail(403, 'Les outils marketing sont réservés aux organisateurs vérifiés');
   };
@@ -63,6 +63,8 @@ export function marketingRoutes(h: PremiumDeps): [string, string, Handler][] {
 
   /** Clic sur un lien de suivi (public) : compte seulement les codes qui existent. */
   const click: Handler = async (c) => {
+    // Appel public : 120 clics par heure et par connexion (pas de gonflement des statistiques)
+    if (c.ip && rateLimit) await rateLimit(`click:${c.ip}`, 120, 60);
     const code = str(c.body.code, 20);
     if (code) await db().query(`update tracking_links set clicks = clicks + 1 where code = $1`, [code]);
     return null;
@@ -121,6 +123,7 @@ export function marketingRoutes(h: PremiumDeps): [string, string, Handler][] {
   // ---------- Désinscription (publique, par jeton) ----------
 
   const unsubscribe: Handler = async (c) => {
+    if (c.ip && rateLimit) await rateLimit(`unsub:${c.ip}`, 30, 60);
     const orgId = str(c.body.o, 60);
     const email = str(c.body.e, 160).toLowerCase();
     if (!orgId || !email || !sameKey(unsubToken(orgId, email), str(c.body.t, 60))) fail(400, 'Lien de désinscription invalide');

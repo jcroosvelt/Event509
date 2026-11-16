@@ -191,7 +191,10 @@ export const googleUrl = (purpose: 'login' | 'link' | 'reauth', next?: string) =
 /** Ferme la session côté serveur (sans passer par http() pour ne pas relancer la déconnexion en cas de 401). */
 export function serverLogout() {
   if (DEMO) return;
-  void fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { 'X-E509-CSRF': '1' } }).catch(() => {});
+  let t: string | null = null;
+  try { t = localStorage.getItem('e509.token'); } catch { /* ignoré */ }
+  const legacy: Record<string, string> = t && t !== 'cookie' && !t.startsWith('demo.') ? { Authorization: `Bearer ${t}` } : {};
+  void fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { 'X-E509-CSRF': '1', ...legacy } }).catch(() => {});
 }
 export interface SignupPending { pending: boolean; email?: string; givenName?: string; familyName?: string; picture?: string; country?: string; city?: string }
 export const signupPending = () => http<SignupPending>('/auth/signup/pending');
@@ -664,7 +667,7 @@ export const otpForgotVerify = (phone: string, code: string) => post<{ verified:
 export const otpResetPassword = (resetToken: string, password: string) => post<{ ok: true }>('/auth/otp/reset-password', { resetToken, password });
 export const otpChangeSend = () => post<OtpSent>('/auth/otp/change-password/send');
 export const otpChangeVerify = (code: string) => post<{ verified: true; changeToken: string }>('/auth/otp/change-password/verify', { code });
-export const otpChangeConfirm = (changeToken: string, password: string) => post<{ ok: true; token: string }>('/auth/otp/change-password/confirm', { changeToken, password });
+export const otpChangeConfirm = (changeToken: string, password: string) => post<{ ok: true; token?: string }>('/auth/otp/change-password/confirm', { changeToken, password });
 
 export async function requestPasswordReset(email: string) {
   if (!DEMO) throw new ApiError(501, 'La réinitialisation par email n’est pas encore disponible. Écrivez au support.');

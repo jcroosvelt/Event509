@@ -10,8 +10,10 @@ import { analyticsRoutes } from './analytics.js';
 import { consumeOtp, normalizePhone, otpConfigured, otpRoutes } from './otp.js';
 import { authFlowRoutes, hasGoogleIdentity } from './authflows.js';
 import { googleConfigured } from './google.js';
-import { createSession, type SessionRow } from './session.js';
+import { createSession, isRecent, type SessionRow } from './session.js';
 import { Respond } from './respond.js';
+import { securityLog } from './seclog.js';
+import { boundedNumber, isProduction, safeWebUrl, unpaidAllowed } from './safety.js';
 import { multiEventRoutes } from './multi.js';
 import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
@@ -335,15 +337,27 @@ const resendVerification: Handler = async (c) => {
   return { sent: await sendVerification(u) };
 };
 
+/** Empreinte factice : sert à dépenser le même temps de calcul pour un compte inconnu. */
+const DUMMY_HASH = ['scrypt', Buffer.alloc(16, 7).toString('base64'), Buffer.alloc(64, 9).toString('base64')].join('$');
+
 const login: Handler = async (c) => {
   const email = str(c.body.email, 160).toLowerCase();
   const password = typeof c.body.password === 'string' ? c.body.password : '';
-  // Anti force brute : 20 essais par 15 minutes et par connexion
+  // Anti force brute : 20 essais par 15 minutes et par connexion, et 10 échecs par heure et par compte
   if (c.ip) await rateLimit(`login:${c.ip}`, 20, 15);
+  const failedKey = `loginfail:${email.slice(0, 160)}`;
+  if (Number((await one<{ n: string }>(`select count(*)::text as n from rate_events where key = $1 and at > now() - interval '1 hour'`, [failedKey]))?.n ?? 0) >= 10)
+    fail(429, 'Trop de tentatives. Réessayez plus tard.', 'rate_limited');
   const u = await one<UserRow>(`select * from users where email = $1`, [email]);
   // Même message dans tous les cas : on ne révèle pas si le compte existe. Un compte associé à Google ne se connecte plus par mot de passe.
   const hasGoogle = u ? !!(await one(`select 1 from auth_identities where user_id = $1 and provider = 'google' and status = 'active'`, [u.id])) : false;
-  if (!u || hasGoogle || !(await verifyPassword(password, u.password_hash))) fail(401, 'Email ou mot de passe incorrect');
+  // Même durée de calcul que le compte existe ou non (pas d'énumération par chronométrage)
+  const okPassword = await verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
+  if (!u || hasGoogle || !okPassword) {
+    await db().query(`insert into rate_events (key) values ($1)`, [failedKey]);
+    securityLog('login_failed', { ip: c.ip, known: !!u });
+    fail(401, 'Email ou mot de passe incorrect');
+  }
   if (u!.status === 'suspended') fail(403, 'Ce compte est suspendu. Contactez le support.');
   // Session serveur (cookie HttpOnly) : aucun jeton n'est renvoyé au navigateur
   const s = await createSession(u!.id, { method: 'password', userAgent: c.userAgent, ip: c.ip });
@@ -390,6 +404,7 @@ const changePassword: Handler = async (c) => {
   // Numéro WhatsApp vérifié et service actif : le changement passe obligatoirement par un code (pas de contournement par cette route)
   if (otpConfigured() && u.data.phoneVerified === true) fail(403, 'Pour votre sécurité, le changement de mot de passe se fait avec un code WhatsApp.', 'otp_required');
   const next = typeof c.body.next === 'string' ? c.body.next : '';
+  await rateLimit(`chgpw:${u.id}`, 10, 60);
   if (!(await verifyPassword(String(c.body.current ?? ''), u.password_hash))) fail(422, 'Mot de passe actuel incorrect');
   if (next.length < 8) fail(422, 'Mot de passe trop court');
   await db().query(`update users set password_hash = $2 where id = $1`, [u.id, await hashPassword(next)]);
@@ -399,6 +414,8 @@ const changePassword: Handler = async (c) => {
 const deleteMe: Handler = async (c) => {
   const u = auth(c);
   if (u.role === 'admin') fail(409, 'Un administrateur ne peut pas supprimer son compte ici');
+  // Opération irréversible : l'identité doit avoir été confirmée il y a moins de 10 minutes (session par cookie)
+  if (c.session && !isRecent(c.session)) fail(403, 'Confirmez votre identité pour supprimer votre compte.', 'reauth_required');
   await db().query(`delete from users where id = $1`, [u.id]);
   return null;
 };
@@ -433,6 +450,8 @@ const getEvent: Handler = async (c) => {
 };
 
 const validatePromo: Handler = async (c) => {
+  // Énumération de codes promo : 60 essais par heure et par connexion
+  if (c.ip) await rateLimit(`promo:${c.ip}`, 60, 60);
   const p = (await docs<PromoCode>(`select data from promo_codes where upper(code) = upper($1)`, [str(c.body.code, 40)]))[0];
   const eventId = str(c.body.eventId, 60);
   if (!p || !p.active || p.used >= p.limit || new Date(p.expiresAt) < new Date()) return null;
@@ -447,6 +466,7 @@ const validatePromo: Handler = async (c) => {
 };
 
 const reportEvent: Handler = async (c) => {
+  if (c.ip) await rateLimit(`report:${c.ip}`, 10, 60);
   const reasons: Report['reason'][] = ['misleading', 'scam', 'inappropriate', 'cancelled', 'other'];
   const reason = str(c.body.reason, 20) as Report['reason'];
   if (!reasons.includes(reason)) fail(422, 'Motif invalide');
@@ -461,7 +481,27 @@ const reportEvent: Handler = async (c) => {
 
 // ---------- Commandes ----------
 
+/**
+ * État initial d'une commande, décidé par le serveur (jamais par le navigateur) :
+ *  - rien à payer → payée ; virement → en attente de réception des fonds ; paiement en ligne → en attente de la passerelle ;
+ *  - tout autre cas (moyen non pris en charge, passerelle absente) : refusé en production, accepté seulement en démonstration/développement.
+ */
+function orderStatus(method: Order['method'], subtotal: number, total: number): 'paid' | 'pending' {
+  if (total <= 0 && subtotal <= 0) return 'paid';
+  if (method === 'transfer') return 'pending';
+  if (ONLINE_METHODS.includes(method)) {
+    if (payConfigured()) return total > 0 ? 'pending' : 'paid';
+    if (unpaidAllowed()) return 'paid';
+    fail(503, 'Le paiement en ligne est momentanément indisponible. Réessayez plus tard.', 'payment_unavailable');
+  }
+  if (total <= 0) return 'paid';
+  if (unpaidAllowed()) return 'paid';
+  return fail(422, 'Ce moyen de paiement n’est pas disponible.', 'payment_method_unavailable');
+}
+
 const createOrder: Handler = async (c) => {
+  // Limite de débit : 30 commandes par heure et par connexion (retenue de stock, abus)
+  if (c.ip) await rateLimit(`order:${c.ip}`, 30, 60);
   const b = c.body as {
     eventId: string; items: { ticketTypeId: string; qty: number; seats?: string[] }[]; promoCode?: string;
     method: Order['method']; currency: Currency; buyer: { name: string; email: string; phone?: string };
@@ -536,8 +576,9 @@ const createOrder: Handler = async (c) => {
         ...(display !== cur ? { displayCurrency: display, displayTotal: roundCur(convert(fb.total, cur, display), display) } : {}),
         // Le virement attend la réception des fonds ; les autres moyens seront confirmés par la passerelle de paiement
         method: subtotal === 0 ? 'card' : b.method,
-        // Virement et paiement en ligne (MonCash, NatCash, KashPaw, carte) : en attente jusqu'à la confirmation du paiement
-        status: (b.method === 'transfer' && subtotal > 0) || (payConfigured() && ONLINE_METHODS.includes(b.method) && fb.total > 0) ? 'pending' : 'paid',
+        // Une commande n'est « payée » que si rien n'est à payer, ou (démonstration et développement seulement) sans passerelle.
+        // Virement et paiement en ligne (MonCash, NatCash, KashPaw, carte) : en attente jusqu'à la confirmation du paiement.
+        status: orderStatus(b.method, subtotal, fb.total),
         buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone,
         promoCode: promo?.code, referral: str(b.referral, 40) || undefined, sessionLabel: str(b.sessionLabel, 80) || undefined,
         // Lien de suivi : gardé seulement s'il existe et appartient à l'organisateur de l'événement
@@ -734,6 +775,9 @@ const requestRefund: Handler = async (c) => {
   const o = (await docs<Order>(`select data from orders where id = $1 and user_id = $2`, [c.params.id, u.id]))[0];
   if (!o) fail(404, 'Commande introuvable');
   if (o!.status !== 'paid') fail(409, 'Cette commande ne peut pas être remboursée');
+  // Une seule demande à la fois par commande (contrôle aussi côté base, verrou sur la commande)
+  if (o!.refundRequest || (await one(`select 1 from refunds where order_id = $1 and status = 'pending'`, [o!.id]))) fail(409, 'Une demande de remboursement existe déjà pour cette commande.');
+  await rateLimit(`refund:${u.id}`, 10, 60);
   const ev = await eventById(o!.eventId);
   const reason = str(c.body.reason, 500);
   const r: RefundRequest = {
@@ -742,6 +786,9 @@ const requestRefund: Handler = async (c) => {
   };
   const refundRequest = { reason, at: r.createdAt, status: 'pending' as const };
   await tx(async (q) => {
+    // Verrou sur la commande : deux demandes simultanées ne créent qu'un remboursement
+    const fresh = await one<{ data: Order }>(`select data from orders where id = $1 and user_id = $2 for update`, [o!.id, u.id], q);
+    if (!fresh || fresh.data.status !== 'paid' || fresh.data.refundRequest) fail(409, 'Une demande de remboursement existe déjà pour cette commande.');
     await upsert('refunds', { id: r.id, organizer_id: ev?.organizerId ?? null, order_id: o!.id, status: r.status, created_at: r.createdAt, data: r }, q);
     await q.query(`update orders set data = data || $2::jsonb where id = $1`, [o!.id, JSON.stringify({ refundRequest })]);
   });
@@ -784,8 +831,8 @@ const listResale: Handler = async (c) =>
   docs<IssuedTicket>(`select data from resale_listings where $1 = '' or event_id = $1 order by price`, [c.query.eventId ?? '']);
 
 const createResale: Handler = async (c) => {
-  const price = num(c.body.price);
-  if (!(price > 0)) fail(422, 'Prix invalide');
+  const price = boundedNumber(c.body.price, 1, 10_000_000);
+  if (price === null) return fail(422, 'Prix invalide');
   return tx(async (q) => {
     const t = await ownTicket(c, c.params.id, q);
     if (t.status !== 'valid') fail(409, 'Ce billet ne peut pas être revendu');
@@ -810,11 +857,17 @@ const cancelResale: Handler = async (c) => {
 
 const buyResale: Handler = async (c) => {
   const u = auth(c);
+  // La revente n'est reliée à aucune passerelle de paiement : acheter ici créerait une commande « payée » sans encaisser un centime
+  // (et sans rien verser au vendeur). En production, l'achat est donc fermé tant qu'un paiement vérifié n'est pas branché.
+  if (isProduction()) fail(503, 'L’achat de billets en revente n’est pas encore disponible.', 'resale_unavailable');
+  await rateLimit(`resale:${u.id}`, 20, 60);
   const buyer = { name: str(c.body.name, 80) || (u.data.name as string), email: (str(c.body.email, 160) || u.email).toLowerCase() };
   return tx(async (q) => {
     const l = await one<{ ticket_id: string; price: string; data: IssuedTicket }>(`select ticket_id, price, data from resale_listings where id = $1 for update`, [c.params.id], q);
     if (!l) fail(410, 'Ce billet vient d’être vendu');
     const old = (await docs<IssuedTicket>(`select data from tickets where id = $1`, [l!.ticket_id], q))[0]!;
+    // On ne s'achète pas son propre billet
+    if (await one(`select 1 from tickets t join orders o on o.id = t.order_id where t.id = $1 and o.user_id = $2`, [old.id, u.id], q)) fail(409, 'C’est votre propre billet.');
     const ev = (await eventById(old.eventId, q))!;
     const order: Order = {
       id: newId('o'), eventId: old.eventId, createdAt: new Date().toISOString(),
@@ -845,6 +898,30 @@ const saveEvent: Handler = async (c) => {
   requireVerified(c.user!);
   const e = c.body as unknown as EventItem;
   if (!str(e.title) || !Array.isArray(e.tickets)) fail(422, 'Événement incomplet');
+  // Contrôle strict des valeurs reçues : rien n'est cru parce que le formulaire l'a envoyé
+  if (e.tickets.length < 1 || e.tickets.length > 40) fail(422, 'Un événement a entre 1 et 40 types de billets');
+  if (str(e.title, 300).length > 150) fail(422, 'Titre trop long (150 caractères au maximum)');
+  if (typeof e.description === 'string' && e.description.length > 10_000) fail(422, 'Description trop longue');
+  if (e.currency !== undefined && e.currency !== 'HTG' && e.currency !== 'USD') fail(422, 'Devise invalide');
+  if (e.maxPerPerson !== undefined && boundedNumber(e.maxPerPerson, 1, 500, true) === null) fail(422, 'Nombre maximum de billets par personne invalide');
+  for (const t of e.tickets) {
+    if (typeof t !== 'object' || t === null) fail(422, 'Billet invalide');
+    if (boundedNumber(t.price, 0, 100_000_000) === null) fail(422, 'Prix de billet invalide (nombre positif ou nul)');
+    if (boundedNumber(t.quota, 0, 1_000_000, true) === null) fail(422, 'Quantité de billets invalide');
+    if (t.maxPerOrder !== undefined && boundedNumber(t.maxPerOrder, 1, 100, true) === null) fail(422, 'Maximum par commande invalide');
+    if (typeof t.name !== 'string' || !t.name.trim() || t.name.length > 100) fail(422, 'Nom de billet invalide');
+    if (typeof t.id !== 'string' || !/^[\w-]{1,60}$/.test(t.id)) fail(422, 'Identifiant de billet invalide');
+    for (const k of ['salesStart', 'salesEnd'] as const) if (t[k] !== undefined && Number.isNaN(Date.parse(String(t[k])))) fail(422, 'Date de vente invalide');
+  }
+  if (new Set(e.tickets.map((t) => t.id)).size !== e.tickets.length) fail(422, 'Identifiants de billets en double');
+  if (Number.isNaN(Date.parse(String(e.start))) || Number.isNaN(Date.parse(String(e.end)))) fail(422, 'Dates de l’événement invalides');
+  // Lien de l'événement en ligne : https seulement (il est affiché comme lien cliquable aux participants)
+  let online = e.online ?? null;
+  if (online) {
+    const url = safeWebUrl(online.url, { httpsOnly: true });
+    if (!url) fail(422, 'Adresse de l’événement en ligne invalide (https://…)');
+    online = { platform: str(online.platform, 40), url: url! };
+  }
   const existing = await one<{ organizer_id: string; data: EventItem }>(`select organizer_id, data from events where id = $1`, [e.id]);
   if (existing && existing.organizer_id !== orgId && c.user!.role !== 'admin') fail(403, 'Cet événement appartient à un autre organisateur');
   const clash = await one(`select 1 from events where slug = $1 and id <> $2`, [e.slug, e.id ?? '']);
@@ -865,29 +942,43 @@ const saveEvent: Handler = async (c) => {
     featured: existing?.data.featured ?? false,
     // Le boost (payant) n'est jamais modifiable par le formulaire
     boostedUntil: existing?.data.boostedUntil,
-    // Une publication par un organisateur non vérifié passe en modération
-    status: e.status,
+    online,
+    // Statut : mêmes règles de modération que « changer le statut » (organisateur non vérifié → modération, événement refusé → renvoi en modération)
+    status: await allowedStatus(c, e.status ?? 'draft', existing?.data.status, existing?.organizer_id ?? orgId),
   };
-  if (next.status === 'published' && c.user!.role !== 'admin' && existing?.data.status !== 'published') {
-    const verified = await one<{ v: boolean }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [next.organizerId]);
-    if (!verified?.v) next.status = 'pending';
-  }
   await saveEventRow(next);
   await act(c, orgId, existing ? 'Événement modifié' : 'Événement créé', next.title);
   await notifyEventChange(existing?.data, next);
   return next;
 };
 
+/**
+ * Statut qu'un organisateur peut réellement donner à un événement. Les règles de modération s'appliquent partout où le statut change
+ * (jamais seulement dans le formulaire) : un organisateur non vérifié passe par la modération, un événement refusé par
+ * l'administration ne se republie pas seul (il peut être corrigé puis renvoyé en modération), l'administration décide librement.
+ */
+async function allowedStatus(c: Ctx, wanted: EventItem['status'], current: EventItem['status'] | undefined, organizerId: string): Promise<EventItem['status']> {
+  if (c.user!.role === 'admin') return wanted;
+  if (!['draft', 'published', 'pending', 'cancelled', 'ended'].includes(wanted)) fail(422, 'Statut invalide');
+  if (wanted !== 'published') return current === 'rejected' && !['draft', 'pending'].includes(wanted) ? 'rejected' : wanted;
+  if (current === 'published') return 'published';
+  if (current === 'rejected') return 'pending';
+  const verified = await one<{ v: boolean }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [organizerId]);
+  return verified?.v ? 'published' : 'pending';
+}
+
 const setEventStatus: Handler = async (c) => {
   const orgId = org(c, 'events');
-  const status = str(c.body.status, 20) as EventItem['status'];
-  if (!['draft', 'published', 'cancelled', 'ended', 'pending'].includes(status)) fail(422, 'Statut invalide');
+  requireVerified(c.user!);
+  const wanted = str(c.body.status, 20) as EventItem['status'];
+  if (!['draft', 'published', 'cancelled', 'ended', 'pending'].includes(wanted)) fail(422, 'Statut invalide');
   const e = await eventById(c.params.id);
   if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
+  const status = await allowedStatus(c, wanted, e!.status, e!.organizerId);
   await saveEventRow({ ...e!, status });
   await act(c, orgId, 'Statut d’événement modifié', `${e!.title} → ${status}`);
   await notifyEventChange(e!, { ...e!, status });
-  return null;
+  return { status };
 };
 
 /** Efface les commandes d'un événement avec tout ce qui s'y rattache (billets, reventes, remboursements, litiges). */
@@ -965,6 +1056,15 @@ const socialUrl = (v: unknown) => {
   return /^https:\/\/[^\s"'<>]+$/.test(u) ? u : '';
 };
 
+/** Site web de l'organisateur : adresse http(s) valide ou vide (affichée comme lien cliquable : jamais « javascript: »). */
+function websiteOf(v: unknown, old?: string) {
+  if (v === undefined) return old;
+  if (typeof v === 'string' && !v.trim()) return '';
+  const url = safeWebUrl(v, { max: 200 });
+  if (!url) fail(422, 'Adresse du site invalide (https://…)');
+  return url!;
+}
+
 const saveOrganizer: Handler = async (c) => {
   const orgId = org(c, 'settings');
   const cur = (await docs<Organizer>(`select data from organizers where id = $1`, [orgId]))[0];
@@ -974,7 +1074,7 @@ const saveOrganizer: Handler = async (c) => {
   const keep = (v: unknown, max: number, old?: string) => (v === undefined ? old : str(v, max));
   // L'état de vérification, la date de certification et les anciens liens ne viennent jamais du formulaire
   const next: Organizer = {
-    ...cur!, name: str(p.name, 80) || cur!.name, bio: keep(p.bio, 1000, cur!.bio), website: keep(p.website, 200, cur!.website),
+    ...cur!, name: str(p.name, 80) || cur!.name, bio: keep(p.bio, 1000, cur!.bio), website: websiteOf(p.website, cur!.website),
     instagram: keep(p.instagram, 60, cur!.instagram), city: keep(p.city, 60, cur!.city) || cur!.city,
     logo: p.logo === '' ? undefined : validCover(p.logo) ? p.logo : cur!.logo,
   };
@@ -1242,7 +1342,9 @@ const savePromo: Handler = async (c) => {
   if (clash && clash.id !== p.id) fail(409, 'Ce code existe déjà');
   const own = await one<{ organizer_id: string }>(`select organizer_id from promo_codes where id = $1`, [p.id]);
   if (own && own.organizer_id !== orgId) fail(403, 'Code d’un autre organisateur');
-  await upsert('promo_codes', { id: p.id || newId('pc'), organizer_id: orgId, code, data: { ...p, code, ...adv } });
+  // L'identifiant du document est celui de la ligne (un identifiant vide dans les données empêcherait de compter les utilisations)
+  const pid = p.id || newId('pc');
+  await upsert('promo_codes', { id: pid, organizer_id: orgId, code, data: { ...p, id: pid, code, ...adv } });
   return null;
 };
 
@@ -1725,6 +1827,7 @@ async function checkPayment(orderId: string): Promise<PayStatus> {
     st = await verifyPayment(orderId);
   } catch (e) {
     console.error('[pay] vérification', e);
+    securityLog('payment_verify_failed', { detail: { order: orderId } });
     return 'pending';
   }
   if (st === 'paid') await settleOrder(orderId);
@@ -1734,6 +1837,8 @@ async function checkPayment(orderId: string): Promise<PayStatus> {
 
 /** Appelé par la page de retour et par la page de commande : état du paiement d'une commande. */
 const verifyOrder: Handler = async (c) => {
+  // Chaque vérification interroge la passerelle de paiement : 120 par heure et par connexion
+  if (c.ip) await rateLimit(`verify:${c.ip}`, 120, 60);
   const r = await one<{ status: string; method: string | null }>(`select status, data->>'method' as method from orders where id = $1`, [c.params.id]);
   if (!r) fail(404, 'Commande introuvable');
   if (r!.status !== 'pending') return { status: r!.status === 'paid' ? 'paid' : r!.status };
@@ -1747,6 +1852,8 @@ const verifyOrder: Handler = async (c) => {
  * à savoir quelle commande vérifier, et l'état est relu auprès de la plateforme (impossible à falsifier).
  */
 const payWebhook: Handler = async (c) => {
+  // Appel public : limité pour qu'il ne serve pas à déclencher en masse des appels vers la passerelle
+  if (c.ip) await rateLimit(`paywh:${c.ip}`, 300, 60);
   const ref = str((c.body.transaction as { reference_id?: unknown } | undefined)?.reference_id, 60);
   if (ref.startsWith('sp_')) await checkPremiumPayment(ref);
   else if (ref.startsWith('bo_')) await checkBoostPayment(ref);
@@ -1843,6 +1950,7 @@ const setPayoutStatus: Handler = async (c) => {
  * (clé du lien de commande). Sans l'un des deux, le jeton n'est pas accepté. Idempotent (pas de doublon).
  */
 const registerDevice: Handler = async (c) => {
+  if (c.ip) await rateLimit(`device:${c.ip}`, 60, 60);
   const token = str(c.body.token, 4096);
   if (token.length < 20) fail(422, 'Jeton invalide');
   const owners: { owner: string; userId: string | null; email: string | null }[] = [];
@@ -1996,7 +2104,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),
   ...multiEventRoutes({ fail, str, auth, admin, org, audit }),
   ...supportRoutes({ fail, str, auth, admin, org, audit }),
-  ...marketingRoutes({ fail, str, auth, admin, org, audit }),
+  ...marketingRoutes({ fail, str, auth, admin, org, audit, rateLimit }),
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ...boostRoutes({ fail, str, auth, admin, org, audit }),
   ...devApiRoutes({ fail, str, auth, admin, org, audit }),

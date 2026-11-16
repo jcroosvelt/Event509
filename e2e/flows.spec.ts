@@ -336,6 +336,60 @@ test.describe('vérification directe par l’administrateur', () => {
   });
 });
 
+test.describe('sécurité du navigateur (en-têtes et politique de contenu)', () => {
+  test('en-têtes de sécurité présents ; seul le widget peut être encadré', async ({ page }) => {
+    const home = await page.request.get('/');
+    const h = home.headers();
+    expect(h['content-security-policy']).toContain("default-src 'self'");
+    expect(h['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(h['content-security-policy']).toContain("object-src 'none'");
+    expect(h['content-security-policy']).not.toContain("'unsafe-eval'");
+    expect(h['content-security-policy']).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(h['x-frame-options']).toBe('DENY');
+    expect(h['x-content-type-options']).toBe('nosniff');
+    expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(h['permissions-policy']).toContain('camera=(self)');
+    const w = (await page.request.get('/widget/festival-kompa-live-2026')).headers();
+    expect(w['content-security-policy']).toContain("frame-ancestors 'self' https:");
+    expect(w['x-frame-options']).toBeUndefined();
+  });
+
+  test('aucune violation de la politique de contenu sur les pages principales', async ({ page }) => {
+    const violations: string[] = [];
+    page.on('console', (m) => {
+      if (/Content.Security.Policy|violates the following|Refused to/i.test(m.text())) violations.push(m.text());
+    });
+    page.on('pageerror', (e) => violations.push(`erreur : ${e.message}`));
+    await page.addInitScript(() => {
+      document.addEventListener('securitypolicyviolation', (e) => console.error(`Content Security Policy : ${e.violatedDirective} ${e.blockedURI}`));
+    });
+    for (const path of ['/', '/explorer', '/e/festival-kompa-live-2026', '/connexion', '/telecharger', '/cgu']) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+    }
+    await loginAs(page, /Organisateur \(admin\)/);
+    for (const path of ['/organisateur', '/organisateur/evenements', '/organisateur/api']) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+    }
+    // Le widget (même site, dans une iframe) reste autorisé ; une page ordinaire, elle, ne peut pas être encadrée
+    await page.goto('/');
+    await page.evaluate(() => {
+      for (const src of ['/widget/festival-kompa-live-2026', '/explorer']) {
+        const f = document.createElement('iframe');
+        f.src = src;
+        f.id = src.includes('widget') ? 'f-widget' : 'f-page';
+        document.body.appendChild(f);
+      }
+    });
+    await expect(page.frameLocator('#f-widget').locator('body')).not.toBeEmpty({ timeout: 10_000 });
+    // (en démonstration le widget n'est pas disponible : on vérifie qu'il s'affiche dans l'iframe, donc que l'encadrement est autorisé)
+    await expect(page.frameLocator('#f-widget').getByText(/n’est pas disponible|not available/)).toBeVisible({ timeout: 10_000 });
+    // « Refused to frame » est attendu pour la page ordinaire : on ne le compte pas comme violation du site
+    expect(violations.filter((v) => !/frame-ancestors|Refused to frame|ERR_BLOCKED_BY_RESPONSE/i.test(v))).toEqual([]);
+  });
+});
+
 test.describe('recherche par pays et par ville', () => {
   test('on filtre par pays du monde et on cherche une grande ville', async ({ page }) => {
     await fresh(page, '/explorer?sort=date');

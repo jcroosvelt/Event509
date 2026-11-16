@@ -424,6 +424,8 @@ export function authFlowRoutes(d: AuthFlowDeps) {
   };
   const logout: Handler = async (c) => {
     if (c.session) await db().query(`update auth_sessions set revoked_at = now() where id_hash = $1`, [c.session.id_hash]);
+    // Ancien jeton (JWT sans état) : la déconnexion le rend inutilisable, en même temps que les autres anciens jetons du compte
+    else if (c.user && c.authorization) await db().query(`update users set sessions_valid_from = now() where id = $1`, [c.user.id]);
     return Respond.json({ ok: true }, [clearCookie(SESSION_COOKIE)]);
   };
 

@@ -38,9 +38,10 @@ async function openInvoice(id: string, lang: 'fr' | 'en', t: (s: string) => stri
 <tr><td>${esc(t('Abonnement Organisateur vérifié'))} — ${esc(p.plan === 'yearly' ? t('annuel') : t('mensuel'))}</td><td class="r">${esc(String(p.amount))} HTG</td></tr>
 <tr><th>${esc(t('Total'))}</th><th class="r">${esc(String(p.amount))} HTG</th></tr></table>
 <p class="muted">${esc(t('Statut'))} : ${esc(t(PAY_STATUS[p.status].l))}</p>
-<script>window.onload=function(){window.print()}</script></body></html>`;
+</body></html>`;
   const w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
   if (!w) throw new Error('popup');
+  w.addEventListener('load', () => w.print());
 }
 
 /** « Mon abonnement professionnel » : statut, échéances, paiement, factures, résiliation. */

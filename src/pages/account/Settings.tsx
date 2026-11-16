@@ -68,7 +68,8 @@ export default function Settings() {
     try {
       const r = await otpChangeConfirm(otpToken, otpPw.next);
       // Les autres sessions sont fermées par le serveur ; celle-ci continue avec le nouveau jeton
-      localStorage.setItem('e509.token', r.token);
+      // Session par cookie : rien à garder (le serveur ne renvoie un jeton que pour un ancien compte)
+      if (r.token) localStorage.setItem('e509.token', r.token);
       setPwOpen(false);
       setOtpToken('');
       setOtpPw({ next: '', confirm: '' });

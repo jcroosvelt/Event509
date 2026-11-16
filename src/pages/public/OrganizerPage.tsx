@@ -9,6 +9,7 @@ import { brandVars } from '@/lib/brandColor';
 import { Avatar, Button, Card, EmptyState, Loading, SectionHeader } from '@/components/ui';
 import { EventCard } from '@/components/events';
 import NotFound from './NotFound';
+import { safeHref } from '@/lib/safeUrl';
 
 export default function OrganizerPage() {
   const { slug = '' } = useParams();
@@ -33,7 +34,7 @@ export default function OrganizerPage() {
         { k: 'facebook', label: 'Facebook', icon: Facebook, url: org.socials?.facebook ?? '' }, { k: 'youtube', label: 'YouTube', icon: Youtube, url: org.socials?.youtube ?? '' },
         { k: 'linkedin', label: 'LinkedIn', icon: Linkedin, url: org.socials?.linkedin ?? '' }, { k: 'tiktok', label: 'TikTok', icon: Link2, url: org.socials?.tiktok ?? '' },
         { k: 'x', label: 'X', icon: Link2, url: org.socials?.x ?? '' },
-      ].filter((x) => x.url)
+      ].filter((x) => safeHref(x.url))
     : [];
   const share = () => {
     const url = window.location.href;
@@ -82,9 +83,9 @@ export default function OrganizerPage() {
         {org.bio && <p className="mt-4 text-ink-soft">{org.bio}</p>}
         {(org.website || org.instagram || socials.length > 0) && (
           <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
-            {org.website && <a href={org.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-brand-ink"><Globe className="h-4 w-4" aria-hidden /> {org.website.replace(/^https?:\/\//, '')}</a>}
+            {safeHref(org.website) && <a href={safeHref(org.website)} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1.5 text-brand-ink"><Globe className="h-4 w-4" aria-hidden /> {(safeHref(org.website) ?? '').replace(/^https?:\/\//, '')}</a>}
             {org.instagram && <span className="flex items-center gap-1.5 text-ink-soft"><Instagram className="h-4 w-4" aria-hidden /> {org.instagram}</span>}
-            {socials.map((x) => <a key={x.k} href={x.url} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1.5 text-brand-ink"><x.icon className="h-4 w-4" aria-hidden /> {x.label}<span className="sr-only"> ({t('nouvel onglet')})</span></a>)}
+            {socials.map((x) => <a key={x.k} href={safeHref(x.url)} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1.5 text-brand-ink"><x.icon className="h-4 w-4" aria-hidden /> {x.label}<span className="sr-only"> ({t('nouvel onglet')})</span></a>)}
           </div>
         )}
       </Card>

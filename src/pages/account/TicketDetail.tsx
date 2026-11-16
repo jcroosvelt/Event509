@@ -14,6 +14,7 @@ import { useTicketScreen } from '@/lib/appBridge';
 import { Badge, Button, Card, Field, Input, Modal, ProgressBar } from '@/components/ui';
 import { EventCover } from '@/components/events';
 import { statusLabel, useSessionLabel } from '@/components/TicketCard';
+import { safeHref } from '@/lib/safeUrl';
 
 /** Jeton tournant : le QR change toutes les 30 s pour décourager les captures d'écran. */
 function useRotatingToken(seconds = 30) {
@@ -167,7 +168,7 @@ export default function TicketDetail() {
       </article>
 
       {active && ev.online && (
-        <a href={ev.online.url} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-3 rounded-3xl bg-violet-600 p-4 font-semibold text-white">
+        <a href={safeHref(ev.online.url) ?? '#'} target="_blank" rel="noreferrer noopener" className="mt-4 flex items-center gap-3 rounded-3xl bg-violet-600 p-4 font-semibold text-white">
           <MonitorPlay className="h-5 w-5" aria-hidden /> {t('Rejoindre le direct sur {platform}', { platform: ev.online.platform })}
         </a>
       )}

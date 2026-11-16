@@ -2,6 +2,7 @@ import { readSession } from './auth.js';
 import { Respond } from './respond.js';
 import { loadSession, parseCookies, readCookie, SESSION_COOKIE, clearCookie, type SessionRow } from './session.js';
 import { siteUrl } from './mail.js';
+import { securityLog } from './seclog.js';
 import { one } from './db.js';
 import { Binary, HttpError, refreshRate, routes, type Ctx, type UserRow } from './routes.js';
 
@@ -33,11 +34,25 @@ export interface ApiResponse {
 const compiled = routes.map(([method, pattern, handler]) => {
   const keys: string[] = [];
   const re = new RegExp(`^${pattern.replace(/:(\w+)/g, (_, k: string) => (keys.push(k), '([^/]+)'))}/?$`);
-  return { method, re, keys, handler };
+  return { method, re, keys, handler, pattern };
 });
 
-/** Point d'entrée unique de l'API, indépendant de l'hébergeur. */
+/** Renseigné pendant le traitement pour le journal de sécurité (route sous forme de modèle, jamais l'adresse réelle avec ses identifiants). */
+interface Meta { route?: string; userId?: string }
+
+/**
+ * Point d'entrée unique de l'API, indépendant de l'hébergeur. Chaque refus d'accès (401/403) et chaque limite de débit atteinte (429)
+ * est journalisé de façon structurée (route modèle, statut, IP masquée, compte), sans aucune donnée sensible.
+ */
 export async function handle(req: ApiRequest): Promise<ApiResponse> {
+  const meta: Meta = {};
+  const out = await handleInner(req, meta);
+  if (out.status === 401 || out.status === 403 || out.status === 429)
+    securityLog(out.status === 429 ? 'rate_limited' : 'access_denied', { ip: req.ip, userId: meta.userId, route: `${req.method} ${meta.route ?? 'inconnue'}`, status: out.status });
+  return out;
+}
+
+async function handleInner(req: ApiRequest, meta: Meta): Promise<ApiResponse> {
   try {
     // Taux de change réglé par l'administrateur (la panne de base est gérée plus loin, route par route)
     await refreshRate().catch(() => {});
@@ -47,7 +62,13 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       if (!m) continue;
       pathMatched = true;
       if (r.method !== req.method) continue;
-      const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1]!)]));
+      meta.route = r.pattern;
+      let params: Record<string, string>;
+      try {
+        params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1]!)]));
+      } catch {
+        return { status: 400, body: { message: 'Adresse invalide' } };
+      }
       const sess = readSession(req.authorization?.replace(/^Bearer\s+/i, ''));
       let user = sess ? await one<UserRow>(`select * from users where id = $1`, [sess.sub]) : null;
       // Session ouverte avant le dernier changement de mot de passe : elle est fermée
@@ -75,6 +96,7 @@ export async function handle(req: ApiRequest): Promise<ApiResponse> {
       // Jeton présent mais invalide ou compte supprimé : la session est terminée
       if ((req.authorization || cookieToken) && !user && !req.path.startsWith('/auth/') && !req.path.startsWith('/cron/') && !req.path.startsWith('/app/') && !req.path.startsWith('/v1/'))
         return { status: 401, body: { message: 'Session expirée, reconnectez-vous' }, ...(cookieToken ? { headers: { 'Set-Cookie': clearCookie(SESSION_COOKIE) } } : {}) };
+      meta.userId = user?.id;
       const ctx: Ctx = { user, session, cookies, userAgent: req.userAgent, method: req.method, path: req.path, authorization: req.authorization, geo: req.geo, ip: req.ip, params, query: req.query, body: (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown> };
       const out = await r.handler(ctx);
       if (out instanceof Respond) return { status: out.status, body: out.body, headers: out.headers };

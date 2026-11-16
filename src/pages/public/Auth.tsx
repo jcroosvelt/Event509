@@ -11,6 +11,7 @@ import type { AppUser } from '@/types';
 import { DEMO, otpEnabled, otpRegisterSend, otpRegisterVerify, signIn, signUp } from '@/services/api';
 import { OtpChallenge, PhoneField } from '@/components/otp/OtpChallenge';
 import { ApiError } from '@/lib/errors';
+import { safeInternalPath } from '@/lib/safeUrl';
 
 function GoogleIcon() {
   return (
@@ -38,7 +39,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   useTitle(signup ? t('Créer un compte organisateur') : t('Connexion organisateur'));
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const next = params.get('next');
+  const next = safeInternalPath(params.get('next')) ?? null;
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);

@@ -25,6 +25,8 @@ export interface PremiumDeps {
   admin: (c: Ctx) => UserRow;
   org: (c: Ctx, perm: string) => string;
   audit: (c: Ctx, action: string, target: string) => Promise<void>;
+  /** Limite de fréquence (clé, maximum, fenêtre en minutes) : lève 429 au-delà. */
+  rateLimit?: (key: string, max: number, windowMinutes: number) => Promise<void>;
 }
 
 export const DEFAULT_PREMIUM: PremiumConfig = {

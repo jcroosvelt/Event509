@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import https from 'node:https';
 import { isIP } from 'node:net';
 import type { EventItem } from '../../src/types.js';
 import { all, db, one } from './db.js';
@@ -16,33 +17,110 @@ const sha = (v: string) => createHash('sha256').update(v).digest('hex');
 
 // ---------- Webhooks : sécurité de l'adresse et envoi signé ----------
 
-/** Adresse privée ou locale : un webhook ne doit jamais pouvoir viser le réseau interne du serveur (SSRF). */
-function privateIp(ip: string) {
-  if (ip.includes(':')) {
-    const l = ip.toLowerCase();
-    return l === '::1' || l === '::' || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('fe80') || l.startsWith('::ffff:127.') || l.startsWith('::ffff:10.') || l.startsWith('::ffff:192.168.');
+/** IPv6 → 16 octets (gère « :: » et la forme IPv4 finale), ou null si illisible. */
+function ipv6Bytes(ip: string): number[] | null {
+  let s = ip.toLowerCase().split('%')[0]!;
+  const v4 = /(\d+\.\d+\.\d+\.\d+)$/.exec(s);
+  if (v4) {
+    const o = v4[1]!.split('.').map(Number);
+    if (o.length !== 4 || o.some((n) => !(n >= 0 && n <= 255))) return null;
+    s = s.slice(0, -v4[1]!.length) + ((o[0]! << 8) | o[1]!).toString(16) + ':' + ((o[2]! << 8) | o[3]!).toString(16);
   }
-  const [a = 0, b = 0] = ip.split('.').map(Number);
-  return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+  const parts = s.split('::');
+  if (parts.length > 2) return null;
+  const head = parts[0] ? parts[0].split(':') : [];
+  const tail = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (parts.length === 1 ? head.length !== 8 : missing < 1) return null;
+  const groups = [...head, ...Array(parts.length === 2 ? missing : 0).fill('0'), ...tail];
+  if (groups.length !== 8) return null;
+  const out: number[] = [];
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const n = parseInt(g, 16);
+    out.push(n >> 8, n & 255);
+  }
+  return out;
+}
+
+function privateV4(a: number, b: number, c: number) {
+  return (
+    a === 0 || a === 10 || a === 127 || a >= 224 || // réseau local, privé, boucle locale, multicast et réservé
+    (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113)
+  );
+}
+
+/** Adresse privée, locale ou réservée : un webhook ne doit jamais pouvoir viser le réseau interne du serveur (SSRF). */
+export function privateIp(ip: string) {
+  if (ip.includes(':')) {
+    const b = ipv6Bytes(ip);
+    if (!b) return true; // illisible : refusée
+    const allZero = (from: number, to: number) => b.slice(from, to).every((x) => x === 0);
+    if (allZero(0, 15) && (b[15] === 0 || b[15] === 1)) return true; // :: et ::1
+    if (b[0] === 0xfe && (b[1]! & 0xc0) === 0x80) return true; // fe80::/10
+    if ((b[0]! & 0xfe) === 0xfc) return true; // fc00::/7
+    if (b[0] === 0xff) return true; // multicast
+    if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0x0d && b[3] === 0xb8) return true; // documentation
+    if (allZero(0, 10) && b[10] === 0xff && b[11] === 0xff) return privateV4(b[12]!, b[13]!, b[14]!); // IPv4 mappée
+    if (allZero(0, 12)) return privateV4(b[12]!, b[13]!, b[14]!); // IPv4 compatible
+    if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b) return privateV4(b[12]!, b[13]!, b[14]!); // NAT64
+    if (b[0] === 0x20 && b[1] === 0x02) return privateV4(b[2]!, b[3]!, b[4]!); // 6to4
+    return false;
+  }
+  const o = ip.split('.').map(Number);
+  if (o.length !== 4 || o.some((n) => !(n >= 0 && n <= 255))) return true;
+  return privateV4(o[0]!, o[1]!, o[2]!);
 }
 /** Seul un test local peut autoriser http et les adresses privées (jamais en production). */
-const testMode = () => process.env.NODE_ENV !== 'production' && process.env.WEBHOOK_ALLOW_PRIVATE === '1';
+const testMode = () => process.env.NODE_ENV !== 'production' && process.env.VERCEL_ENV !== 'production' && process.env.WEBHOOK_ALLOW_PRIVATE === '1';
+
+type Target = { error: string } | { ip: string; family: 4 | 6 } | { test: true };
+
+/** Contrôle l'adresse et renvoie l'IP publique vers laquelle se connecter (connexion épinglée : pas de seconde résolution). */
+async function resolveTarget(raw: string): Promise<Target> {
+  let u: URL;
+  try { u = new URL(raw); } catch { return { error: 'Adresse invalide' }; }
+  if (u.protocol !== 'https:' && !(testMode() && u.protocol === 'http:')) return { error: 'L’adresse doit commencer par https://' };
+  if (u.username || u.password) return { error: 'L’adresse ne doit pas contenir d’identifiants' };
+  if (testMode()) return { test: true };
+  if (u.port && u.port !== '443') return { error: 'Seul le port 443 est accepté' };
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.localhost') || host.endsWith('.internal')) return { error: 'Adresse locale refusée' };
+  try {
+    const found = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
+    if (!found.length || found.some((r) => privateIp(r.address))) return { error: 'Adresse locale ou privée refusée' };
+    return { ip: found[0]!.address, family: found[0]!.family === 6 ? 6 : 4 };
+  } catch {
+    return { error: 'Adresse introuvable' };
+  }
+}
 
 export async function checkWebhookUrl(raw: string): Promise<string | null> {
-  let u: URL;
-  try { u = new URL(raw); } catch { return 'Adresse invalide'; }
-  if (u.protocol !== 'https:' && !(testMode() && u.protocol === 'http:')) return 'L’adresse doit commencer par https://';
-  if (u.username || u.password) return 'L’adresse ne doit pas contenir d’identifiants';
-  if (testMode()) return null;
-  const host = u.hostname.replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return 'Adresse locale refusée';
-  try {
-    const ips = isIP(host) ? [host] : (await lookup(host, { all: true })).map((r) => r.address);
-    if (!ips.length || ips.some(privateIp)) return 'Adresse locale ou privée refusée';
-  } catch {
-    return 'Adresse introuvable';
-  }
-  return null;
+  const t = await resolveTarget(raw);
+  return 'error' in t ? t.error : null;
+}
+
+/** POST vers l'adresse vérifiée, en se connectant à l'IP déjà contrôlée (le nom de domaine ne peut plus pointer ailleurs entre-temps). */
+function postPinned(raw: string, ip: string, family: 4 | 6, headers: Record<string, string>, body: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(raw);
+    const req = https.request(
+      {
+        host: u.hostname.replace(/^\[|\]$/g, ''), servername: isIP(u.hostname) ? undefined : u.hostname, port: 443, path: `${u.pathname}${u.search}`, method: 'POST',
+        headers: { ...headers, 'Content-Length': String(Buffer.byteLength(body)), Host: u.host }, timeout: 5000,
+        lookup: ((_h: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => (opts?.all ? cb(null, [{ address: ip, family }]) : cb(null, ip, family))) as never,
+      },
+      (res) => {
+        res.resume(); // la réponse n'est pas lue (jamais renvoyée à l'organisateur)
+        resolve(res.statusCode ?? 0);
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('Délai dépassé')));
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 /** Envoie un événement à un webhook, signé : « X-Event509-Signature: t=<horodatage>,v1=<HMAC-SHA256 de "t.corps"> ». */
@@ -52,15 +130,16 @@ async function deliver(hook: { id: string; url: string; secret: string }, type: 
   const sig = createHmac('sha256', hook.secret).update(`${t}.${body}`).digest('hex');
   let code: number | null = null, error: string | null = null;
   try {
-    const bad = await checkWebhookUrl(hook.url);
-    if (bad) throw new Error(bad);
-    const res = await fetch(hook.url, {
-      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Event509-Webhooks/1', 'X-Event509-Event': type, 'X-Event509-Signature': `t=${t},v1=${sig}` },
-      body,
-    });
-    code = res.status;
-    if (res.status < 200 || res.status >= 300) error = `Réponse ${res.status}`;
+    const target = await resolveTarget(hook.url);
+    if ('error' in target) throw new Error(target.error);
+    const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Event509-Webhooks/1', 'X-Event509-Event': type, 'X-Event509-Signature': `t=${t},v1=${sig}` };
+    if ('test' in target) {
+      // Essais locaux uniquement (jamais en production)
+      const res = await fetch(hook.url, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000), headers, body });
+      code = res.status;
+    } else code = await postPinned(hook.url, target.ip, target.family, headers, body);
+    // Aucune redirection n'est suivie : une réponse 3xx est un échec
+    if (code < 200 || code >= 300) error = `Réponse ${code}`;
   } catch (e) {
     error = e instanceof Error ? e.message.slice(0, 160) : 'Échec';
   }
