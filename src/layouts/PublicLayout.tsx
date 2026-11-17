@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
-import { ApkMenuLink } from '@/components/AppInstall';
+import { ApkMenuLink, InstallButton } from '@/components/AppInstall';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ambassadors } from '@/data/mock';
 import { useApp } from '@/store/app';
@@ -319,6 +319,7 @@ export default function PublicLayout() {
             </div>
           </form>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
+            <InstallButton />
             <Prefs />
             {user && <NotificationsMenu />}
             <UserMenu />

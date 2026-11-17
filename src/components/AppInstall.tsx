@@ -157,6 +157,40 @@ export function AppInstallPopup() {
 }
 
 /**
+ * Bouton « Installer » discret de l'en-tête : visible seulement sur un navigateur Android (jamais dans l'application) et
+ * quand un APK est publié. Ouvre la fenêtre d'informations puis lance le téléchargement.
+ */
+export function InstallButton() {
+  const { t } = useApp();
+  const release = useRelease();
+  const [open, setOpen] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
+  if (!release || !isAndroidBrowser()) return null;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-dark active:scale-[.98]"
+      >
+        <Download className="h-3.5 w-3.5" aria-hidden /> {t('Installer')}
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} size="sm" title={t('Installer EVENT509')}>
+        <div className="space-y-4">
+          <AppInstallInfo release={release} onDownload={() => setDownloaded(true)} />
+          {downloaded && (
+            <p role="status" className="rounded-2xl bg-brand-50 p-3 text-sm text-brand-dark">
+              {t('Téléchargement lancé. Ouvrez le fichier EVENT509.apk depuis vos notifications ou vos téléchargements.')}{' '}
+              <button type="button" onClick={() => { rememberInstalled(); setOpen(false); }} className="font-semibold underline">{t('C’est installé')}</button>
+            </p>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
  * Dans l'application : une version plus récente est publiée. Le bandeau propose la mise à jour (l'APK s'ouvre dans le
  * navigateur du téléphone, qui le télécharge et lance l'installation).
  */

@@ -144,7 +144,7 @@ export default function App() {
             <Route path="organisateur/:slug" element={<OrganizerPage />} />
             <Route path="billets" element={<Wallet_ />} />
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
-            <Route path="favoris" element={auth(<Favorites />)} />
+            <Route path="favoris" element={<Favorites />} />
             <Route path="notifications" element={auth(<Notifications />)} />
             <Route path="compte" element={auth(<Profile />)} />
             <Route path="compte/achats" element={auth(<Orders />)} />
