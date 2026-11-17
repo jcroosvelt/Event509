@@ -15,6 +15,16 @@ import { randomToken, sha256 } from './session.js';
  * (les gestionnaires de mots de passe ou le cloud du système peuvent la synchroniser, mais EVENT509 ne s'y fie jamais).
  */
 
+/**
+ * Application Android EVENT509 : une passkey créée dans l'application porte l'origine « android:apk-key-hash:… » (empreinte de la
+ * clé de signature de l'APK, publique). Elle n'est acceptée que pour cette clé ; le fichier /.well-known/assetlinks.json du site
+ * déclare la même empreinte pour qu'Android autorise l'application à utiliser les passkeys du site.
+ */
+const ANDROID_ORIGINS = () =>
+  (process.env.WEBAUTHN_ANDROID_ORIGINS ?? 'android:apk-key-hash:eXDgPFuZ5286Wx_RzzM5ye6n21WM0hMsTXkkrYC_L9I')
+    .split(',').map((x) => x.trim()).filter((x) => /^android:apk-key-hash:[A-Za-z0-9_-]{43}$/.test(x));
+const origins = (site: string) => [site, ...ANDROID_ORIGINS()];
+
 export const rp = () => {
   const url = process.env.WEBAUTHN_ORIGIN || siteUrl();
   let host = 'localhost';
@@ -59,7 +69,7 @@ export async function verifyPasskeyRegistration(userId: string, challengeId: str
   const r = rp();
   let v;
   try {
-    v = await verifyRegistrationResponse({ response, expectedChallenge: ch.challenge, expectedOrigin: r.origin, expectedRPID: r.id, requireUserVerification: true });
+    v = await verifyRegistrationResponse({ response, expectedChallenge: ch.challenge, expectedOrigin: origins(r.origin), expectedRPID: r.id, requireUserVerification: true });
   } catch {
     return null;
   }
@@ -93,7 +103,7 @@ export async function verifyPasskeyLogin(challengeId: string, response: Authenti
   let v;
   try {
     v = await verifyAuthenticationResponse({
-      response, expectedChallenge: ch.challenge, expectedOrigin: r.origin, expectedRPID: r.id, requireUserVerification: true,
+      response, expectedChallenge: ch.challenge, expectedOrigin: origins(r.origin), expectedRPID: r.id, requireUserVerification: true,
       credential: { id: cred.credential_id, publicKey: Buffer.from(cred.public_key, 'base64url'), counter: Number(cred.counter), transports: (cred.transports ?? undefined) as never },
     });
   } catch {

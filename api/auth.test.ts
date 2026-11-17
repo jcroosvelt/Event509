@@ -349,6 +349,20 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect(logs).not.toMatch(/Moustache|Kanaval|argon2/);
   });
 
+  it('9b. passkey de l’application Android : acceptée seulement avec l’empreinte de l’APK EVENT509', async () => {
+    const { b } = await newAccount();
+    const appKey = new Authenticator(RP, 'android:apk-key-hash:eXDgPFuZ5286Wx_RzzM5ye6n21WM0hMsTXkkrYC_L9I');
+    const otherApp = new Authenticator(RP, 'android:apk-key-hash:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    const o1 = await b.call('POST', '/auth/passkeys/register/options');
+    expect((await b.call('POST', '/auth/passkeys/register/verify', { challengeId: o1.body.challengeId, response: otherApp.register(o1.body.options.challenge), name: 'Autre appli' })).status).toBe(400);
+    const o2 = await b.call('POST', '/auth/passkeys/register/options');
+    expect((await b.call('POST', '/auth/passkeys/register/verify', { challengeId: o2.body.challengeId, response: appKey.register(o2.body.options.challenge), name: 'Application' })).status).toBe(200);
+    const dev = new Browser('EVENT509-native');
+    const lo = await dev.call('POST', '/auth/passkeys/login/options');
+    expect((await dev.call('POST', '/auth/passkeys/login/verify', { challengeId: lo.body.challengeId, response: appKey.assert(lo.body.options.challenge) })).status).toBe(200);
+    expect((await dev.call('GET', '/auth/me')).status).toBe(200);
+  });
+
   // ---- 8-9. Passkeys
 
   it('8-9. enregistrement et connexion avec une passkey (vraies signatures vérifiées)', async () => {
