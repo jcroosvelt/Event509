@@ -5,7 +5,6 @@ import { useApp } from '@/store/app';
 import { APK_PATH, fetchRelease, isAndroidBrowser, isNewer, promptAllowed, rememberInstalled, rememberLater, sizeMo, type AppRelease } from '@/lib/appRelease';
 import { inApp, postApp, useAppBuild } from '@/lib/appBridge';
 import { Button, Modal } from '@/components/ui';
-import { http } from '@/services/api';
 
 /** Dernière version publiée de l'application (null tant qu'elle n'est pas connue, ou si aucun APK n'est publié). */
 export function useRelease() {
@@ -191,54 +190,4 @@ export function ApkMenuLink({ className, children }: { className: string; childr
       {children(t('Télécharger l’application ({size})', { size: sizeMo(release.size) }))}
     </a>
   );
-}
-
-/**
- * Dans l'application : ouvre la version native (écrans Android). Une session distincte (révocable depuis la page Sécurité) est
- * ouverte pour l'application à partir de la session en cours ; son secret n'est remis qu'à l'application.
- */
-export function NativeMenuLink({ className, children }: { className: string; children: (label: string) => React.ReactNode }) {
-  const { t, user, toast } = useApp();
-  const [busy, setBusy] = useState(false);
-  if (!inApp() || !user) return null;
-  const open = async () => {
-    setBusy(true);
-    try {
-      const r = await http<{ token: string }>('/auth/app/native-session', { method: 'POST', body: '{}' });
-      try { sessionStorage.removeItem('e509.native.off'); } catch { /* ignoré */ }
-      postApp(`native:open:${r.token}`);
-    } catch {
-      toast(t('La version native n’a pas pu s’ouvrir. Réessayez.'), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <button type="button" disabled={busy} onClick={open} className={`${className} w-full text-left disabled:opacity-60`}>
-      {children(t('Ouvrir la version native (bêta)'))}
-    </button>
-  );
-}
-
-/**
- * Dans l'application : à l'ouverture, l'utilisateur connecté arrive directement dans la version native (écrans Android).
- * Une seule tentative par lancement, seulement depuis l'accueil (un lien ou une notification garde sa page), et jamais après
- * un retour volontaire au site complet.
- */
-export function NativeAutoOpen() {
-  const { user } = useApp();
-  useEffect(() => {
-    if (!inApp() || !user) return;
-    try {
-      if (sessionStorage.getItem('e509.native.off') || sessionStorage.getItem('e509.native.auto')) return;
-      if (location.pathname !== '/') return;
-      sessionStorage.setItem('e509.native.auto', '1');
-    } catch {
-      return;
-    }
-    void http<{ token: string }>('/auth/app/native-session', { method: 'POST', body: '{}' })
-      .then((r) => postApp(`native:open:${r.token}`))
-      .catch(() => {});
-  }, [user]);
-  return null;
 }

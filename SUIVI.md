@@ -146,3 +146,4 @@
 - 2026-11-16 : audit de sécurité complet (branche `securite`, non déployée) : 2 critiques, 5 hautes, 9 moyennes corrigées/documentées ; 21 tests de sécurité ; documents SECURITY_*.md ; sauvegardes Neon à renforcer (6 h seulement). Connexion Google de l'APK : nouvelle vérification par secret PKCE (site déployé, APK à retester).
 - 2026-11-17 : seulement gourde (HTG) et dollar américain (USD) ; taux du dollar mis à jour automatiquement chaque jour (open.er-api.com, valeurs absurdes refusées), plus de réglage manuel ; organisateurs hors d'Haïti : abonnement et boost affichés en dollars (paiement prélevé en gourdes au taux du jour).
 - 2026-11-17 : version native (bêta) : événements, achat, billets hors ligne (QR), scanner et espace organisateur ; ouverture automatique dans l'application.
+- 2026-11-17 : l'application Android est entièrement native (plus de WebView) ; retrait côté site de l'ouverture automatique et de la route de session native devenues inutiles.
