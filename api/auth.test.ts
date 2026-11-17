@@ -1001,6 +1001,45 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect((await b.call('GET', '/auth/me')).status).toBe(401);
   });
 
+  it('21g. application native : connexion par la fenêtre Google du téléphone (jeton d’identité vérifié par le serveur)', async () => {
+    const mint = (claims: Record<string, unknown>, nonce: string, o: { key?: typeof rsa; aud?: string; exp?: number; nonceInToken?: string } = {}) =>
+      idToken({ iss: 'https://accounts.google.com', aud: o.aud ?? 'test-client', exp: o.exp ?? Math.floor(Date.now() / 1000) + 600, iat: Math.floor(Date.now() / 1000), nonce: o.nonceInToken ?? nonce, email_verified: true, ...claims }, { key: o.key });
+    const nonce = () => randomBytes(16).toString('base64url');
+    // Nouvelle personne : inscription en cours (cookie), puis profil complété → compte créé
+    const claims = google(++seq);
+    const app = new Browser('EVENT509-native');
+    const n1 = nonce();
+    const r1 = await app.call('POST', '/auth/google/app-token', { idToken: mint(claims, n1), nonce: n1 });
+    expect(r1.status, JSON.stringify(r1.body)).toBe(200);
+    expect(r1.body.next).toBe('/inscription/profil');
+    expect([...app.jar.keys()].some((k) => k.includes('signup'))).toBe(true);
+    const done = await app.call('POST', '/auth/signup/complete', profile());
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    const id = done.body.user.id as string;
+    // Compte existant : session ouverte directement
+    const again = new Browser('EVENT509-native');
+    const n2 = nonce();
+    const r2 = await again.call('POST', '/auth/google/app-token', { idToken: mint(claims, n2), nonce: n2 });
+    expect(r2.status).toBe(200);
+    expect(r2.body.next).toBe('/');
+    expect((await again.call('GET', '/auth/me')).body.id).toBe(id);
+    expect(await events(id)).toContain('login');
+    // Refus : mauvais nonce, mauvaise signature, mauvais destinataire, jeton expiré, requête incomplète
+    const bad = async (idt: string, n: string) => (await new Browser().call('POST', '/auth/google/app-token', { idToken: idt, nonce: n })).status;
+    const n3 = nonce();
+    expect(await bad(mint(claims, n3, { nonceInToken: nonce() }), n3)).toBe(401);
+    expect(await bad(mint(claims, n3, { key: otherRsa }), n3)).toBe(401);
+    expect(await bad(mint(claims, n3, { aud: 'autre-application' }), n3)).toBe(401);
+    expect(await bad(mint(claims, n3, { exp: Math.floor(Date.now() / 1000) - 3600 }), n3)).toBe(401);
+    expect(await bad('pas.un.jeton', n3)).toBe(401);
+    expect(await bad(mint(claims, n3), 'court')).toBe(422);
+    // Un ancien compte (même e-mail, sans identité Google) n'est jamais fusionné
+    const legacy = `ancien-app${++seq}@legacy.test`;
+    await pool.query(`insert into users (id, email, password_hash, role, data) values ($1,$2,$3,'participant',$4)`, [`u_legapp${seq}`, legacy, await hashPassword('AncienMdp2026x'), JSON.stringify({ name: 'Ancien', joinedAt: '2024-01-01' })]);
+    const n4 = nonce();
+    expect(await bad(mint(google(++seq, { email: legacy }), n4), n4)).toBe(409);
+  });
+
   it('21. application : connexion Google dans le navigateur, session créée seulement dans la WebView avec le bon secret', async () => {
     const { claims, id } = await newAccount();
     const { verifier, challenge } = pkce();

@@ -3,7 +3,7 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import type { AppUser, Organizer, TeamMember, TeamRole } from '../../src/types.js';
 import { all, db, one, tx, upsert, type Q } from './db.js';
 import { newId } from './auth.js';
-import { googleConfigured, finishGoogle, OAuthError, safeNext, startGoogle } from './google.js';
+import { googleConfigured, finishGoogle, OAuthError, safeNext, startGoogle, verifyIdToken } from './google.js';
 import { normalizePhone } from './otp.js';
 import { Respond } from './respond.js';
 import {
@@ -145,6 +145,43 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (c.ip) await d.rateLimit(`appgoogle:${user.id}`, 20, 60);
     const g = await startGoogle({ purpose: purpose as 'link' | 'reauth', userId: user.id, appChallenge: challenge });
     return { url: g.url };
+  };
+
+  /**
+   * Application Android native : connexion par la fenêtre Google du téléphone (sélecteur de compte intégré, sans navigateur).
+   * L'application envoie le jeton d'identité Google et le « nonce » qu'elle a fixé ; le serveur vérifie la signature, l'émetteur,
+   * le destinataire (notre identifiant client), l'expiration et le nonce, puis applique les mêmes règles que la connexion
+   * par le navigateur : compte existant → session, nouvelle personne → inscription en cours (profil à compléter),
+   * ancien compte → refus (jamais de fusion automatique sur l'e-mail).
+   */
+  const appGoogleToken: Handler = async (c) => {
+    if (!googleConfigured()) fail(503, 'La connexion Google n’est pas disponible.', 'unavailable');
+    if (c.ip) await d.rateLimit(`gtoken:${c.ip}`, 20, 60);
+    const idToken = str(c.body.idToken, 4000);
+    const nonce = str(c.body.nonce, 200);
+    if (!idToken || !/^[A-Za-z0-9_-]{16,128}$/.test(nonce)) fail(422, 'Requête invalide.');
+    let claims!: Awaited<ReturnType<typeof verifyIdToken>>;
+    try {
+      claims = await verifyIdToken(idToken, nonce);
+    } catch (e) {
+      await logSecurity(null, 'oauth_failed', { reason: e instanceof OAuthError ? e.reason : 'error', app: true, native: true }, c.ip);
+      fail(401, e instanceof OAuthError && e.reason === 'email_not_verified' ? 'L’adresse de ce compte Google n’est pas vérifiée.' : 'Connexion Google refusée. Réessayez.', 'google');
+    }
+    const active = await one<{ user_id: string }>(`select user_id from auth_identities where provider = 'google' and subject = $1 and status = 'active'`, [claims.sub]);
+    if (active) {
+      const u = await one<UserRow>(`select * from users where id = $1`, [active.user_id]);
+      if (!u || u.status === 'suspended') return fail(403, 'Ce compte est suspendu.', 'suspended');
+      const s = await createSession(u.id, { method: 'google', userAgent: c.userAgent, ip: c.ip, limited: !u.auth_complete });
+      await logSecurity(u.id, 'login', { method: 'google', device: deviceLabel(c.userAgent), native: true }, c.ip);
+      return Respond.json({ next: u.auth_complete ? '/' : '/compte/completer' }, [s.cookie]);
+    }
+    if (await one(`select 1 from users where lower(email) = $1`, [claims.email])) fail(409, 'Un compte existe déjà avec cette adresse : connectez-vous avec votre e-mail et votre mot de passe.', 'legacy_account');
+    const token = randomToken(32);
+    await db().query(`delete from pending_signups where expires_at < now() or google_sub = $1`, [claims.sub]);
+    await db().query(
+      `insert into pending_signups (id_hash, google_sub, email, given_name, family_name, picture, expires_at) values ($1,$2,$3,$4,$5,$6, now() + interval '24 hours')`,
+      [sha256(token), claims.sub, claims.email, claims.givenName ?? null, claims.familyName ?? null, claims.picture ?? null]);
+    return Respond.json({ next: '/inscription/profil' }, [setCookie(SIGNUP_COOKIE, token, 86400)]);
   };
 
   const googleCallback: Handler = async (c) => {
@@ -848,6 +885,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     ['GET', '/auth/app/exchange', appExchange],
     ['GET', '/auth/app/ready', appReady],
     ['POST', '/auth/app/google', appGoogleStart],
+    ['POST', '/auth/google/app-token', appGoogleToken],
     ['GET', '/auth/signup/pending', signupPending],
     ['POST', '/auth/signup/complete', signupComplete],
     ['POST', '/auth/profile/complete', profileComplete],
