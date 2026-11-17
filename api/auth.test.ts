@@ -918,6 +918,75 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
   };
   const appCode = (o: Out) => new URL(deeplink(o)).searchParams;
 
+  it('21e. application native : confirmer son identité et changer de compte Google sans session dans le navigateur', async () => {
+    const { b, id, claims } = await newAccount();
+    const startUrl = (r: Out) => {
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const u = new URL(r.body.url);
+      return [u.searchParams.get('state')!, u.searchParams.get('nonce')!, u.searchParams.get('code_challenge')!] as const;
+    };
+    // Sans session : refusé ; défi mal formé : refusé
+    expect((await new Browser().call('POST', '/auth/app/google', { purpose: 'reauth', challenge: pkce().challenge })).status).toBe(401);
+    expect((await b.call('POST', '/auth/app/google', { purpose: 'reauth', challenge: 'court' })).status).toBe(422);
+    expect((await b.call('POST', '/auth/app/google', { purpose: 'login', challenge: pkce().challenge })).status).toBe(422);
+    // Confirmation d'identité : un autre compte Google est refusé
+    const p1 = pkce();
+    const wrong = await new Browser().callback(...startUrl(await b.call('POST', '/auth/app/google', { purpose: 'reauth', challenge: p1.challenge })), google(301), { dropBrowser: true });
+    expect(appCode(wrong).get('error')).toBe('wrong_google');
+    // Le bon compte Google : l'application reçoit une session neuve (identité confirmée), avec son secret seulement
+    const p2 = pkce();
+    const ok = await new Browser().callback(...startUrl(await b.call('POST', '/auth/app/google', { purpose: 'reauth', challenge: p2.challenge })), claims, { dropBrowser: true });
+    const code = appCode(ok).get('code')!;
+    expect((await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code, verifier: pkce().verifier } })).status).toBe(302);
+    const p3 = pkce();
+    const ok3 = await new Browser().callback(...startUrl(await b.call('POST', '/auth/app/google', { purpose: 'reauth', challenge: p3.challenge })), claims, { dropBrowser: true });
+    const app = new Browser('EVENT509-native');
+    expect((await app.call('GET', '/auth/app/exchange', undefined, { query: { code: appCode(ok3).get('code')!, verifier: p3.verifier } })).status).toBe(302);
+    expect((await app.call('GET', '/auth/me')).body.id).toBe(id);
+    // Changement de compte Google : exige une identité confirmée récemment (la session neuve l'est)
+    const newG = google(302);
+    const p4 = pkce();
+    const linked = await new Browser().callback(...startUrl(await app.call('POST', '/auth/app/google', { purpose: 'link', challenge: p4.challenge })), newG, { dropBrowser: true });
+    expect(appCode(linked).get('link')).toBe('1');
+    // La demande n'est retrouvée qu'avec le défi du secret de l'application, et par le titulaire du compte
+    expect((await app.call('GET', '/auth/google/link/pending', undefined, { query: { token: pkce().challenge } })).status).toBe(404);
+    expect((await (await newAccount()).b.call('GET', '/auth/google/link/pending', undefined, { query: { token: p4.challenge } })).status).toBe(404);
+    expect((await app.call('GET', '/auth/google/link/pending', undefined, { query: { token: p4.challenge } })).body.email).toBe(newG.email);
+    expect((await app.call('POST', '/auth/google/link/confirm', { token: p4.challenge, confirm: true })).status).toBe(200);
+    expect((await pool.query(`select email from auth_identities where user_id = $1 and status = 'active'`, [id])).rows[0].email).toBe(newG.email);
+    // Un compte Google déjà utilisé ailleurs est refusé
+    const other = await newAccount();
+    const p5 = pkce();
+    const taken = await new Browser().callback(...startUrl(await app.call('POST', '/auth/app/google', { purpose: 'link', challenge: p5.challenge })), other.claims, { dropBrowser: true });
+    expect(appCode(taken).get('error')).toBe('google_in_use');
+  });
+
+  it('21f. application native : récupération sans Google, la nouvelle session revient dans l’application', async () => {
+    const { b, id, claims } = await newAccount();
+    const codes: string[] = (await b.call('POST', '/auth/security/recovery-codes')).body.codes;
+    const rec = new Browser('EVENT509-native');
+    const token = (await rec.call('POST', '/auth/recovery/start', { identifier: claims.email })).body.recoveryToken;
+    await rec.call('POST', '/auth/recovery/code', { recoveryToken: token, code: codes[0] });
+    await rec.call('POST', '/auth/recovery/questions/answer', { recoveryToken: token, answers: qs3.map((q) => q.answer) });
+    const { verifier, challenge } = pkce();
+    const g = await rec.call('POST', '/auth/recovery/google', { recoveryToken: token, appChallenge: challenge });
+    expect(g.status).toBe(200);
+    const u = new URL(g.body.url);
+    const newG = google(303);
+    const done = await new Browser().callback(u.searchParams.get('state')!, u.searchParams.get('nonce')!, u.searchParams.get('code_challenge')!, newG, { dropBrowser: true });
+    const code = appCode(done).get('code')!;
+    // Avec le secret de l'application : session du même compte ; le code ne ressert pas
+    const app = new Browser('EVENT509-native');
+    expect((await app.call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } })).status).toBe(302);
+    expect((await app.call('GET', '/auth/me')).body.id).toBe(id);
+    expect(loc(await new Browser().call('GET', '/auth/app/exchange', undefined, { query: { code, verifier } }))).toContain('error=');
+    // La récupération est consommée : impossible de recommencer avec la même tentative
+    expect([400, 403]).toContain((await rec.call('POST', '/auth/recovery/google', { recoveryToken: token, appChallenge: challenge })).status);
+    expect((await pool.query(`select email from auth_identities where user_id = $1 and status = 'active'`, [id])).rows[0].email).toBe(newG.email);
+    // Les anciennes sessions sont fermées
+    expect((await b.call('GET', '/auth/me')).status).toBe(401);
+  });
+
   it('21. application : connexion Google dans le navigateur, session créée seulement dans la WebView avec le bon secret', async () => {
     const { claims, id } = await newAccount();
     const { verifier, challenge } = pkce();

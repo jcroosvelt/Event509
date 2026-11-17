@@ -130,6 +130,23 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     return Respond.redirect(g.url, [setCookie(OAUTH_COOKIE, g.browser, 600)]);
   };
 
+  /**
+   * Application Android native, compte connecté : changement de compte Google ou confirmation d'identité par Google.
+   * L'application appelle cette route avec sa session et le défi PKCE d'un secret qu'elle seule détient, puis ouvre l'adresse
+   * renvoyée dans l'onglet du navigateur (où aucune session EVENT509 n'existe).
+   */
+  const appGoogleStart: Handler = async (c) => {
+    if (!googleConfigured()) fail(503, 'La connexion Google n’est pas disponible.', 'unavailable');
+    const purpose = str(c.body.purpose, 10);
+    if (purpose !== 'link' && purpose !== 'reauth') fail(422, 'Opération inconnue.');
+    const challenge = str(c.body.challenge, 60);
+    if (!/^[A-Za-z0-9_-]{43}$/.test(challenge)) fail(422, 'Défi invalide.');
+    const { user } = purpose === 'link' ? needRecent(c) : needSession(c);
+    if (c.ip) await d.rateLimit(`appgoogle:${user.id}`, 20, 60);
+    const g = await startGoogle({ purpose: purpose as 'link' | 'reauth', userId: user.id, appChallenge: challenge });
+    return { url: g.url };
+  };
+
   const googleCallback: Handler = async (c) => {
     const clear = clearCookie(OAUTH_COOKIE);
     let fromApp = false;
@@ -179,6 +196,26 @@ export function authFlowRoutes(d: AuthFlowDeps) {
       return Respond.redirect('/inscription/profil', [clear, setCookie(SIGNUP_COOKIE, token, 86400)]);
     }
 
+    // ---- Application native, compte connecté (la session est dans l'application, pas dans le navigateur)
+    if (state.app_challenge && state.purpose === 'reauth') {
+      // Le compte Google doit être celui du compte : l'application reçoit alors une session neuve (identité confirmée à l'instant)
+      if (!state.user_id || active?.user_id !== state.user_id) {
+        if (state.user_id) await logSecurity(state.user_id, 'reauth_failed', { method: 'google', app: true }, c.ip);
+        return bad('wrong_google');
+      }
+      await logSecurity(state.user_id, 'reauth', { method: 'google', app: true }, c.ip);
+      return toApp('session', { userId: state.user_id });
+    }
+    if (state.app_challenge && state.purpose === 'link') {
+      if (!state.user_id) return bad('invalid');
+      if (active) return bad(active.user_id === state.user_id ? 'same_google' : 'google_in_use');
+      // Demande en attente, retrouvée par l'application grâce au défi de son secret ; elle doit encore la confirmer avec sa session
+      await db().query(`delete from pending_links where expires_at < now() or user_id = $1`, [state.user_id]);
+      await db().query(`insert into pending_links (id_hash, user_id, google_sub, email, expires_at) values ($1,$2,$3,$4, now() + interval '10 minutes')`,
+        [sha256(state.app_challenge), state.user_id, claims.sub, claims.email]);
+      return backToApp('link=1', [clear]);
+    }
+
     // ---- Opérations sur un compte connecté
     const sUser = c.user;
     if (state.purpose === 'reauth') {
@@ -202,12 +239,12 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     }
 
     // ---- Récupération : le nouveau Google remplace l'ancien après validation des facteurs
-    if (state.purpose === 'recover') return finishRecovery(c, state.recovery_id, claims, clear);
+    if (state.purpose === 'recover') return finishRecovery(c, state.recovery_id, claims, clear, state.app_challenge ? (userId) => toApp('session', { userId }) : undefined);
     return bad('invalid');
   };
 
-  async function finishRecovery(c: Ctx, recoveryId: string | null, claims: { sub: string; email: string }, clear: string) {
-    const bad = (e: string) => Respond.redirect(`/connexion/recuperation?error=${e}`, [clear]);
+  async function finishRecovery(c: Ctx, recoveryId: string | null, claims: { sub: string; email: string }, clear: string, toApp?: (userId: string) => Promise<unknown>) {
+    const bad = (e: string) => (toApp ? backToApp(`error=${e}`, [clear]) : Respond.redirect(`/connexion/recuperation?error=${e}`, [clear]));
     if (!recoveryId) return bad('invalid');
     const rec = await one<{ id_hash: string; user_id: string | null; factors: string[]; request_id: string | null }>(
       `select id_hash, user_id, factors, request_id from recovery_sessions where id_hash = $1 and completed_at is null and expires_at > now()`, [recoveryId]);
@@ -231,6 +268,8 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     const u = (await one<UserRow>(`select * from users where id = $1`, [userId]))!;
     await logSecurity(userId, 'recovery_completed', { factors: rec.factors }, c.ip);
     await notifySecurity(userId, 'Récupération de compte terminée', ['Un nouveau compte Google a été associé à votre compte EVENT509 et vos autres sessions ont été fermées.']);
+    // Application native : la nouvelle session est remise à l'application (code à usage unique + secret PKCE)
+    if (toApp) return toApp(userId);
     const s = await createSession(userId, { method: 'recovery', userAgent: c.userAgent, ip: c.ip, limited: !u.auth_complete });
     return Respond.redirect(u.auth_complete ? '/compte/securite?recovered=1' : '/compte/completer', [clear, s.cookie]);
   }
@@ -713,7 +752,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (!googleConfigured()) fail(503, 'La connexion Google n’est pas disponible.', 'unavailable');
     const r = await loadRecovery(c.body.recoveryToken);
     if (!r.user_id || !recoverySufficient(r.factors)) fail(403, 'Validez d’abord les vérifications demandées.', 'factors_missing');
-    const g = await startGoogle({ purpose: 'recover', recoveryId: r.id_hash });
+    const g = await startGoogle({ purpose: 'recover', recoveryId: r.id_hash, appChallenge: typeof c.body.appChallenge === 'string' && /^[A-Za-z0-9_-]{43}$/.test(c.body.appChallenge) ? c.body.appChallenge : null });
     return Respond.json({ url: g.url }, [setCookie(OAUTH_COOKIE, g.browser, 600)]);
   };
 
@@ -750,7 +789,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (!r || r.status !== 'approved' || !r.user_id || !r.execute_after || r.execute_after.getTime() > Date.now()) fail(403, 'Cette demande n’est pas encore utilisable.', 'not_ready');
     const rid = sha256(randomToken(32));
     await db().query(`insert into recovery_sessions (id_hash, user_id, factors, expires_at, request_id) values ($1,$2,'{admin}', now() + interval '30 minutes', $3)`, [rid, r!.user_id, r!.id]);
-    const g = await startGoogle({ purpose: 'recover', recoveryId: rid });
+    const g = await startGoogle({ purpose: 'recover', recoveryId: rid, appChallenge: typeof c.body.appChallenge === 'string' && /^[A-Za-z0-9_-]{43}$/.test(c.body.appChallenge) ? c.body.appChallenge : null });
     return Respond.json({ url: g.url }, [setCookie(OAUTH_COOKIE, g.browser, 600)]);
   };
   /** Le titulaire du compte peut annuler une demande d'assistance déposée à son nom. */
@@ -808,6 +847,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     ['GET', '/auth/google/callback', googleCallback],
     ['GET', '/auth/app/exchange', appExchange],
     ['GET', '/auth/app/ready', appReady],
+    ['POST', '/auth/app/google', appGoogleStart],
     ['GET', '/auth/signup/pending', signupPending],
     ['POST', '/auth/signup/complete', signupComplete],
     ['POST', '/auth/profile/complete', profileComplete],
