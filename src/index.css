@@ -50,6 +50,8 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Un toucher est un clic tout de suite : pas d'attente ni de geste de double toucher (zoom) sur les liens et boutons */
+    touch-action: manipulation;
   }
   body {
     @apply bg-canvas font-sans text-ink antialiased;
