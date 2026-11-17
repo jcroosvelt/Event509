@@ -2196,5 +2196,7 @@
   "Taux de change": "Exchange rate",
   "Le site gère deux monnaies : la gourde (HTG) et le dollar américain (USD). Le taux est mis à jour automatiquement chaque jour : vous n’avez rien à régler. Le paiement est toujours prélevé en gourdes ; les commandes déjà passées ne changent pas.": "The site handles two currencies: the gourde (HTG) and the US dollar (USD). The rate is updated automatically every day: there is nothing to set. Payment is always charged in gourdes; existing orders do not change.",
   "1 USD = {rate} HTG": "1 USD = {rate} HTG",
-  "Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.": "Billed in US dollars. Payment is charged in gourdes at today's rate."
+  "Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.": "Billed in US dollars. Payment is charged in gourdes at today's rate.",
+  "La version native n’a pas pu s’ouvrir. Réessayez.": "The native version could not open. Try again.",
+  "Ouvrir la version native (bêta)": "Open the native version (beta)"
 }

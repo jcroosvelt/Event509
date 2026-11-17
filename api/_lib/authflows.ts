@@ -437,6 +437,18 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (n) await notifySecurity(user.id, 'Sessions fermées', [`${n} autre(s) session(s) ont été fermées sur votre compte EVENT509.`]);
     return { revoked: n };
   };
+  /**
+   * Application Android native : à partir d'une session de la WebView, ouvre une session distincte (révocable depuis la page
+   * Sécurité) dont le secret est remis à l'application, qui l'enverra elle-même avec chaque requête. Aucune nouvelle connexion Google.
+   */
+  const nativeSession: Handler = async (c) => {
+    const { user, session } = needSession(c);
+    if (session.limited) fail(403, 'Complétez votre profil pour continuer.', 'profile_incomplete');
+    if (c.ip) await d.rateLimit(`nativesess:${user.id}`, 10, 60);
+    const s = await createSession(user.id, { method: 'app', userAgent: c.userAgent, ip: c.ip });
+    await logSecurity(user.id, 'native_session', { device: deviceLabel(c.userAgent) }, c.ip);
+    return { token: s.token };
+  };
   const logout: Handler = async (c) => {
     if (c.session) await db().query(`update auth_sessions set revoked_at = now() where id_hash = $1`, [c.session.id_hash]);
     // Ancien jeton (JWT sans état) : la déconnexion le rend inutilisable, en même temps que les autres anciens jetons du compte
@@ -815,6 +827,7 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     ['DELETE', '/auth/sessions/:id', sessionRevoke],
     ['POST', '/auth/sessions/revoke-others', sessionsRevokeOthers],
     ['POST', '/auth/logout', logout],
+    ['POST', '/auth/app/native-session', nativeSession],
     ['POST', '/auth/reauth/passkey/options', reauthPasskeyOptions],
     ['POST', '/auth/reauth/passkey/verify', reauthPasskeyVerify],
     ['POST', '/auth/reauth/recovery-code', reauthCode],

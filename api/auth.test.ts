@@ -791,6 +791,32 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect((await wv.call('GET', '/auth/app/ready', undefined, { query: { verifier } })).body).toEqual({ ready: false });
   });
 
+  it('17e. application native : une session distincte, révocable, ouverte depuis une session existante', async () => {
+    const { b, id } = await newAccount();
+    // Sans session, ou sans la protection CSRF : refusé
+    expect((await new Browser().call('POST', '/auth/app/native-session', {})).status).toBe(401);
+    expect((await b.call('POST', '/auth/app/native-session', {}, { csrf: false })).status).toBe(403);
+    const r = await b.call('POST', '/auth/app/native-session', {}, { origin: 'https://evil.example' });
+    expect(r.status).toBe(403);
+    const ok = await b.call('POST', '/auth/app/native-session', {});
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const token = ok.body.token as string;
+    expect(token.length).toBeGreaterThan(30);
+    // L'application envoie ce secret comme cookie de session : même compte, et la session apparaît dans la liste
+    const app = new Browser('EVENT509-native');
+    app.jar.set('e509_session', token);
+    const me = await app.call('GET', '/auth/me');
+    expect(me.status).toBe(200);
+    expect(me.body.id).toBe(id);
+    const list = await b.call('GET', '/auth/sessions');
+    expect(JSON.stringify(list.body)).toContain('"method":"app"');
+    // Le jeton n'est écrit dans aucun journal
+    expect(JSON.stringify((await pool.query(`select detail from security_events where user_id = $1`, [id])).rows)).not.toContain(token);
+    // Fermer les autres sessions ferme aussi la session native
+    await b.call('POST', '/auth/sessions/revoke-others');
+    expect((await app.call('GET', '/auth/me')).status).toBe(401);
+  });
+
   it('17b. protections : CSRF, réauthentification, droits, profil incomplet, anciens comptes', async () => {
     const { b, id } = await newAccount();
     // CSRF : sans l'en-tête personnalisé, ou depuis un autre site, une action modifiant des données est refusée
