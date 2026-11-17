@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-17 : URGENT corrigé : `assetlinks.json` ne déclare plus que l'application ouvre tous les liens du site (`handle_all_urls` retiré, seules les passkeys restent) ; avec l'application, les pages du site ouvertes dans le navigateur revenaient à l'application en boucle.
 - 2026-11-17 : APK 1.0.39 publié : si la fenêtre Google du téléphone se referme sans compte (« Connexion annulée » en 1.0.38), le navigateur prend toujours le relais ; la raison donnée par Google est affichée.
 - 2026-11-17 : APK 1.0.38 publié : connexion Google par la fenêtre native du téléphone (repli automatique sur le navigateur) ; à activer côté Google : identifiant client Android (paquet + SHA-1, voir docs de l'application).
 - 2026-11-17 : nouvelle route `POST /auth/google/app-token` : connexion Google de l'application par la fenêtre Google native du téléphone (jeton d'identité vérifié : signature, émetteur, destinataire, expiration, nonce ; mêmes règles que la connexion par le navigateur). Test 21g. Nécessite, côté Google, un identifiant client de type Android (nom du paquet + empreinte SHA-1) dans le même projet que l'identifiant Web.
