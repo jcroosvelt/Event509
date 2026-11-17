@@ -3,15 +3,20 @@
 
 /** Monnaie de comptabilité : les prix et les finances restent en gourdes (HTG) ou en dollars (USD). */
 export type Currency = 'HTG' | 'USD';
-/** Principales devises proposées à l'acheteur (copie de src/types.ts ; un test vérifie qu'elles concordent). */
-export const DISPLAY_CURRENCIES = ['HTG', 'USD', 'EUR', 'GBP', 'CAD', 'CHF', 'JPY', 'CNY', 'AUD', 'MXN', 'BRL', 'DOP'] as const;
+/** Deux devises seulement : la gourde et le dollar américain (copie de src/types.ts ; un test vérifie qu'elles concordent). */
+export const DISPLAY_CURRENCIES = ['HTG', 'USD'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export const isDisplayCurrency = (v: unknown): v is DisplayCurrency => typeof v === 'string' && (DISPLAY_CURRENCIES as readonly string[]).includes(v);
 
-/** Taux de départ : gourdes (HTG) pour 1 unité. L'administrateur les règle, ils sont relus depuis la base. */
-export const DEFAULT_RATES: Record<DisplayCurrency, number> = {
-  HTG: 1, USD: 132, EUR: 145, GBP: 168, CAD: 96, CHF: 150, JPY: 0.88, CNY: 18.2, AUD: 86, MXN: 7.2, BRL: 24, DOP: 2.2,
-};
+/**
+ * Monnaie de facturation des services de la plateforme (abonnement, boost) : un organisateur établi hors d'Haïti est facturé en
+ * dollars américains, comme sur toute plateforme internationale ; les autres en gourdes. Le paiement reste prélevé en gourdes
+ * au taux du jour. Pays inconnu : gourdes.
+ */
+export const billingCurrencyFor = (country: unknown): Currency => (typeof country === 'string' && /^[A-Za-z]{2}$/.test(country) && country.toUpperCase() !== 'HT' ? 'USD' : 'HTG');
+
+/** Taux de départ : gourdes (HTG) pour 1 dollar. Personne ne le règle à la main : il est mis à jour chaque jour automatiquement (voir `updateMarketRate`). */
+export const DEFAULT_RATES: Record<DisplayCurrency, number> = { HTG: 1, USD: 132 };
 export const RATES: Record<DisplayCurrency, number> = { ...DEFAULT_RATES };
 /** Taux du dollar (gourdes pour 1 dollar), gardé pour les calculs de finances. */
 export let USD_TO_HTG = RATES.USD;
@@ -23,7 +28,7 @@ export function setRates(next: Record<string, unknown>) {
   USD_TO_HTG = RATES.USD;
 }
 /** Devises sans centimes. */
-export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG' || c === 'JPY';
+export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG';
 
 export interface FeeSettings {
   percent: number;

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CalendarClock, Check, Download, Lock, RefreshCw } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
-import { dateShort, moneyRaw } from '@/lib/format';
+import { dateShort, moneyRaw, platformMoney } from '@/lib/format';
 import { getInvoice, getPremium, premiumAvailable, subscribePremium, type PremiumOverview } from '@/services/premium';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Badge, Button, Card, EmptyState, Field, Loading, PageHeader, Select, Table, Td, type Tone } from '@/components/ui';
@@ -111,7 +111,8 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
       {c.enabled && (
         <Card>
           <h2 className="font-bold">{ov.subscriptionActive ? t('Renouveler pour une année de plus') : t('Souscrire pour l’année')}</h2>
-          <p className="mt-3 text-3xl font-extrabold">{moneyRaw(c.yearlyPrice, 'HTG', lang)}<span className="text-sm font-semibold text-ink-muted"> / {t('an')}</span></p>
+          <p className="mt-3 text-3xl font-extrabold">{platformMoney(c.yearlyPrice, ov.billingCurrency, lang)}<span className="text-sm font-semibold text-ink-muted"> / {t('an')}</span></p>
+          {ov.billingCurrency === 'USD' && <p className="mt-1 text-xs text-ink-muted">{t('Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.')}</p>}
           <p className="mt-1 text-sm text-ink-soft">{ov.subscriptionActive ? t('Un paiement prolonge votre abonnement d’une année à partir de sa date d’expiration.') : t('Un seul paiement pour toute l’année, sans prélèvement automatique.')}</p>
           {c.onlinePayment && (
             <div className="mt-4 max-w-xs">

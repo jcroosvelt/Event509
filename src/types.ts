@@ -3,7 +3,7 @@
 /** Monnaie de comptabilité : les prix et les finances restent en gourdes (HTG) ou en dollars (USD). */
 export type Currency = 'HTG' | 'USD';
 /** Principales devises du monde proposées à l'acheteur (affichage et conversion) ; les prix sont fixés en gourdes. */
-export const DISPLAY_CURRENCIES = ['HTG', 'USD', 'EUR', 'GBP', 'CAD', 'CHF', 'JPY', 'CNY', 'AUD', 'MXN', 'BRL', 'DOP'] as const;
+export const DISPLAY_CURRENCIES = ['HTG', 'USD'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export const isDisplayCurrency = (v: unknown): v is DisplayCurrency => typeof v === 'string' && (DISPLAY_CURRENCIES as readonly string[]).includes(v);
 export type Lang = 'fr' | 'en';

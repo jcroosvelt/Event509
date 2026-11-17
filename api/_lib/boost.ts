@@ -1,5 +1,6 @@
 import type { EventItem } from '../../src/types.js';
 import { all, db, one, tx, upsert } from './db.js';
+import { billingCurrencyFor } from './fees.js';
 import { newId } from './auth.js';
 import { sendNoticeEmail } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
@@ -84,10 +85,12 @@ export async function checkBoostPayment(id: string): Promise<PayStatus> {
 export function boostRoutes(h: PremiumDeps): [string, string, Handler][] {
   const { fail, str, admin, org, audit } = h;
 
-  const config: Handler = async () => {
+  const config: Handler = async (c0) => {
     const c = await getBoostConfig();
+    const orgId = c0.user?.organizer_id;
+    const billingCurrency = billingCurrencyFor(orgId ? (await one<{ c: string | null }>(`select data->>'country' as c from organizers where id = $1`, [orgId]))?.c : null);
     const used = await slotsUsed();
-    return { enabled: c.enabled, packages: c.packages, maxActive: c.maxActive, slotsLeft: Math.max(0, c.maxActive - used), onlinePayment: payConfigured() };
+    return { enabled: c.enabled, packages: c.packages, maxActive: c.maxActive, slotsLeft: Math.max(0, c.maxActive - used), onlinePayment: payConfigured(), billingCurrency };
   };
 
   const list: Handler = async (c) => {

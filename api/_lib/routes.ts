@@ -142,13 +142,49 @@ async function feeSettings(q: Q = db()): Promise<FeeSettings> {
   return { ...DEFAULT_FEES, ...stored };
 }
 let rateLoadedAt = 0;
-/** Relit le taux de change réglé par l'administrateur (au plus une fois toutes les 30 s par instance). */
-export async function refreshRate() {
-  if (Date.now() - rateLoadedAt < 30_000) return;
-  const r = await one<{ value: { usdToHtg?: number; rates?: Record<string, number> } }>(`select value from settings where key = 'rate'`);
-  // Départ : taux par défaut, puis ceux réglés par l'administrateur (l'ancien réglage ne contenait que le dollar)
-  setRates({ ...DEFAULT_RATES, ...(r?.value?.usdToHtg ? { USD: r.value.usdToHtg } : {}), ...(r?.value?.rates ?? {}) });
+let marketTried = 0;
+/** Plages acceptées pour un taux venu d'une source externe : une valeur absurde ou un saut brutal est ignoré (jamais crue sur parole). */
+export const RATE_MIN = 50;
+export const RATE_MAX = 1000;
+export const RATE_MAX_JUMP = 0.25;
+export const rateAccepted = (next: unknown, current: number) =>
+  typeof next === 'number' && Number.isFinite(next) && next >= RATE_MIN && next <= RATE_MAX && Math.abs(next - current) / current <= RATE_MAX_JUMP;
+
+/**
+ * Taux du jour (gourdes pour 1 dollar) lu auprès d'une source publique, sans clé ni réglage manuel. Gardé en base avec sa date ;
+ * en cas d'échec ou de valeur douteuse, le dernier taux connu reste en vigueur.
+ */
+export async function updateMarketRate(fetchFn: typeof fetch = fetch): Promise<{ updated: boolean; rate: number; reason?: string }> {
+  await refreshRate(true);
+  const current = RATES.USD;
+  try {
+    const res = await fetchFn(process.env.RATE_SOURCE_URL || 'https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(6000), redirect: 'error' });
+    if (!res.ok) return { updated: false, rate: current, reason: `source ${res.status}` };
+    const j = (await res.json()) as { result?: string; rates?: Record<string, unknown> };
+    const next = j.rates?.HTG;
+    if (j.result !== 'success' || typeof next !== 'number' || !rateAccepted(next, current)) return { updated: false, rate: current, reason: 'valeur refusée' };
+    const rate = Math.round(next * 100) / 100;
+    await upsert('settings', { key: 'rate', value: { usdToHtg: rate, rates: { USD: rate }, source: 'open.er-api.com', at: new Date().toISOString() } });
+    setRates({ USD: rate });
+    rateLoadedAt = Date.now();
+    return { updated: true, rate };
+  } catch (e) {
+    console.error('[taux]', (e as Error).message);
+    return { updated: false, rate: current, reason: 'source injoignable' };
+  }
+}
+
+/** Relit le taux enregistré (au plus une fois toutes les 30 s par instance) ; s'il date de plus de 2 jours, une mise à jour est tentée en arrière-plan. */
+export async function refreshRate(force = false) {
+  if (!force && Date.now() - rateLoadedAt < 30_000) return;
+  const r = await one<{ value: { usdToHtg?: number; rates?: Record<string, number>; at?: string } }>(`select value from settings where key = 'rate'`);
+  setRates({ ...DEFAULT_RATES, ...(r?.value?.usdToHtg ? { USD: r.value.usdToHtg } : {}) });
   rateLoadedAt = Date.now();
+  const age = r?.value?.at ? Date.now() - Date.parse(r.value.at) : Infinity;
+  if (!force && age > 2 * 86_400_000 && Date.now() - marketTried > 3_600_000) {
+    marketTried = Date.now();
+    void updateMarketRate().catch(() => {});
+  }
 }
 async function rateFor(orgId: string, q: Q = db()) {
   const r = await one<{ rate: string }>(`select rate from custom_commissions where organizer_id = $1`, [orgId], q);
@@ -1586,32 +1622,6 @@ const saveSite: Handler = async (c) => {
   return merged;
 };
 
-/**
- * Taux de change du site : combien de gourdes valent 1 unité de chaque devise (dollar, euro, livre…). Les prix restent
- * fixés en gourdes. Réservé à l'administrateur.
- */
-const saveRate: Handler = async (c) => {
-  admin(c);
-  const given = (typeof c.body.rates === 'object' && c.body.rates ? c.body.rates : {}) as Record<string, unknown>;
-  // Ancienne forme : { rate } = gourdes pour 1 dollar
-  if (c.body.rate !== undefined) given.USD = c.body.rate;
-  const next: Record<string, number> = {};
-  for (const [code, raw] of Object.entries(given)) {
-    if (code === 'HTG') continue;
-    if (!isDisplayCurrency(code)) fail(422, `Devise inconnue : ${code}`);
-    const v = Math.round(num(raw) * 10000) / 10000;
-    if (!Number.isFinite(v) || v < 0.001 || v > 100000) fail(422, `Taux invalide pour ${code} : indiquez le nombre de gourdes pour 1 ${code}`);
-    next[code] = v;
-  }
-  if (!Object.keys(next).length) fail(422, 'Aucun taux à enregistrer');
-  const rates = { ...RATES, ...next };
-  await upsert('settings', { key: 'rate', value: { usdToHtg: rates.USD, rates } });
-  setRates(rates);
-  rateLoadedAt = Date.now();
-  await audit(c, 'Taux de change modifiés', Object.entries(next).map(([k, v]) => `1 ${k} = ${v} HTG`).join(', '));
-  return { rates: { ...RATES } };
-};
-
 const saveFees: Handler = async (c) => {
   admin(c);
   const b = c.body as Partial<FeeSettings>;
@@ -2073,8 +2083,9 @@ const runReminders: Handler = async (c) => {
   const stale = await all<{ id: string }>(
     `select id from orders where status = 'pending' and data->>'method' = any($1) and created_at < now() - interval '2 hours'`, [[...ONLINE_METHODS]]);
   for (const o of stale) if ((await checkPayment(o.id)) === 'pending') await dropOrder(o.id);
+  const rate = await updateMarketRate().catch(() => null);
   const premium = await premiumMaintenance().catch((e) => (console.error('[premium] maintenance', e), null));
-  if (!pushConfigured()) return { sent: 0, premium, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
+  if (!pushConfigured()) return { sent: 0, premium, rate, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
   const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
   const now = Date.parse(`${nowLocal}Z`);
   const today = nowLocal.slice(0, 10);
@@ -2184,7 +2195,6 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['PUT', '/org/ambassadors', saveAmbassador],
 
   ['PUT', '/admin/fees', saveFees],
-  ['PUT', '/admin/rate', saveRate],
   ['GET', '/geo', getGeo],
   ['POST', '/app/announce', announceApp],
   ['GET', '/legal', getLegal],

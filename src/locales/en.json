@@ -1884,14 +1884,6 @@
   "Exemple donné dans le texte": "Example given in the text",
   "Signalement d’un double paiement (heures)": "Reporting a double payment (hours)",
   "Réponse du support à une demande (jours ouvrables)": "Support reply to a request (business days)",
-  "Taux de change enregistrés": "Exchange rates saved",
-  "Les taux n’ont pas pu être enregistrés.": "The rates could not be saved.",
-  "Taux invalide pour {code}": "Invalid rate for {code}",
-  "Taux de change (en gourdes)": "Exchange rates (in gourdes)",
-  "Les prix sont fixés en gourdes (HTG). Indiquez ce que vaut 1 unité de chaque devise en gourdes : l’application s’en sert pour afficher les prix dans la devise choisie par l’acheteur. Le paiement est toujours prélevé en gourdes. Les commandes déjà passées ne changent pas.": "Prices are set in gourdes (HTG). Enter what 1 unit of each currency is worth in gourdes: the app uses it to show prices in the currency chosen by the buyer. Payment is always charged in gourdes. Orders already placed do not change.",
-  "1 {code} = … gourdes": "1 {code} = … gourdes",
-  "Enregistrer les taux": "Save the rates",
-  "Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.": "Prices are set in gourdes: you will be charged {htg}, at today's rate.",
   "Position trouvée : les événements près de vous passent en premier": "Location found: events near you now come first",
   "Position introuvable. Autorisez la localisation ou choisissez votre pays et votre ville.": "Location not found. Allow location access or choose your country and city.",
   "Préférences enregistrées": "Preferences saved",
@@ -2200,5 +2192,9 @@
   "+ Ajouter une question (facultatif, jusqu’à 3)": "+ Add a question (optional, up to 3)",
   "Question : 8 caractères au moins. Réponse : 3 caractères au moins.": "Question: at least 8 characters. Answer: at least 3 characters.",
   "{n} configurée(s)": "{n} set up",
-  "Cette question vous aidera à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.": "This question will help prove you own the account if you lose access to Google. Write your own question about something only you know. Avoid your date of birth, family name, address, parents or anything visible on social networks. Your answers are protected and will never be shown again."
+  "Cette question vous aidera à prouver que vous êtes bien le propriétaire du compte si vous perdez l’accès à Google. Écrivez vos propres questions, sur des informations que vous seul connaissez. Évitez la date de naissance, le nom de famille, l’adresse, vos parents ou tout ce qui est visible sur les réseaux sociaux. Vos réponses sont protégées et ne seront plus jamais affichées.": "This question will help prove you own the account if you lose access to Google. Write your own question about something only you know. Avoid your date of birth, family name, address, parents or anything visible on social networks. Your answers are protected and will never be shown again.",
+  "Taux de change": "Exchange rate",
+  "Le site gère deux monnaies : la gourde (HTG) et le dollar américain (USD). Le taux est mis à jour automatiquement chaque jour : vous n’avez rien à régler. Le paiement est toujours prélevé en gourdes ; les commandes déjà passées ne changent pas.": "The site handles two currencies: the gourde (HTG) and the US dollar (USD). The rate is updated automatically every day: there is nothing to set. Payment is always charged in gourdes; existing orders do not change.",
+  "1 USD = {rate} HTG": "1 USD = {rate} HTG",
+  "Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.": "Billed in US dollars. Payment is charged in gourdes at today's rate."
 }

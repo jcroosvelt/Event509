@@ -282,19 +282,20 @@ test.describe('pages légales', () => {
 });
 
 test.describe('devises', () => {
-  test('l’acheteur choisit une devise du monde ; les prix suivent, et le paiement reste en gourdes', async ({ page }) => {
+  test('l’acheteur choisit gourde ou dollar américain (seules devises) ; les prix suivent, et le paiement reste en gourdes', async ({ page }) => {
     await fresh(page, '/compte/parametres');
-    await page.locator('#contenu').getByLabel(/^(Devise|Currency)$/).selectOption('EUR');
+    await page.locator('#contenu').getByLabel(/^(Devise|Currency)$/).selectOption('USD');
+    // Seules la gourde et le dollar américain sont proposés
+    await expect(page.locator('#contenu').getByLabel(/^(Devise|Currency)$/).locator('option')).toHaveText([/^HTG/, /^USD/]);
     await page.goto('/explorer');
-    await expect(page.getByText(/€\s?\d|\d\s?€/).first()).toBeVisible();
+    await expect(page.getByText(/\$\s?\d/).first()).toBeVisible();
 
-    // À la caisse, la devise se change aussi et une note rappelle que le prélèvement se fait en gourdes
+    // À la caisse, la devise se change aussi
     await page.goto('/e/festival-kompa-live-2026/achat?t=t1b:1');
     const caisse = page.locator('#contenu').getByLabel(/^(Devise|Currency)$/);
-    await expect(caisse).toHaveValue('EUR');
-    await expect(page.getByText(/débité de|charged/)).toBeVisible();
+    await expect(caisse).toHaveValue('USD');
     await caisse.selectOption('HTG');
-    await expect(page.getByText(/débité de|charged/)).toHaveCount(0);
+    await expect(caisse).toHaveValue('HTG');
   });
 });
 

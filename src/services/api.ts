@@ -1011,19 +1011,9 @@ export async function saveSiteInfo(next: SiteInfo) {
   audit('Réglages des documents légaux modifiés', Object.keys(next).join(', '));
 }
 
-/** Taux de change en vigueur : gourdes pour 1 unité de chaque devise. */
+/** Taux de change en vigueur : gourdes pour 1 dollar (mis à jour automatiquement par le serveur). */
 export function currentExchangeRates(): Record<DisplayCurrency, number> {
   return { ...RATES };
-}
-/** Réservé à l'administrateur : fixe les taux de change du site (gourdes pour 1 unité de chaque devise). */
-export async function saveExchangeRates(rates: Partial<Record<DisplayCurrency, number>>) {
-  if (!DEMO) {
-    const r = await http<{ rates: Partial<Record<DisplayCurrency, number>> }>('/admin/rate', { method: 'PUT', body: JSON.stringify({ rates }) });
-    return void setRates(r.rates);
-  }
-  await wait(200);
-  setRates(rates);
-  audit('Taux de change modifiés', Object.entries(rates).map(([k, v]) => `1 ${k} = ${v} HTG`).join(', '));
 }
 export async function listCustomCommissions() {
   if (!DEMO) return http<typeof db.customCommissions>('/admin/commissions');

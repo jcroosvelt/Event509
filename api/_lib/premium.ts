@@ -2,6 +2,7 @@ import type {
   PremiumBenefit, PremiumConfig, PremiumPayment, PremiumSubscription, VerificationApplication, VerificationLogEntry, VerificationRequest, VerificationStatus,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
+import { billingCurrencyFor } from './fees.js';
 import { newId } from './auth.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { claimOnce, notifyUsers, organizerUserIds } from './push.js';
@@ -258,6 +259,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const o = await one<{ v: boolean; since: string | null }>(`select (data->>'verified')::boolean as v, data->>'verifiedSince' as since from organizers where id = $1`, [orgId]);
     return {
       config: { ...(await publicConfig(c) as object) },
+      billingCurrency: billingCurrencyFor((await one<{ c: string | null }>(`select data->>'country' as c from organizers where id = $1`, [orgId]))?.c),
       request: req && {
         status: req.status, note: req.data.note ?? null, application: req.data.application ?? {}, submittedAt: req.data.submittedAt,
         approvedAt: req.data.approvedAt ?? null, appeal: req.data.appeal ?? null,

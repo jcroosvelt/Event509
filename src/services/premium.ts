@@ -20,6 +20,8 @@ export interface PremiumOverview {
   };
   subscription: PremiumSubscription | null;
   subscriptionActive: boolean;
+  /** Monnaie de facturation : dollars américains hors d'Haïti, gourdes sinon. */
+  billingCurrency?: 'HTG' | 'USD';
   payments: PremiumPayment[];
   verified: boolean;
   verifiedSince: string | null;
@@ -123,7 +125,7 @@ export const getFinance = (from: string, to: string) => http<FinanceData>(`/org/
 
 // Boost par événement
 export interface BoostConfig { enabled: boolean; packages: { days: number; price: number }[]; maxActive: number }
-export interface BoostPublicConfig extends BoostConfig { slotsLeft: number; onlinePayment: boolean }
+export interface BoostPublicConfig extends BoostConfig { slotsLeft: number; onlinePayment: boolean; billingCurrency?: 'HTG' | 'USD' }
 export interface OrgBoost { id: string; eventId: string; event: string; days: number; amount: number; state: 'pending' | 'active' | 'ended' | 'canceled' | 'failed'; method: 'online' | 'transfer'; createdAt: string; startsAt: string | null; endsAt: string | null; views: number; orders: number; tickets: number }
 export const getBoostConfig = () => http<BoostPublicConfig>('/boost/config');
 export const listBoosts = () => http<OrgBoost[]>('/org/boosts');

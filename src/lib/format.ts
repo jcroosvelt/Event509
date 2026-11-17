@@ -1,12 +1,10 @@
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
 /**
- * Taux de change : gourdes (HTG) pour 1 unité de chaque devise. Les prix sont fixés en gourdes ; l'administrateur règle
- * ces taux (Administration > Commissions) et le serveur les transmet. Les valeurs ci-dessous servent de départ.
+ * Taux de change : gourdes (HTG) pour 1 dollar. Les prix sont fixés en gourdes ; le taux est mis à jour chaque jour
+ * automatiquement par le serveur, qui le transmet. La valeur ci-dessous sert de départ.
  */
-export const DEFAULT_RATES: Record<DisplayCurrency, number> = {
-  HTG: 1, USD: 132, EUR: 145, GBP: 168, CAD: 96, CHF: 150, JPY: 0.88, CNY: 18.2, AUD: 86, MXN: 7.2, BRL: 24, DOP: 2.2,
-};
+export const DEFAULT_RATES: Record<DisplayCurrency, number> = { HTG: 1, USD: 132 };
 export const RATES: Record<DisplayCurrency, number> = { ...DEFAULT_RATES };
 /** Taux du dollar (gourdes pour 1 dollar), gardé pour les calculs de finances. */
 export let USD_TO_HTG = RATES.USD;
@@ -21,7 +19,7 @@ export function setUsdToHtg(n: number) {
   setRates({ USD: n });
 }
 /** Devises sans centimes. */
-export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG' || c === 'JPY';
+export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG';
 
 const locale = (lang: Lang) => (lang === 'en' ? 'en-US' : 'fr-FR');
 
@@ -33,6 +31,11 @@ export function convert(amount: number, from: DisplayCurrency, to: DisplayCurren
 export function money(amount: number, currency: DisplayCurrency, lang: Lang = 'fr') {
   if (amount === 0) return lang === 'en' ? 'Free' : 'Gratuit';
   return moneyRaw(amount, currency, lang);
+}
+
+/** Prix d'un service de la plateforme (fixé en gourdes), affiché dans la monnaie de facturation de l'organisateur. */
+export function platformMoney(htg: number, billing: 'HTG' | 'USD' | undefined, lang: Lang = 'fr') {
+  return billing === 'USD' ? moneyRaw(Math.round(convert(htg, 'HTG', 'USD') * 100) / 100, 'USD', lang) : moneyRaw(htg, 'HTG', lang);
 }
 
 export function moneyRaw(amount: number, currency: DisplayCurrency, lang: Lang = 'fr') {

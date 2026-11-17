@@ -356,9 +356,6 @@ export default function Checkout() {
                 <dt className="font-bold">{t('Total')}</dt>
                 <dd className="text-2xl font-extrabold">{isFree ? t('Gratuit') : fmt(total)}</dd>
               </div>
-              {!isFree && currency !== 'HTG' && currency !== 'USD' && (
-                <p className="text-xs text-ink-muted">{t('Les prix sont fixés en gourdes : vous serez débité de {htg}, au taux du jour.', { htg: moneyRaw(Math.round(convert(total, currency, 'HTG')), 'HTG', lang) })}</p>
-              )}
             </dl>
             <Button type="submit" size="lg" className="mt-5 w-full" loading={paying}>
               {!paying && <Lock className="h-4 w-4" aria-hidden />}
