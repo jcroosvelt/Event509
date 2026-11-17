@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-17 : APK 1.0.37 publié : l'application propose elle-même les mises à jour (bandeau « Nouvelle version disponible »), numéro de version affiché dans le menu, étapes de la connexion Google affichées à l'écran ; parcours de connexion testé de bout en bout sur un faux serveur.
 - 2026-11-17 : la page Favoris est ouverte à tous (elle redirigeait les visiteurs sans compte vers la connexion, alors que les favoris sont gardés sur l'appareil) ; petit bouton « Installer » en haut à droite sur Android (hors application).
 - 2026-11-17 : APK 1.0.36 publié : espaces organisateur et administration comme le site (tableau de bord, menus, barres basses), onglet Explorer, lieu automatique, billets sans compte (e-mail), ajout au calendrier avec repli Google Agenda, barre du haut sans l'icône du site.
 - 2026-11-17 : APK 1.0.34 publié : design de l'application identique au site (couleurs, police, mode sombre, accueil, cartes, billets, barre du bas) ; débordements d'affichage corrigés grâce aux nouveaux tests d'écrans.
