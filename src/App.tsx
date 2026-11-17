@@ -5,7 +5,7 @@ import {
   FileText, LifeBuoy, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
-import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
+import { AppInstallPopup, AppUpdateBanner, NativeAutoOpen } from '@/components/AppInstall';
 import { RequireAuth, SessionWatcher } from '@/components/guards';
 import PublicLayout from '@/layouts/PublicLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
@@ -112,6 +112,7 @@ export default function App() {
       <SessionWatcher />
       <Toaster />
       <AppInstallPopup />
+      <NativeAutoOpen />
       <AppUpdateBanner />
       <Suspense fallback={<Loading />}>
         <Routes>

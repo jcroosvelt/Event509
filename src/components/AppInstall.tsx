@@ -205,6 +205,7 @@ export function NativeMenuLink({ className, children }: { className: string; chi
     setBusy(true);
     try {
       const r = await http<{ token: string }>('/auth/app/native-session', { method: 'POST', body: '{}' });
+      try { sessionStorage.removeItem('e509.native.off'); } catch { /* ignoré */ }
       postApp(`native:open:${r.token}`);
     } catch {
       toast(t('La version native n’a pas pu s’ouvrir. Réessayez.'), 'error');
@@ -217,4 +218,27 @@ export function NativeMenuLink({ className, children }: { className: string; chi
       {children(t('Ouvrir la version native (bêta)'))}
     </button>
   );
+}
+
+/**
+ * Dans l'application : à l'ouverture, l'utilisateur connecté arrive directement dans la version native (écrans Android).
+ * Une seule tentative par lancement, seulement depuis l'accueil (un lien ou une notification garde sa page), et jamais après
+ * un retour volontaire au site complet.
+ */
+export function NativeAutoOpen() {
+  const { user } = useApp();
+  useEffect(() => {
+    if (!inApp() || !user) return;
+    try {
+      if (sessionStorage.getItem('e509.native.off') || sessionStorage.getItem('e509.native.auto')) return;
+      if (location.pathname !== '/') return;
+      sessionStorage.setItem('e509.native.auto', '1');
+    } catch {
+      return;
+    }
+    void http<{ token: string }>('/auth/app/native-session', { method: 'POST', body: '{}' })
+      .then((r) => postApp(`native:open:${r.token}`))
+      .catch(() => {});
+  }, [user]);
+  return null;
 }
