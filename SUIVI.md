@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-17 : APK 1.0.36 publié : espaces organisateur et administration comme le site (tableau de bord, menus, barres basses), onglet Explorer, lieu automatique, billets sans compte (e-mail), ajout au calendrier avec repli Google Agenda, barre du haut sans l'icône du site.
 - 2026-11-17 : APK 1.0.34 publié : design de l'application identique au site (couleurs, police, mode sombre, accueil, cartes, billets, barre du bas) ; débordements d'affichage corrigés grâce aux nouveaux tests d'écrans.
 - 2026-11-11 : création du fichier de suivi.
 - 2026-11-11 : vérifié sur le site en ligne (compte et événement de test, supprimés ensuite) : achat sans compte, billets créés à l'achat, lien de commande qui rouvre les billets sans compte, mauvaise clé refusée ; le code livré ne contient aucune donnée fictive (81 fichiers examinés). L'email des billets ne part pas encore : `RESEND_API_KEY` et `MAIL_FROM` ne sont pas définis dans Vercel.
