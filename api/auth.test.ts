@@ -1154,4 +1154,52 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     process.env.GOOGLE_CLIENT_ID = id;
     void tokenCalls;
   });
+  // ---- 24. Versement : trois niveaux de sécurité
+
+  it('24. versement : identité récente + empreinte (passkey) + questions de sécurité, sinon refus', async () => {
+    const { b, id, user } = await newAccount();
+    const orgId = user.organizerId as string;
+    // Un solde disponible : un événement avec 2 billets vendus à 500 HTG
+    const ev = await b.call('PUT', '/org/events', {
+      title: 'Soirée test versement', description: 'Description de test', start: '2030-06-01T20:00:00', end: '2030-06-01T23:00:00', currency: 'HTG', status: 'draft', seated: false, maxPerPerson: 8,
+      venue: { name: 'Salle', address: 'Rue', city: 'Jacmel' }, categories: ['music'], images: [], tags: [],
+      tickets: [{ id: 't1', name: 'Standard', kind: 'paid', price: 500, quota: 20, sold: 0, salesStart: '2026-01-01T00:00:00', salesEnd: '2030-06-01T20:00:00', maxPerOrder: 5 }],
+    });
+    expect(ev.status, JSON.stringify(ev.body)).toBe(200);
+    await pool.query(`update events set data = jsonb_set(data, '{tickets,0,sold}', '2') where id = $1`, [ev.body.id]);
+    const body = { amount: 100, currency: 'HTG', method: 'moncash', destination: { name: 'Marie Claire', phone: '+50937000000' } };
+    const answers = qs3.map((q) => q.answer);
+    // Sans passkey enregistrée : refus, il faut en ajouter une
+    expect((await b.call('POST', '/org/payouts', { ...body, answers })).body.code).toBe('passkey_setup_required');
+    const auth = new Authenticator(RP, ORIGIN);
+    const o = await b.call('POST', '/auth/passkeys/register/options');
+    expect((await b.call('POST', '/auth/passkeys/register/verify', { challengeId: o.body.challengeId, response: auth.register(o.body.options.challenge), name: 'Téléphone' })).status).toBe(200);
+    const sign = async () => {
+      const ch = await b.call('POST', '/org/payouts/security');
+      expect(ch.status).toBe(200);
+      expect(ch.body.hasPasskey).toBe(true);
+      expect(ch.body.questions).toHaveLength(3);
+      expect(JSON.stringify(ch.body)).not.toMatch(/Moustache|answer_hash/);
+      return { challengeId: ch.body.passkey.challengeId, response: auth.assert(ch.body.passkey.options.challenge) };
+    };
+    // Niveau 1 : identité confirmée trop ancienne
+    await pool.query(`update auth_sessions set recent_auth_at = now() - interval '1 hour' where user_id = $1`, [id]);
+    expect((await b.call('POST', '/org/payouts', { ...body, answers, passkey: await sign() })).body.code).toBe('reauth_required');
+    await pool.query(`update auth_sessions set recent_auth_at = now() where user_id = $1`, [id]);
+    // Niveau 2 : pas d'empreinte, ou signature d'une autre clé
+    expect((await b.call('POST', '/org/payouts', { ...body, answers })).body.code).toBe('passkey_required');
+    const other = new Authenticator(RP, ORIGIN);
+    const ch = await b.call('POST', '/org/payouts/security');
+    expect((await b.call('POST', '/org/payouts', { ...body, answers, passkey: { challengeId: ch.body.passkey.challengeId, response: other.assert(ch.body.passkey.options.challenge) } })).body.code).toBe('passkey_required');
+    // Niveau 3 : mauvaises réponses
+    expect((await b.call('POST', '/org/payouts', { ...body, answers: ['x', 'y', 'z'], passkey: await sign() })).body.code).toBe('answers_invalid');
+    // Les trois niveaux : accepté, une seule fois par signature
+    const pk = await sign();
+    const ok = await b.call('POST', '/org/payouts', { ...body, answers, passkey: pk });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.status).toBe('requested');
+    expect((await b.call('POST', '/org/payouts', { ...body, answers, passkey: pk })).body.code).toBe('passkey_required');
+    expect(await events(id)).toEqual(expect.arrayContaining(['payout_denied', 'payout_requested']));
+    expect(Number((await pool.query(`select count(*) as n from payouts where organizer_id = $1`, [orgId])).rows[0].n)).toBe(1);
+  });
 });

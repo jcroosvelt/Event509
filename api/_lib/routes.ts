@@ -10,7 +10,10 @@ import { analyticsRoutes } from './analytics.js';
 import { consumeOtp, normalizePhone, otpConfigured, otpRoutes } from './otp.js';
 import { authFlowRoutes, hasGoogleIdentity } from './authflows.js';
 import { googleConfigured } from './google.js';
-import { createSession, isRecent, type SessionRow } from './session.js';
+import { createSession, isRecent, logSecurity, notifySecurity, type SessionRow } from './session.js';
+import { passkeyLoginOptions, verifyPasskeyLogin } from './webauthn.js';
+import { getQuestions, verifyAnswers } from './secrets.js';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import { Respond } from './respond.js';
 import { securityLog } from './seclog.js';
 import { boundedNumber, isProduction, safeWebUrl, unpaidAllowed } from './safety.js';
@@ -1527,9 +1530,51 @@ function checkDestination(method: Payout['method'], raw: unknown): Payout['desti
   return { name, phone };
 }
 
+/**
+ * Sécurité d'un versement : trois niveaux, tous vérifiés ici (jamais par l'écran seul).
+ * 1. Identité confirmée récemment (session confirmée depuis peu : Google, passkey ou code de récupération).
+ * 2. Empreinte digitale : signature passkey fraîche pour ce versement (le téléphone exige empreinte, visage ou code de l'appareil).
+ * 3. Réponses aux questions de sécurité du compte.
+ */
+const payoutChallenge: Handler = async (c) => {
+  const orgId = org(c, 'payouts');
+  const u = c.user!;
+  const passkeys = Number((await one<{ n: string }>(`select count(*) as n from webauthn_credentials where user_id = $1`, [u.id]))?.n ?? 0);
+  const questions = await getQuestions(u.id);
+  void orgId;
+  return {
+    recent: isRecent(c.session),
+    hasPasskey: passkeys > 0,
+    questions: questions.map((q) => ({ position: q.position, question: q.question })),
+    passkey: passkeys > 0 ? await passkeyLoginOptions('login') : null,
+  };
+};
+
+async function checkPayoutSecurity(c: Ctx) {
+  const u = c.user!;
+  if (c.ip) await rateLimit(`payout-sec:${u.id}`, 10, 60);
+  // 1. Identité confirmée récemment
+  if (!isRecent(c.session)) fail(403, 'Confirmez votre identité (niveau 1 sur 3) pour demander un versement.', 'reauth_required');
+  // 2. Empreinte digitale (passkey)
+  const pk = c.body.passkey as { challengeId?: unknown; response?: unknown } | undefined;
+  if (!(await one(`select 1 from webauthn_credentials where user_id = $1`, [u.id]))) fail(403, 'Ajoutez une passkey (empreinte digitale) dans Sécurité avant de demander un versement.', 'passkey_setup_required');
+  const v = pk && typeof pk.challengeId === 'string' && pk.response ? await verifyPasskeyLogin(pk.challengeId, pk.response as AuthenticationResponseJSON).catch(() => null) : null;
+  if (!v || v.userId !== u.id) {
+    await logSecurity(u.id, 'payout_denied', { level: 2 }, c.ip);
+    fail(403, 'Empreinte digitale non confirmée (niveau 2 sur 3).', 'passkey_required');
+  }
+  // 3. Questions de sécurité
+  if (!(await getQuestions(u.id)).length) fail(403, 'Définissez vos questions de sécurité dans Sécurité avant de demander un versement.', 'questions_setup_required');
+  if (!(await verifyAnswers(u.id, c.body.answers))) {
+    await logSecurity(u.id, 'payout_denied', { level: 3 }, c.ip);
+    fail(403, 'Réponses aux questions de sécurité incorrectes (niveau 3 sur 3).', 'answers_invalid');
+  }
+}
+
 const requestPayout: Handler = async (c) => {
   const orgId = org(c, 'payouts');
   requireVerified(c.user!);
+  await checkPayoutSecurity(c);
   const amount = num(c.body.amount);
   const currency = c.body.currency as Currency;
   const method = c.body.method as Payout['method'];
@@ -1542,6 +1587,8 @@ const requestPayout: Handler = async (c) => {
   if (priority && !(await benefitsFor(orgId)).includes('finance')) fail(403, 'Les retraits prioritaires sont réservés aux organisateurs vérifiés');
   const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}`, ...(priority ? { priority: true } : {}) };
   await upsert('payouts', { id: p.id, organizer_id: orgId, status: p.status, created_at: new Date().toISOString(), data: p });
+  await logSecurity(c.user!.id, 'payout_requested', { payout: p.id, amount, currency, method }, c.ip);
+  await notifySecurity(c.user!.id, 'Demande de versement', [`Une demande de versement de ${amount} ${currency} vers ${method} vient d’être faite depuis votre compte.`, 'Si ce n’est pas vous, changez immédiatement vos accès et contactez Event509.']).catch(() => {});
   return p;
 };
 
@@ -2216,6 +2263,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/org/payouts', listPayouts],
   ['POST', '/org/payouts', requestPayout],
   ['GET', '/org/balance', balance],
+  ['POST', '/org/payouts/security', payoutChallenge],
   ['GET', '/org/campaigns', listCampaigns],
   ['PUT', '/org/campaigns', saveCampaign],
   ['GET', '/org/ambassadors', listAmbassadors],

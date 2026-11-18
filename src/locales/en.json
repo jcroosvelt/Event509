@@ -2204,5 +2204,12 @@
   "Aucune demande de remboursement": "No refund requests",
   "Vos demandes apparaîtront ici avec leur décision.": "Your requests will appear here with their decision.",
   "demandé le {date}": "requested on {date}",
-  "Accepté": "Approved"
+  "Accepté": "Approved",
+  "Ajoutez d’abord une passkey (empreinte digitale) dans Sécurité.": "First add a passkey (fingerprint) in Security.",
+  "Choisissez d’abord vos questions de sécurité dans Sécurité.": "First choose your security questions in Security.",
+  "Réponses incorrectes. Réessayez.": "Incorrect answers. Try again.",
+  "Empreinte non confirmée. Recommencez.": "Fingerprint not confirmed. Start again.",
+  "Pour éviter les fraudes, un versement demande 3 vérifications : identité récente, empreinte digitale (passkey) et vos questions de sécurité.": "To prevent fraud, a payout requires 3 checks: recent identity confirmation, fingerprint (passkey) and your security questions.",
+  "Ouvrir Sécurité": "Open Security",
+  "Empreinte confirmée. Dernière étape : vos questions de sécurité.": "Fingerprint confirmed. Last step: your security questions."
 }

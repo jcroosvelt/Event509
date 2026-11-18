@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Download, Smartphone, Wallet } from 'lucide-react';
-import { DEMO, getBalance, listPayouts, requestPayout } from '@/services/api';
+import { Link } from 'react-router-dom';
+import { DEMO, getBalance, listPayouts, payoutSecurity, requestPayout, type PayoutProof } from '@/services/api';
+import { ApiError } from '@/lib/errors';
+import { getPasskeyAssertion, passkeyCancelled } from '@/lib/webauthn';
+import ReauthModal from '@/components/ReauthModal';
 import { organizers } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { load, persist, useApp } from '@/store/app';
@@ -39,6 +43,12 @@ export default function Payouts() {
   // Avantage « finance » : demande prioritaire (traitée en premier, toujours validée par l'administration)
   const canPriority = !DEMO && !!organizers.find((o) => o.id === orgOf(user))?.perks?.includes('finance');
   const [priority, setPriority] = useState(false);
+  // Sécurité du versement : 1. identité récente, 2. empreinte (passkey), 3. questions
+  const [reauth, setReauth] = useState(false);
+  const [questions, setQuestions] = useState<{ position: number; question: string }[] | null>(null);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [passkey, setPasskey] = useState<PayoutProof['passkey'] | null>(null);
+  const [setup, setSetup] = useState<string | null>(null);
   const empty: Last = { method: 'moncash', name: '', phone: '', email: '' };
   // La dernière destination utilisée est proposée de nouveau, mais reste modifiable
   const last = load<Last>(lastKey(orgId), empty);
@@ -57,24 +67,59 @@ export default function Payouts() {
   const b = balance[cur];
   const m = req.values.method as Payout['method'];
 
-  const askPayout = async () => {
-    if (!req.validate()) return;
+  const form = () => {
+    if (!req.validate()) return null;
     const amount = Number(req.values.amount);
-    if (amount > b.balance) return req.setErrors({ amount: t('Le montant dépasse votre solde disponible ({max})', { max: moneyRaw(b.balance, cur, lang) }) });
+    if (amount > b.balance) { req.setErrors({ amount: t('Le montant dépasse votre solde disponible ({max})', { max: moneyRaw(b.balance, cur, lang) }) }); return null; }
     const destination = m === 'paypal' ? { email: req.values.email.trim() } : { name: req.values.name.trim(), phone: req.values.phone.trim() };
+    return { amount, destination };
+  };
+
+  // Étapes 1 et 2 : identité récente puis empreinte digitale (passkey)
+  const secure = async () => {
+    if (!form()) return;
+    if (DEMO) return send();
     setBusy(true);
     try {
-      await requestPayout(orgId, amount, cur, m, destination, priority);
-      persist(lastKey(orgId), { method: m, name: req.values.name, phone: req.values.phone, email: req.values.email });
-      setReqOpen(false);
-      toast(t('Demande envoyée : Event509 la valide sous 24 h, puis envoie l’argent à la destination indiquée'));
-      reload();
-    } catch {
-      toast(t('La demande n’a pas pu être envoyée. Vérifiez les informations et réessayez.'), 'error');
+      const s = await payoutSecurity(orgId);
+      if (!s.hasPasskey) return setSetup(t('Ajoutez d’abord une passkey (empreinte digitale) dans Sécurité.'));
+      if (!s.questions.length) return setSetup(t('Choisissez d’abord vos questions de sécurité dans Sécurité.'));
+      if (!s.recent) return setReauth(true);
+      const response = await getPasskeyAssertion(s.passkey!.options);
+      setPasskey({ challengeId: s.passkey!.challengeId, response });
+      setAnswers(s.questions.map(() => ''));
+      setQuestions(s.questions);
+    } catch (e) {
+      if (!passkeyCancelled(e)) toast(t('Vérification impossible. Réessayez.'), 'error');
     } finally {
       setBusy(false);
     }
   };
+
+  // Étape 3 : réponses aux questions, puis envoi de la demande
+  const send = async () => {
+    const f = form();
+    if (!f) return;
+    setBusy(true);
+    try {
+      await requestPayout(orgId, f.amount, cur, m, f.destination, priority, passkey ? { passkey, answers } : undefined);
+      persist(lastKey(orgId), { method: m, name: req.values.name, phone: req.values.phone, email: req.values.email });
+      setReqOpen(false);
+      setQuestions(null);
+      setPasskey(null);
+      toast(t('Demande envoyée : Event509 la valide sous 24 h, puis envoie l’argent à la destination indiquée'));
+      reload();
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : '';
+      if (code === 'answers_invalid') toast(t('Réponses incorrectes. Réessayez.'), 'error');
+      else if (code === 'reauth_required') { setQuestions(null); setReauth(true); }
+      else if (code === 'passkey_required') { setQuestions(null); toast(t('Empreinte non confirmée. Recommencez.'), 'error'); }
+      else toast(t('La demande n’a pas pu être envoyée. Vérifiez les informations et réessayez.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const askPayout = () => (questions ? send() : secure());
 
   return (
     <div>
@@ -86,7 +131,7 @@ export default function Payouts() {
           <h2 className="text-sm font-semibold text-ink-soft">{t('Solde disponible')}</h2>
           <div className="mt-1 text-4xl font-extrabold tracking-tight">{moneyRaw(b.balance, cur, lang)}</div>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Button onClick={() => { req.reset({ amount: String(Math.floor(b.balance)), method: last.method, name: last.name, phone: last.phone, email: last.email }); setReqOpen(true); }} disabled={b.balance < 1}>{t('Demander un versement')}</Button>
+            <Button onClick={() => { setQuestions(null); setPasskey(null); setSetup(null); req.reset({ amount: String(Math.floor(b.balance)), method: last.method, name: last.name, phone: last.phone, email: last.email }); setReqOpen(true); }} disabled={b.balance < 1}>{t('Demander un versement')}</Button>
             {b.balance < 1 && <span className="text-sm text-ink-soft">{t('Aucun solde à verser pour l’instant.')}</span>}
           </div>
         </div>
@@ -132,7 +177,24 @@ export default function Payouts() {
         )}
       </Card>
 
-      <Modal open={reqOpen} onClose={() => setReqOpen(false)} title={t('Demander un versement')} description={t('Disponible : {max}', { max: moneyRaw(b.balance, cur, lang) })} size="sm" footer={<Button className="flex-1" onClick={askPayout} loading={busy}>{t('Confirmer')}</Button>}>
+      <Modal open={reqOpen} onClose={() => setReqOpen(false)} title={t('Demander un versement')} description={t('Disponible : {max}', { max: moneyRaw(b.balance, cur, lang) })} size="sm" footer={<Button className="flex-1" onClick={() => void askPayout()} loading={busy} disabled={!!questions && answers.some((a) => !a.trim())}>{questions ? t('Envoyer la demande') : t('Continuer')}</Button>}>
+        <p className="mb-4 rounded-2xl bg-canvas p-3 text-xs text-ink-soft">{t('Pour éviter les fraudes, un versement demande 3 vérifications : identité récente, empreinte digitale (passkey) et vos questions de sécurité.')}</p>
+        {setup && (
+          <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">
+            {setup} <Link to="/compte/securite" className="font-bold underline">{t('Ouvrir Sécurité')}</Link>
+          </div>
+        )}
+        {questions ? (
+          <form noValidate onSubmit={(e) => { e.preventDefault(); void send(); }} className="space-y-4">
+            <p className="text-sm font-semibold">{t('Empreinte confirmée. Dernière étape : vos questions de sécurité.')}</p>
+            {questions.map((q, i) => (
+              <Field key={q.position} label={q.question} required>
+                <Input autoComplete="off" value={answers[i] ?? ''} onChange={(e) => setAnswers((a) => a.map((x, j) => (j === i ? e.target.value : x)))} />
+              </Field>
+            ))}
+            <button type="submit" hidden />
+          </form>
+        ) : (
         <form noValidate onSubmit={(e) => { e.preventDefault(); void askPayout(); }} className="space-y-4">
           <Field label={t('Montant ({cur})', { cur })} error={req.errors.amount} required>
             <Input type="text" inputMode="decimal" autoComplete="off" {...req.bind('amount')} onChange={(e) => req.set('amount', cleanNumber(e.target.value, true))} />
@@ -160,7 +222,9 @@ export default function Payouts() {
           )}
           {canPriority && <Toggle checked={priority} onChange={setPriority} label={t('Demande prioritaire')} description={t('Traitée en premier, mais soumise aux mêmes contrôles financiers et délais de traitement.')} />}
         </form>
+        )}
       </Modal>
+      {reauth && <ReauthModal next="/organisateur/versements" onClose={() => setReauth(false)} onDone={() => { setReauth(false); void secure(); }} />}
     </div>
   );
 }

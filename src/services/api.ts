@@ -761,8 +761,13 @@ export async function getBalance(orgId: string) {
   return { HTG: by('HTG'), USD: by('USD'), buyerShare: feeSettings.buyerShare };
 }
 
-export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination'], priority = false) {
-  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination, priority }) });
+/** Versement : 3 niveaux (identité récente, passkey/empreinte, questions de sécurité). */
+export interface PayoutSecurity { recent: boolean; hasPasskey: boolean; questions: { position: number; question: string }[]; passkey: { options: unknown; challengeId: string } | null }
+export const payoutSecurity = (orgId: string) => http<PayoutSecurity>(`/org/payouts/security${orgQ(orgId)}`, { method: 'POST', body: '{}' });
+export interface PayoutProof { passkey: { challengeId: string; response: unknown }; answers: string[] }
+
+export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination'], priority = false, proof?: PayoutProof) {
+  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination, priority, ...proof }) });
   await wait(500);
   // La demande attend la validation de l'administration
   const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
