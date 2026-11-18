@@ -15,11 +15,12 @@ import { SeatMap } from '@/components/SeatMap';
 import { useSessionLabel } from '@/components/TicketCard';
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type PaymentMethod, type PromoCode } from '@/types';
 
+// La carte bancaire passe toujours en premier (choix par défaut) ; les autres moyens sont secondaires
 const methods: { id: PaymentMethod; label: string; sub: string; icon: typeof CreditCard; color: string; logo?: string }[] = [
+  { id: 'card', label: 'Carte bancaire', sub: 'Visa, Mastercard, Amex', icon: CreditCard, color: 'bg-brand-50 text-brand-ink' },
   { id: 'moncash', label: 'MonCash', sub: 'Paiement mobile Digicel', icon: Smartphone, color: 'bg-red-50 text-red-600', logo: '/pay/moncash.png' },
   { id: 'natcash', label: 'NatCash', sub: 'Paiement mobile Natcom', icon: Smartphone, color: 'bg-orange-50 text-orange-500', logo: '/pay/natcash.png' },
   { id: 'kashpaw', label: 'KashPaw', sub: 'Paiement mobile', icon: Smartphone, color: 'bg-yellow-50 text-yellow-600', logo: '/pay/kashpaw.png' },
-  { id: 'card', label: 'Carte bancaire', sub: 'Visa, Mastercard, Amex', icon: CreditCard, color: 'bg-brand-50 text-brand-ink' },
   { id: 'paypal', label: 'PayPal', sub: 'Compte PayPal ou carte', icon: Wallet, color: 'bg-sky-50 text-sky-600' },
   { id: 'transfer', label: 'Virement bancaire', sub: 'Validation sous 24–48 h', icon: Building2, color: 'bg-emerald-50 text-emerald-600' },
 ];
@@ -52,7 +53,7 @@ export default function Checkout() {
   const [currency, setCurrency] = useState<DisplayCurrency>(app.currency);
   const [seats, setSeats] = useState<Record<string, string[]>>({});
   const [activeLine, setActiveLine] = useState<string>('');
-  const [method, setMethod] = useState<PaymentMethod>('moncash');
+  const [method, setMethod] = useState<PaymentMethod>('card');
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<PromoCode | null>(null);
   const [promoErr, setPromoErr] = useState('');
