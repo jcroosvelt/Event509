@@ -3,6 +3,13 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/app/event509.apk",
+      "destination": "https://github.com/jcroosvelt/Event509/releases/latest/download/event509.apk",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/app/event509.apk",
