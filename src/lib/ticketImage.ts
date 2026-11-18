@@ -25,8 +25,8 @@ export interface TicketImageOpts {
 const W = 1920;
 const H = 700;
 const SCALE = 2; // 3840 × 1400
-const NAVY = '#0B1533';
-const BLUE = '#1F5EFF';
+const NAVY = '#0C0640';
+const BLUE = '#1509F3';
 const FONT = '"Plus Jakarta Sans Variable", system-ui, sans-serif';
 
 export async function renderTicketBlob(o: TicketImageOpts): Promise<Blob> {
@@ -114,7 +114,7 @@ export async function renderTicketBlob(o: TicketImageOpts): Promise<Blob> {
   fit(ctx, o.price, px + 62, y0 + 116, 96, 28, 800);
   ctx.textAlign = 'left';
 
-  ctx.fillStyle = '#93B3FF';
+  ctx.fillStyle = '#9C97FF';
   ctx.font = `700 30px ${FONT}`;
   ctx.fillText(o.ticketName.toUpperCase(), px + 160, y0 + 78);
   ctx.fillStyle = '#FFFFFF';

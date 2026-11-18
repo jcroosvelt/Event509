@@ -322,7 +322,7 @@ function CheckIn({ eventId, title, start }: { eventId: string; title: string; st
               {camOn && !result && (
                 <>
                   <div aria-hidden className="pointer-events-none absolute inset-[12%] rounded-3xl border-4 border-white/80" />
-                  <div aria-hidden className="pointer-events-none absolute inset-x-[12%] h-0.5 animate-[scanline_2.4s_ease-in-out_infinite] bg-brand shadow-[0_0_12px_#1F5EFF]" />
+                  <div aria-hidden className="pointer-events-none absolute inset-x-[12%] h-0.5 animate-[scanline_2.4s_ease-in-out_infinite] bg-brand shadow-[0_0_12px_#1509F3]" />
                   <button type="button" onClick={() => { wantCam.current = false; setCamOn(false); }} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-white/90 text-navy" aria-label={t('Couper la caméra')}><CameraOff className="h-4 w-4" aria-hidden /></button>
                 </>
               )}

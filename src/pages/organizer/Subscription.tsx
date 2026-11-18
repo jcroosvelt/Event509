@@ -31,7 +31,7 @@ async function openInvoice(id: string, lang: 'fr' | 'en', t: (s: string) => stri
   const p = inv.payment;
   const date = dateShort(p.paidAt ?? p.createdAt, lang);
   const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>${esc(inv.number)}</title>
-<style>body{font-family:system-ui,Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#0B1533}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:24px}td,th{padding:10px 8px;border-bottom:1px solid #dde1ea;text-align:left}.r{text-align:right}.muted{color:#6E7689;font-size:13px}</style></head><body>
+<style>body{font-family:system-ui,Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#0C0640}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:24px}td,th{padding:10px 8px;border-bottom:1px solid #dde1ea;text-align:left}.r{text-align:right}.muted{color:#6E7689;font-size:13px}</style></head><body>
 <h1>Event509 — ${esc(t('Facture'))} ${esc(inv.number)}</h1>
 <p class="muted">${esc(t('Date'))} : ${esc(date)}<br>${esc(t('Client'))} : ${esc(inv.organization)}</p>
 <table><tr><th>${esc(t('Description'))}</th><th class="r">${esc(t('Montant'))}</th></tr>

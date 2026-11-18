@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
-import type { AppUser, Organizer, TeamMember, TeamRole } from '../../src/types.js';
-import { all, db, one, tx, upsert, type Q } from './db.js';
+import type { AppUser, TeamMember, TeamRole } from '../../src/types.js';
+import { all, db, one, tx, type Q } from './db.js';
 import { newId } from './auth.js';
 import { googleConfigured, finishGoogle, OAuthError, safeNext, startGoogle, verifyIdToken } from './google.js';
 import { normalizePhone } from './otp.js';
@@ -39,7 +39,6 @@ const OAUTH_COOKIE = 'e509_oauth';
 const RECOVERY_DELAY_HOURS = 48;
 const UNDO_HOURS = 72;
 
-const slugify = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'organisation';
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || 'E5';
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
 const maskEmail = (e: string) => {
@@ -55,7 +54,7 @@ function backToApp(query: string, cookies: string[]) {
   const url = `${APP_SCHEME}://auth?${query.replace(/[^A-Za-z0-9_=&-]/g, '')}`;
   return Respond.html(
     `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${url}"><title>EVENT509</title>` +
-      `<style>body{font-family:system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#F1F3F8;color:#0B1533;text-align:center;padding:24px}a{display:inline-block;margin-top:16px;background:#1F5EFF;color:#fff;padding:14px 28px;border-radius:999px;font-weight:700;text-decoration:none}</style></head>` +
+      `<style>body{font-family:system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#F2F2FA;color:#0C0640;text-align:center;padding:24px}a{display:inline-block;margin-top:16px;background:#1509F3;color:#fff;padding:14px 28px;border-radius:999px;font-weight:700;text-decoration:none}</style></head>` +
       `<body><main><h1>Retour dans EVENT509</h1><p>Si l’application ne s’ouvre pas toute seule, touchez le bouton.</p><a href="${url}">Ouvrir EVENT509</a></main></body></html>`,
     cookies,
   );
@@ -69,7 +68,7 @@ export async function hasGoogleIdentity(userId: string) {
 
 export function authFlowRoutes(d: AuthFlowDeps) {
   const { fail } = d;
-  const dest = (u: UserRow, next?: string | null) => next ?? (u.role === 'admin' ? '/admin' : u.organizer_id ? '/organisateur' : '/');
+  const dest = (u: UserRow, next?: string | null) => next ?? (u.role === 'admin' ? '/admin' : u.organizer_id ? '/organisateur' : '/compte');
 
   // ---------- Aides ----------
 
@@ -385,15 +384,13 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     const country = str(b.country, 10).toUpperCase();
     const city = str(b.city, 80);
     const username = str(b.username, 30).toLowerCase();
-    const orgName = str(b.orgName, 80);
     if (givenName.length < 1 || !/\p{L}/u.test(givenName)) fail(422, 'Indiquez votre prénom.', 'profile_invalid');
     if (familyName.length < 1 || !/\p{L}/u.test(familyName)) fail(422, 'Indiquez votre nom.', 'profile_invalid');
     if (!/^[A-Z]{2}$/.test(country)) fail(422, 'Choisissez votre pays.', 'profile_invalid');
     if (city.length < 2) fail(422, 'Indiquez votre ville.', 'profile_invalid');
     if (username && !/^[a-z0-9][a-z0-9_.-]{2,29}$/.test(username)) fail(422, 'Nom d’utilisateur : 3 à 30 caractères (lettres, chiffres, point, tiret, tiret bas).', 'profile_invalid');
-    // Type de compte : acheteur par défaut (aucune organisation) ; organisateur sur demande
-    const accountType = b.accountType === 'organizer' || (b.accountType === undefined && orgName) ? 'organizer' as const : 'buyer' as const;
-    return { givenName, familyName, country, city, username: username || null, orgName, accountType };
+    // Un seul type de compte : l'organisation se crée plus tard depuis le compte (POST /auth/organizer)
+    return { givenName, familyName, country, city, username: username || null };
   }
   function checkConsent(b: Record<string, unknown>) {
     if (b.acceptTerms !== true || b.acceptPrivacy !== true) fail(422, 'Acceptez les conditions d’utilisation et la politique de confidentialité.', 'consent_required');
@@ -432,21 +429,11 @@ export function authFlowRoutes(d: AuthFlowDeps) {
           organizerId = invite.organizer_id;
           perms = invite.data.perms ?? null;
           await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [pend.email]);
-        } else if (prof.accountType === 'buyer') {
-          // Compte acheteur : pas d'organisation (il pourra en créer une plus tard depuis son compte)
+        } else {
+          // Compte commun : pas d'organisation (il pourra en créer une depuis son compte)
           role = 'participant';
           teamRole = null;
           organizerId = null;
-        } else {
-          organizerId = newId('org');
-          const orgName = prof.orgName || name;
-          // Adresse de la page publique : unique ; en cas de conflit, un suffixe aléatoire (on réessaie jusqu'à trouver une adresse libre)
-          let slug = slugify(orgName);
-          for (let i = 0; i < 8 && (await one(`select 1 from organizers where slug = $1`, [slug], q)); i++) slug = `${slugify(orgName)}-${randomToken(4).toLowerCase().replace(/[^a-z0-9]/g, 'x')}`;
-          const o: Organizer = { id: organizerId, slug, name: orgName, verified: false, avatar: initials(orgName), followers: 0, eventsCount: 0, city: prof.city, country: prof.country, kind: 'individual' };
-          await upsert('organizers', { id: o.id, slug: o.slug, data: o }, q);
-          const mid = newId('m');
-          await upsert('team_members', { id: mid, organizer_id: o.id, email: pend.email, data: { id: mid, name, email: pend.email, role: 'admin', status: 'active' } satisfies TeamMember }, q);
         }
         const data = {
           name, avatar: initials(name), city: prof.city, country: prof.country, givenName: prof.givenName, familyName: prof.familyName,

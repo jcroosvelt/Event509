@@ -14,7 +14,7 @@ type BtnVariant = 'primary' | 'dark' | 'soft' | 'ghost' | 'outline' | 'danger' |
 const btnBase =
   'inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none';
 const btnVariants: Record<BtnVariant, string> = {
-  primary: 'bg-brand text-white hover:bg-brand-dark dark:hover:bg-brand/90',
+  primary: 'bg-brand-grad text-white hover:brightness-125',
   dark: 'bg-contrast text-on-contrast hover:opacity-90',
   soft: 'bg-brand-100 text-brand-dark hover:bg-brand-200',
   ghost: 'text-ink hover:bg-ink/5',
@@ -54,7 +54,7 @@ export function IconButton({
     white: 'bg-surface border border-line text-ink hover:border-ink/20',
     soft: 'bg-canvas text-ink hover:bg-line',
     dark: 'bg-contrast text-on-contrast',
-    brand: 'bg-brand text-white hover:bg-brand-dark',
+    brand: 'bg-brand-grad text-white hover:brightness-125',
   };
   return (
     <button type="button" aria-label={label} title={label} className={cx('relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition active:scale-95', tones[tone], className)} {...p}>
@@ -455,7 +455,7 @@ export function SparkLine({ values, className, stroke = 'rgb(var(--brand))' }: {
 export function Avatar({ name, src, size = 40, className }: { name: string; src?: string; size?: number; className?: string }) {
   const ini = name.length <= 3 ? name : name.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
   // Fonds assez foncés pour des initiales blanches lisibles (≥ 4,5:1)
-  const hues = ['#1A4FD6', '#0B1533', '#6342E0', '#0B7259', '#B8325A', '#94570A'];
+  const hues = ['#1509F3', '#0C0640', '#6342E0', '#0B7259', '#B8325A', '#94570A'];
   const bg = hues[name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % hues.length];
   return src ? (
     <img src={src} alt="" className={cx('shrink-0 rounded-full object-cover', className)} style={{ width: size, height: size }} />

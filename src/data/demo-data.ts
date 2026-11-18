@@ -9,10 +9,10 @@ import type {
 
 
 export const organizers: Organizer[] = [
-  { id: 'org1', slug: 'lakay-productions', bio: 'Concerts, festivals et soirées depuis 2012. Les plus grandes scènes kompa du pays.', website: 'https://lakay.ht', instagram: '@lakayprod', cover: 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)', name: 'Lakay Productions', verified: true, avatar: 'LP', followers: 12400, eventsCount: 38, city: 'Pétion-Ville' },
-  { id: 'org2', slug: 'tech-ayiti', bio: 'La communauté tech haïtienne : conférences, ateliers et formations.', website: 'https://techayiti.org', cover: 'linear-gradient(135deg, #7C5CFF 0%, #1F5EFF 100%)', name: 'Tech Ayiti', verified: true, avatar: 'TA', followers: 5300, eventsCount: 14, city: 'Port-au-Prince' },
+  { id: 'org1', slug: 'lakay-productions', bio: 'Concerts, festivals et soirées depuis 2012. Les plus grandes scènes kompa du pays.', website: 'https://lakay.ht', instagram: '@lakayprod', cover: 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)', name: 'Lakay Productions', verified: true, avatar: 'LP', followers: 12400, eventsCount: 38, city: 'Pétion-Ville' },
+  { id: 'org2', slug: 'tech-ayiti', bio: 'La communauté tech haïtienne : conférences, ateliers et formations.', website: 'https://techayiti.org', cover: 'linear-gradient(135deg, #7C5CFF 0%, #1509F3 100%)', name: 'Tech Ayiti', verified: true, avatar: 'TA', followers: 5300, eventsCount: 14, city: 'Port-au-Prince' },
   { id: 'org3', slug: 'jakmel-arts', bio: 'Artisans du papier mâché et organisateurs culturels de Jacmel.', cover: 'linear-gradient(135deg, #FF8A3D 0%, #E5487A 100%)', name: 'Jakmèl Arts Collectif', verified: false, avatar: 'JA', followers: 2100, eventsCount: 9, city: 'Jacmel' },
-  { id: 'org4', slug: 'saveurs-du-nord', bio: 'Dîners de chefs et festivals gastronomiques au Cap-Haïtien.', cover: 'linear-gradient(135deg, #0FA37F 0%, #0B1533 100%)', name: 'Saveurs du Nord', verified: true, avatar: 'SN', followers: 3900, eventsCount: 21, city: 'Cap-Haïtien' },
+  { id: 'org4', slug: 'saveurs-du-nord', bio: 'Dîners de chefs et festivals gastronomiques au Cap-Haïtien.', cover: 'linear-gradient(135deg, #0FA37F 0%, #0C0640 100%)', name: 'Saveurs du Nord', verified: true, avatar: 'SN', followers: 3900, eventsCount: 21, city: 'Cap-Haïtien' },
 ];
 
 const g = (a: string, b: string, c?: string) =>
@@ -31,7 +31,7 @@ export const events: EventItem[] = [
     id: 'e1', slug: 'festival-kompa-live-2026', title: 'Festival Kompa Live 2026',
     description:
       "Trois scènes, douze groupes et une nuit entière de kompa sous les étoiles. Le rendez-vous musical de fin d'année avec les meilleurs groupes du pays et de la diaspora. Restauration sur place, parking sécurisé et zone VIP avec vue sur la grande scène.",
-    cover: g('#1F5EFF', '#0B1533', '#0A0F24'), categories: ['music', 'party'],
+    cover: g('#1509F3', '#0C0640', '#0A0F24'), categories: ['music', 'party'],
     start: '2026-12-19T19:00:00', end: '2026-12-20T04:00:00',
     venue: { name: 'Parc Historique de la Canne à Sucre', address: 'Route de Tabarre', city: 'Port-au-Prince' },
     currency: 'HTG', organizerId: 'org1', status: 'published', seated: false, maxPerPerson: 8,
@@ -47,7 +47,7 @@ export const events: EventItem[] = [
     id: 'e2', slug: 'ayiti-tech-summit', title: 'Ayiti Tech Summit',
     description:
       "La conférence annuelle de l'écosystème tech haïtien : startups, investisseurs, développeurs et étudiants. Keynotes, ateliers pratiques, salon de l'emploi et concours de pitch avec 500 000 HTG à gagner.",
-    cover: g('#5B8CFF', '#1F5EFF', '#123AA8'), categories: ['conference', 'business', 'education'],
+    cover: g('#5A52FF', '#1509F3', '#0E0780'), categories: ['conference', 'business', 'education'],
     start: '2026-11-27T08:30:00', end: '2026-11-28T18:00:00',
     sessions: [
       { id: 's1', label: 'Jour 1 — Keynotes & panels', start: '2026-11-27T08:30:00', end: '2026-11-27T18:00:00' },
@@ -83,7 +83,7 @@ export const events: EventItem[] = [
   {
     id: 'e4', slug: 'nuit-gastronomique-cap', title: 'Nuit Gastronomique du Cap',
     description: "Six chefs, six plats, une soirée. Menu dégustation autour des produits du Nord, accords rhum et live jazz créole.",
-    cover: g('#0FA37F', '#0B6B60', '#0B1533'), categories: ['food'],
+    cover: g('#0FA37F', '#0B6B60', '#0C0640'), categories: ['food'],
     start: '2026-12-05T19:30:00', end: '2026-12-05T23:30:00',
     venue: { name: 'Hôtel Roi Christophe', address: 'Rue 24-B', city: 'Cap-Haïtien' },
     currency: 'USD', organizerId: 'org4', status: 'published', seated: true, maxPerPerson: 4,
@@ -94,7 +94,7 @@ export const events: EventItem[] = [
   {
     id: 'e5', slug: 'tournoi-foot-quartiers', title: 'Tournoi des Quartiers — Finale',
     description: "La finale du tournoi inter-quartiers. Animations, DJ à la mi-temps et remise des trophées.",
-    cover: g('#22C55E', '#15803D', '#0B1533'), categories: ['sport'],
+    cover: g('#22C55E', '#15803D', '#0C0640'), categories: ['sport'],
     start: '2026-11-22T15:00:00', end: '2026-11-22T19:00:00',
     venue: { name: 'Stade Sylvio Cator', address: 'Rue Oswald Durand', city: 'Port-au-Prince' },
     currency: 'HTG', organizerId: 'org1', status: 'published', seated: false, maxPerPerson: 10,
@@ -104,7 +104,7 @@ export const events: EventItem[] = [
   {
     id: 'e6', slug: 'masterclass-marketing-digital', title: 'Masterclass Marketing Digital',
     description: "Quatre semaines pour maîtriser la publicité sur les réseaux sociaux et WhatsApp Business. Sessions en ligne chaque mardi soir.",
-    cover: g('#7C5CFF', '#1F5EFF'), categories: ['education', 'online', 'business'],
+    cover: g('#7C5CFF', '#1509F3'), categories: ['education', 'online', 'business'],
     start: '2026-11-17T19:00:00', end: '2026-12-08T21:00:00', recurring: 'weekly',
     venue: null, online: { platform: 'Zoom', url: 'https://zoom.us' },
     currency: 'USD', organizerId: 'org2', status: 'published', seated: false, maxPerPerson: 1,
@@ -125,7 +125,7 @@ export const events: EventItem[] = [
   {
     id: 'e8', slug: 'rooftop-sunset-session', title: 'Rooftop Sunset Session',
     description: "Afro house et kompa au coucher du soleil sur le toit le plus haut de Pétion-Ville.",
-    cover: g('#FF5E7E', '#7C3AED', '#0B1533'), categories: ['party', 'music'],
+    cover: g('#FF5E7E', '#7C3AED', '#0C0640'), categories: ['party', 'music'],
     start: '2026-11-14T17:00:00', end: '2026-11-15T01:00:00',
     venue: { name: 'Sky Lounge', address: 'Rue Lamarre', city: 'Pétion-Ville' },
     currency: 'USD', organizerId: 'org1', status: 'published', seated: false, maxPerPerson: 6,

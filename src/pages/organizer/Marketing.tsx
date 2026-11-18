@@ -141,7 +141,7 @@ export default function Marketing() {
           </Field>
           <div className="rounded-2xl bg-canvas p-4">
             <div className="mb-2 text-xs font-semibold text-ink-muted">{t('Aperçu')}</div>
-            <div className={cx('max-w-xs whitespace-pre-line rounded-2xl p-3 text-sm', ch === 'whatsapp' ? 'bg-[#DCF8C6] text-[#0B1533]' : 'bg-surface')}>{form.values.body || t('Votre message apparaîtra ici.')}</div>
+            <div className={cx('max-w-xs whitespace-pre-line rounded-2xl p-3 text-sm', ch === 'whatsapp' ? 'bg-[#DCF8C6] text-[#0C0640]' : 'bg-surface')}>{form.values.body || t('Votre message apparaîtra ici.')}</div>
           </div>
         </form>
       </Modal>

@@ -70,9 +70,11 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
   async function organizer(verified = true) {
     const n = ++seq;
     const email = `sec${n}-${Date.now()}@sec.test`;
-    const r = await call('POST', '/auth/signup', { name: `Orga Test${n}`, email, password: 'Soleil2026x', acceptTerms: true, orgName: `Org Sec ${n}`, country: 'HT' });
+    const r = await call('POST', '/auth/signup', { name: `Orga Test${n}`, email, password: 'Soleil2026x', acceptTerms: true });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    const orgId = r.body.user.organizerId as string;
+    const up = await call('POST', '/auth/organizer', { orgName: `Org Sec ${n}`, country: 'HT' }, r.body.token);
+    expect(up.status, JSON.stringify(up.body)).toBe(200);
+    const orgId = up.body.organizerId as string;
     if (verified) await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [orgId]);
     return { token: r.body.token as string, id: r.body.user.id as string, orgId, email };
   }

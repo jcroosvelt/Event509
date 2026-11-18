@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check, ShieldCheck } from 'lucide-react';
 import { useApp } from '@/store/app';
-import { AccountTypePicker, type AccountType } from '@/components/AccountTypePicker';
 import { COUNTRIES, countryName } from '@/data/countries';
 import { ApiError } from '@/lib/errors';
 import { Button, Card, Field, Input, Select } from '@/components/ui';
@@ -10,10 +9,8 @@ import type { ProfileDraft, QuestionDraft } from '@/services/api';
 
 /** Inscription (étape après Google) ou complétion d'un ancien compte : profil, trois questions de sécurité, conditions. Le serveur contrôle tout. */
 export function ProfileWizard({
-  email, initial, onSubmit, title, askType = false,
+  email, initial, onSubmit, title,
 }: {
-  /** Inscription : choix acheteur / organisateur (pas pour la complétion d'un compte existant). */
-  askType?: boolean;
   email: string;
   initial: Partial<ProfileDraft>;
   onSubmit: (d: ProfileDraft) => Promise<void>;
@@ -22,8 +19,7 @@ export function ProfileWizard({
   const { t, lang } = useApp();
   const examples = [t('Quel était le surnom que j’utilisais pendant mon enfance ?'), t('Quel était le nom de mon premier projet personnel ?'), t('Quel était le nom de mon premier événement organisé ?')];
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [p, setP] = useState({ givenName: initial.givenName ?? '', familyName: initial.familyName ?? '', country: initial.country || 'HT', city: initial.city ?? '', username: initial.username ?? '', orgName: '' });
-  const [accountType, setAccountType] = useState<AccountType>('buyer');
+  const [p, setP] = useState({ givenName: initial.givenName ?? '', familyName: initial.familyName ?? '', country: initial.country || 'HT', city: initial.city ?? '', username: initial.username ?? '' });
   const [qs, setQs] = useState<QuestionDraft[]>([{ question: '', answer: '' }]);
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
@@ -37,7 +33,7 @@ export function ProfileWizard({
     setBusy(true);
     setError('');
     try {
-      await onSubmit({ ...p, ...(askType ? { accountType } : {}), username: p.username.trim() || undefined, orgName: accountType === 'organizer' ? p.orgName.trim() || undefined : undefined, questions: qs, acceptTerms: terms, acceptPrivacy: privacy });
+      await onSubmit({ ...p, username: p.username.trim() || undefined, questions: qs, acceptTerms: terms, acceptPrivacy: privacy });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined;
       if (code === 'profile_invalid' || code === 'username_taken') setStep(1);
@@ -64,7 +60,6 @@ export function ProfileWizard({
 
         {step === 1 && (
           <form noValidate className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); if (profileOk) { setError(''); setStep(2); } }}>
-            {askType && <AccountTypePicker value={accountType} onChange={setAccountType} />}
             <Field label={t('Adresse e-mail Google')} hint={t('Fournie par Google, non modifiable')}><Input value={email} readOnly disabled /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t('Prénom')} required><Input autoComplete="given-name" value={p.givenName} onChange={(e) => setP({ ...p, givenName: e.target.value })} /></Field>
@@ -79,7 +74,6 @@ export function ProfileWizard({
               <Field label={t('Ville')} required><Input autoComplete="address-level2" value={p.city} onChange={(e) => setP({ ...p, city: e.target.value })} /></Field>
             </div>
             <Field label={t('Nom d’utilisateur')} hint={t('Facultatif : sert aussi à retrouver votre compte')}><Input autoComplete="username" value={p.username} onChange={(e) => setP({ ...p, username: e.target.value })} /></Field>
-            {askType && accountType === 'organizer' && <Field label={t('Nom de votre organisation')} hint={t('Facultatif : par défaut, votre nom')}><Input autoComplete="organization" value={p.orgName} onChange={(e) => setP({ ...p, orgName: e.target.value })} /></Field>}
             <Button type="submit" size="lg" className="w-full" disabled={!profileOk}>{t('Continuer')}</Button>
           </form>
         )}

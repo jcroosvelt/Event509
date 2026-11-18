@@ -275,7 +275,6 @@ function checkPassword(password: string, email: string, name: string) {
 }
 
 const TERMS_VERSION = '2026-11';
-const ORG_KINDS = ['individual', 'company', 'association'] as const;
 
 /** Envoie le lien de confirmation d'adresse (sans effet tant que l'envoi d'emails n'est pas configuré). */
 async function sendVerification(u: UserRow) {
@@ -301,10 +300,6 @@ const signup: Handler = async (c) => {
   if (!isEmail(email)) fail(422, 'Adresse email invalide');
   checkPassword(password, email, name);
   if (c.body.acceptTerms !== true) fail(422, 'Vous devez accepter les conditions d’utilisation');
-  const orgName = str(c.body.orgName, 80) || name;
-  const country = str(c.body.country, 2).toUpperCase();
-  if (country && !/^[A-Z]{2}$/.test(country)) fail(422, 'Pays invalide');
-  const kind = ORG_KINDS.includes(str(c.body.kind) as (typeof ORG_KINDS)[number]) ? str(c.body.kind) : 'individual';
   let phone = str(c.body.phone, 30);
   if (phone && !/^\+?[0-9 ().-]{6,20}$/.test(phone)) fail(422, 'Numéro de téléphone invalide');
   // Vérification WhatsApp (dès que le service est configuré) : le numéro doit avoir été confirmé par code, preuve signée du serveur
@@ -335,20 +330,8 @@ const signup: Handler = async (c) => {
       organizerId = invite.organizer_id;
       invitePerms = invite.data.perms ?? null;
       await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [email]);
-    } else if (!(c.body.accountType === 'organizer' || (c.body.accountType === undefined && str(c.body.orgName)))) {
-      // Compte acheteur (par défaut) : pas d'organisation
-      role = 'participant';
-    } else {
-      role = 'organizer';
-      teamRole = 'admin';
-      organizerId = newId('org');
-      let slug = slugify(orgName);
-      if (await one(`select 1 from organizers where slug = $1`, [slug], q)) slug = `${slug}-${organizerId.slice(-4).toLowerCase()}`;
-      const o: Organizer = { id: organizerId, slug, name: orgName, verified: false, avatar: initials(orgName), followers: 0, eventsCount: 0, city: '', ...(country ? { country } : {}), kind };
-      await upsert('organizers', { id: o.id, slug: o.slug, data: o }, q);
-      const mid = newId('m');
-      await upsert('team_members', { id: mid, organizer_id: o.id, email, data: { id: mid, name, email, role: 'admin', status: 'active' } satisfies TeamMember }, q);
     }
+    // Un seul type de compte à l'inscription : la personne devient organisatrice plus tard (POST /auth/organizer)
     const data = {
       name, avatar: initials(name), city: '', joinedAt: new Date().toISOString().slice(0, 10),
       ...(phone ? { phone } : {}),
@@ -437,15 +420,20 @@ const updateMe: Handler = async (c) => {
 const becomeOrganizer: Handler = async (c) => {
   const u = auth(c);
   if (u.organizer_id) return toAppUser(u);
+  const orgName = str(c.body.orgName, 80) || '';
+  const country = str(c.body.country, 10).toUpperCase();
+  if (orgName.length < 2) fail(422, 'Indiquez le nom de votre organisation.', 'org_name_required');
+  if (!/^[A-Z]{2}$/.test(country)) fail(422, 'Choisissez le pays de votre organisation.', 'org_country_required');
+  await rateLimit(`becomeorg:${u.id}`, 5, 60);
   return tx(async (q) => {
-    const name = (u.data.name as string) || u.email;
+    const name = orgName;
     const id = newId('org');
     let slug = slugify(name);
     if (await one(`select 1 from organizers where slug = $1`, [slug], q)) slug = `${slug}-${id.slice(-4).toLowerCase()}`;
-    const o: Organizer = { id, slug, name, verified: false, avatar: initials(name), followers: 0, eventsCount: 0, city: (u.data.city as string) ?? '' };
+    const o: Organizer = { id, slug, name, verified: false, avatar: initials(name), followers: 0, eventsCount: 0, city: (u.data.city as string) ?? '', country, kind: 'individual' };
     await upsert('organizers', { id, slug, data: o }, q);
     const mid = newId('m');
-    await upsert('team_members', { id: mid, organizer_id: id, email: u.email, data: { id: mid, name, email: u.email, role: 'admin', status: 'active' } satisfies TeamMember }, q);
+    await upsert('team_members', { id: mid, organizer_id: id, email: u.email, data: { id: mid, name: (u.data.name as string) || u.email, email: u.email, role: 'admin', status: 'active' } satisfies TeamMember }, q);
     const role = u.role === 'admin' ? 'admin' : 'organizer';
     await q.query(`update users set role = $2, team_role = 'admin', organizer_id = $3 where id = $1`, [u.id, role, id]);
     return toAppUser((await one<UserRow>(`select * from users where id = $1`, [u.id], q))!);
@@ -995,7 +983,7 @@ const saveEvent: Handler = async (c) => {
     id: existing ? e.id : newId('e'),
     slug: clash || !e.slug ? `${slugify(e.title)}-${Math.random().toString(36).slice(2, 6)}` : slugify(e.slug),
     organizerId: existing?.organizer_id ?? orgId,
-    cover: images.length ? images[0]! : validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
+    cover: images.length ? images[0]! : validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)',
     images,
     // Pays du lieu (code à 2 lettres) : les participants de ce pays voient l'événement en premier
     venue: e.venue ? { ...e.venue, country: /^[A-Z]{2}$/.test(String(e.venue.country ?? '')) ? e.venue.country : undefined } : null,

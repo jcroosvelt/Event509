@@ -16,12 +16,12 @@ import NotFound from '../public/NotFound';
 import type { CategoryId, Currency, EventItem, SeatMapConfig, Session, TicketKind, TicketType } from '@/types';
 
 const covers = [
-  'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)',
+  'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)',
   'linear-gradient(135deg, #FF8A3D 0%, #E5487A 55%, #5B2BC9 100%)',
-  'linear-gradient(135deg, #0FA37F 0%, #0B6B60 55%, #0B1533 100%)',
-  'linear-gradient(135deg, #7C5CFF 0%, #1F5EFF 100%)',
+  'linear-gradient(135deg, #0FA37F 0%, #0B6B60 55%, #0C0640 100%)',
+  'linear-gradient(135deg, #7C5CFF 0%, #1509F3 100%)',
   'linear-gradient(135deg, #F4B740 0%, #E07A1F 55%, #7A2E0E 100%)',
-  'linear-gradient(135deg, #FF5E7E 0%, #7C3AED 55%, #0B1533 100%)',
+  'linear-gradient(135deg, #FF5E7E 0%, #7C3AED 55%, #0C0640 100%)',
 ];
 
 const kinds: { v: TicketKind; l: string }[] = [
@@ -243,7 +243,7 @@ export default function EventEditor() {
                 onClick={() => (i <= step || validate(i - 1)) && setStep(i)}
                 className={cx('flex shrink-0 items-center gap-2 rounded-full py-2 pl-2 pr-4 text-sm font-semibold transition', i === step ? 'bg-contrast text-on-contrast' : i < step ? 'bg-brand-100 text-brand-dark' : 'bg-surface text-ink-soft shadow-card')}
               >
-                <span aria-hidden className={cx('grid h-6 w-6 place-items-center rounded-full text-xs', i === step ? 'bg-brand text-white' : i < step ? 'bg-brand text-white' : 'bg-canvas')}>{i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}</span>
+                <span aria-hidden className={cx('grid h-6 w-6 place-items-center rounded-full text-xs', i === step ? 'bg-brand-grad text-white' : i < step ? 'bg-brand-grad text-white' : 'bg-canvas')}>{i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}</span>
                 {t(s)}
               </button>
             </li>

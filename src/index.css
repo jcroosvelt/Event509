@@ -4,46 +4,51 @@
 
 /* Jetons de couleur (canaux RGB pour l'opacité Tailwind) */
 :root {
-  --ink: 11 21 51;
-  --ink-soft: 74 85 115;
-  --ink-muted: 100 110 137; /* 4,9:1 sur blanc */
-  --canvas: 241 243 248;
+  --ink: 10 8 32;
+  --ink-soft: 72 70 108;
+  --ink-muted: 100 98 135; /* 5:1 sur blanc */
+  --canvas: 242 242 250;
   --surface: 255 255 255;
-  --line: 230 233 242;
-  --contrast: 11 21 51;
+  --line: 230 229 243;
+  --contrast: 10 8 32;
   --on-contrast: 255 255 255;
-  --brand: 31 94 255;
-  --brand-ink: 26 80 219; /* texte bleu : 6:1 sur blanc */
-  --brand-dark: 15 68 214;
-  --brand-50: 238 243 255;
-  --brand-100: 220 231 255;
-  --brand-200: 191 210 255;
-  --brand-300: 147 179 255;
-  --hatch: 223 228 240;
-  --hatch-bg: 245 247 251;
-  --shadow-card: 0 1px 2px rgba(11, 21, 51, 0.04), 0 8px 24px -12px rgba(11, 21, 51, 0.08);
+  /* Bleu EVENT509 : #1509F3 (haut droit) vers le noir #080808 (bas gauche) */
+  --brand: 21 9 243; /* blanc dessus : 8,9:1 */
+  --brand-ink: 21 9 243; /* texte bleu : 8,9:1 sur blanc */
+  --brand-dark: 14 6 170;
+  --brand-50: 240 239 255;
+  --brand-100: 226 224 254;
+  --brand-200: 197 194 252;
+  --brand-300: 140 133 248;
+  --grad-from: 21 9 243;
+  --grad-to: 12 6 64;
+  --hatch: 223 222 240;
+  --hatch-bg: 245 245 251;
+  --shadow-card: 0 1px 2px rgba(10, 8, 32, 0.04), 0 8px 24px -12px rgba(10, 8, 32, 0.1);
   color-scheme: light;
 }
 
 .dark {
-  --ink: 232 236 247;
-  --ink-soft: 174 183 207;
-  --ink-muted: 137 149 180;
-  --canvas: 10 16 34;
-  --surface: 19 27 51;
-  --line: 37 48 85;
-  --contrast: 232 236 247;
-  --on-contrast: 11 21 51;
-  --brand: 47 98 240; /* fond bleu : 5:1 avec texte blanc */
-  --brand-ink: 138 170 255; /* texte bleu : 7:1 sur surface sombre */
-  --brand-dark: 110 150 255;
-  --brand-50: 23 36 71;
-  --brand-100: 28 43 87;
-  --brand-200: 38 57 122;
-  --brand-300: 64 90 170;
-  --hatch: 45 58 98;
-  --hatch-bg: 25 35 64;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --ink: 236 235 250;
+  --ink-soft: 178 176 210;
+  --ink-muted: 140 138 175;
+  --canvas: 8 8 14;
+  --surface: 17 16 30;
+  --line: 40 38 68;
+  --contrast: 236 235 250;
+  --on-contrast: 10 8 32;
+  --brand: 62 48 255; /* fond bleu : 6,6:1 avec texte blanc */
+  --brand-ink: 156 151 255; /* texte bleu : 7:1 sur surface sombre */
+  --brand-dark: 176 172 255;
+  --brand-50: 22 18 60;
+  --brand-100: 30 24 84;
+  --brand-200: 44 36 124;
+  --brand-300: 80 70 200;
+  --grad-from: 28 16 255;
+  --grad-to: 14 8 80;
+  --hatch: 45 43 80;
+  --hatch-bg: 24 22 44;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 
@@ -71,6 +76,15 @@
 }
 
 @layer utilities {
+  /* Dégradé EVENT509 : du bleu #1509F3 (haut droit) vers un bleu nuit presque noir (bas gauche) */
+  .bg-brand-grad {
+    background-color: rgb(var(--brand));
+    background-image: linear-gradient(225deg, rgb(var(--grad-from)) 0%, rgb(var(--grad-to)) 125%);
+  }
+  .bg-navy {
+    background-color: #0c0640;
+    background-image: linear-gradient(225deg, #1509f3 0%, #0c0640 58%, #080808 100%);
+  }
   /* Piste hachurée des histogrammes et places occupées */
   .hatch {
     background-image: repeating-linear-gradient(135deg, rgb(var(--hatch)) 0 2px, transparent 2px 6px);

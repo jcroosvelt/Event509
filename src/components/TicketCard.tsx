@@ -61,7 +61,7 @@ export function TicketCard({ ticket, compact, linked = true }: { ticket: IssuedT
         {!compact && ticket.status === 'valid' && (
           // Le QR reste noir sur blanc dans les deux thèmes pour être lisible par les scanners
           <div className="rounded-2xl bg-white p-1.5 ring-1 ring-line">
-            <QRCodeSVG value={ticket.code} size={84} fgColor="#0B1533" bgColor="#FFFFFF" level="M" aria-label={t('QR code du billet {code}', { code: ticket.code })} />
+            <QRCodeSVG value={ticket.code} size={84} fgColor="#0C0640" bgColor="#FFFFFF" level="M" aria-label={t('QR code du billet {code}', { code: ticket.code })} />
           </div>
         )}
       </div>

@@ -234,7 +234,7 @@ export default function EventDetail() {
                       onClick={() => setOcc(s.label)}
                       className={cx('flex items-center gap-4 rounded-3xl border bg-surface p-4 text-left shadow-card transition', on ? 'border-brand ring-4 ring-brand/10' : 'border-transparent hover:border-line')}
                     >
-                      <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-2xl font-extrabold', on ? 'bg-brand text-white' : 'bg-brand-100 text-brand-dark')}>{i + 1}</span>
+                      <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-2xl font-extrabold', on ? 'bg-brand-grad text-white' : 'bg-brand-100 text-brand-dark')}>{i + 1}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block font-semibold first-letter:uppercase">{ev.sessions?.length ? s.label : dateLong(s.start, lang)}</span>
                         <span className="flex items-center gap-1 text-sm text-ink-muted">

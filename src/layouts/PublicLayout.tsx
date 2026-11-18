@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Bell, Compass, Download, Heart, Home, LayoutDashboard, LogOut, Megaphone, Moon, Receipt, Repeat2, Search, Settings, ShieldCheck, Sun, Ticket, User, WifiOff, type LucideIcon,
+  Bell, Compass, Download, Heart, Home, LayoutDashboard, LogOut, Megaphone, Moon, Receipt, Repeat2, Search, Settings, ShieldCheck, Sun, Ticket, User, WifiOff,
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
@@ -163,16 +163,17 @@ function UserMenu() {
 
 /** Barre de navigation basse mobile : barre flottante (voir FloatingBar). */
 export function BottomNav({
-  items, center, label, subtitle,
+  items, center, label, title, subtitle,
 }: {
   items: BarItem[];
   center?: BarItem;
   label: string;
+  title: string;
   subtitle?: string;
 }) {
   const half = Math.ceil(items.length / 2);
   const all = center ? [...items.slice(0, half), center, ...items.slice(half)] : items;
-  return <FloatingBar items={all} label={label} subtitle={subtitle} />;
+  return <FloatingBar items={all} label={label} title={title} subtitle={subtitle} />;
 }
 
 export function OfflineBanner() {
@@ -340,6 +341,7 @@ export default function PublicLayout() {
 
       <BottomNav
         label={t('Navigation principale')}
+        title="EVENT509"
         items={[
           { to: '/', icon: Home, label: t('Accueil'), end: true },
           { to: '/explorer', icon: Compass, label: t('Explorer') },

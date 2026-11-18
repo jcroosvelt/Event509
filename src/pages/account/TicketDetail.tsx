@@ -137,7 +137,7 @@ export default function TicketDetail() {
               <QRCodeSVG
                 value={`${tk.code}.${token}`}
                 size={220}
-                fgColor="#0B1533"
+                fgColor="#0C0640"
                 bgColor="#FFFFFF"
                 level="Q"
                 imageSettings={{ src: '/logo-mark.png', height: 34, width: 28, excavate: true }}

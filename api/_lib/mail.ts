@@ -76,7 +76,7 @@ export async function sendTicketsEmail(opts: { to: string; name: string; lang: '
   const attachments: Attachment[] = [];
   const rows: string[] = [];
   for (const [i, t] of tickets.entries()) {
-    const png = await QRCode.toBuffer(t.code, { type: 'png', margin: 2, width: 480, errorCorrectionLevel: 'M', color: { dark: '#0B1533', light: '#FFFFFF' } });
+    const png = await QRCode.toBuffer(t.code, { type: 'png', margin: 2, width: 480, errorCorrectionLevel: 'M', color: { dark: '#0C0640', light: '#FFFFFF' } });
     attachments.push({ filename: `billet-${i + 1}-${t.code}.png`, content: png.toString('base64') });
     const tt = event.tickets.find((x) => x.id === t.ticketTypeId)?.name ?? '';
     rows.push(
@@ -84,20 +84,20 @@ export async function sendTicketsEmail(opts: { to: string; name: string; lang: '
     );
   }
   const place = event.venue ? `${event.venue.name}${event.venue.city ? `, ${event.venue.city}` : ''}` : event.online?.platform ?? '';
-  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+  const html = `<!doctype html><html><body style="margin:0;background:#F2F2FA;font-family:Arial,Helvetica,sans-serif;color:#0C0640">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
-<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#93B3FF">509</span></td></tr>
+<tr><td style="background:#0C0640;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#9C97FF">509</span></td></tr>
 <tr><td style="padding:28px">
 <p style="margin:0 0 12px">${tx.hello(esc(name))}</p>
 <p style="margin:0 0 18px;line-height:1.5">${tx.intro}</p>
 <p style="margin:0 0 4px;font-size:20px;font-weight:bold">${esc(event.title)}</p>
 <p style="margin:0 0 18px;color:#4A5573">${esc(when(event.start, lang))}${place ? `<br>${esc(place)}` : ''}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join('')}</table>
-<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1F5EFF;color:#fff;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:bold;display:inline-block">${tx.button}</a></p>
+<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1509F3;color:#fff;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:bold;display:inline-block">${tx.button}</a></p>
 <p style="margin:0;color:#4A5573;font-size:13px;line-height:1.5">${tx.warn}</p>
 </td></tr>
-<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">${tx.footer}</td></tr>
+<tr><td style="padding:16px 28px;background:#F2F2FA;color:#6E7689;font-size:12px">${tx.footer}</td></tr>
 </table></td></tr></table></body></html>`;
   return send(to, tx.subject(event.title), html, attachments);
 }
@@ -105,15 +105,15 @@ export async function sendTicketsEmail(opts: { to: string; name: string; lang: '
 /** Email d'information simple (suppression de commande ou d'événement…). Sans réglage Resend, rien n'est envoyé. */
 export async function sendNoticeEmail(to: string, subject: string, title: string, lines: string[]): Promise<boolean> {
   if (!mailConfigured()) return false;
-  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+  const html = `<!doctype html><html><body style="margin:0;background:#F2F2FA;font-family:Arial,Helvetica,sans-serif;color:#0C0640">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
-<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#93B3FF">509</span></td></tr>
+<tr><td style="background:#0C0640;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#9C97FF">509</span></td></tr>
 <tr><td style="padding:28px">
 <p style="margin:0 0 14px;font-size:20px;font-weight:bold">${esc(title)}</p>
 ${lines.map((l) => `<p style="margin:0 0 10px;line-height:1.5">${esc(l)}</p>`).join('')}
 </td></tr>
-<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
+<tr><td style="padding:16px 28px;background:#F2F2FA;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
 </table></td></tr></table></body></html>`;
   return send(to, subject, html);
 }
@@ -125,12 +125,12 @@ ${lines.map((l) => `<p style="margin:0 0 10px;line-height:1.5">${esc(l)}</p>`).j
 export async function sendCampaignEmail(to: string, opts: { organizer: string; subject: string; body: string; unsubscribeUrl: string }): Promise<boolean> {
   if (!mailConfigured()) return false;
   const paras = opts.body.split(/\n{2,}/).map((p) => `<p style="margin:0 0 12px;line-height:1.55">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
-  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+  const html = `<!doctype html><html><body style="margin:0;background:#F2F2FA;font-family:Arial,Helvetica,sans-serif;color:#0C0640">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
-<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">${esc(opts.organizer)}</td></tr>
+<tr><td style="background:#0C0640;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">${esc(opts.organizer)}</td></tr>
 <tr><td style="padding:28px">${paras}</td></tr>
-<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Vous recevez ce message car vous avez accepté de recevoir les actualités de ${esc(opts.organizer)} lors de votre achat sur Event509.<br><a href="${esc(opts.unsubscribeUrl)}" style="color:#1A50DB">Se désinscrire</a></td></tr>
+<tr><td style="padding:16px 28px;background:#F2F2FA;color:#6E7689;font-size:12px">Vous recevez ce message car vous avez accepté de recevoir les actualités de ${esc(opts.organizer)} lors de votre achat sur Event509.<br><a href="${esc(opts.unsubscribeUrl)}" style="color:#1A50DB">Se désinscrire</a></td></tr>
 </table></td></tr></table></body></html>`;
   // En-têtes de désinscription en un clic, pour les messageries qui les affichent
   return sendWithHeaders(to, opts.subject, html, { 'List-Unsubscribe': `<${opts.unsubscribeUrl}>` });
@@ -156,17 +156,17 @@ async function sendWithHeaders(to: string, subject: string, html: string, header
 /** Email de confirmation d'adresse : un lien à usage unique (valable 7 jours) vers le site. */
 export async function sendVerifyEmail(to: string, name: string, link: string): Promise<boolean> {
   if (!mailConfigured()) return false;
-  const html = `<!doctype html><html><body style="margin:0;background:#F1F3F8;font-family:Arial,Helvetica,sans-serif;color:#0B1533">
+  const html = `<!doctype html><html><body style="margin:0;background:#F2F2FA;font-family:Arial,Helvetica,sans-serif;color:#0C0640">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden">
-<tr><td style="background:#0B1533;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#93B3FF">509</span></td></tr>
+<tr><td style="background:#0C0640;color:#fff;padding:22px 28px;font-size:20px;font-weight:bold">Event<span style="color:#9C97FF">509</span></td></tr>
 <tr><td style="padding:28px">
 <p style="margin:0 0 12px">Bonjour ${esc(name)},</p>
 <p style="margin:0 0 18px;line-height:1.5">Confirmez votre adresse email pour publier vos événements et demander vos versements.</p>
-<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1F5EFF;color:#fff;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:bold;display:inline-block">Confirmer mon adresse</a></p>
+<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1509F3;color:#fff;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:bold;display:inline-block">Confirmer mon adresse</a></p>
 <p style="margin:0;color:#4A5573;font-size:13px;line-height:1.5">Ce lien est valable 7 jours. Si vous n'avez pas créé de compte Event509, ignorez cet email.</p>
 </td></tr>
-<tr><td style="padding:16px 28px;background:#F1F3F8;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
+<tr><td style="padding:16px 28px;background:#F2F2FA;color:#6E7689;font-size:12px">Cet email a été envoyé par Event509.</td></tr>
 </table></td></tr></table></body></html>`;
   return send(to, 'Confirmez votre adresse email', html);
 }

@@ -24,14 +24,13 @@ export default function CompleteSignup() {
     );
   return (
     <ProfileWizard
-      askType
       title={t('Terminez votre inscription')}
       email={data.email ?? ''}
       initial={{ givenName: data.givenName, familyName: data.familyName, country: data.country, city: data.city }}
       onSubmit={async (d) => {
         const s = await signupComplete(d);
         await startSession(s);
-        nav('/organisateur', { replace: true });
+        nav('/compte', { replace: true });
       }}
     />
   );

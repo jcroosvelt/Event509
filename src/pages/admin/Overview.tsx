@@ -20,8 +20,8 @@ import type { Order, PlatformTarget } from '@/types';
 
 const glass = 'rounded-[1.75rem] bg-surface/85 shadow-card ring-1 ring-white/60 backdrop-blur-xl dark:ring-line';
 const gradients = {
-  brand: 'bg-[linear-gradient(140deg,#5B8CFF_0%,#1F5EFF_55%,#1745C9_100%)]',
-  navy: 'bg-[linear-gradient(140deg,#24407F_0%,#13234F_50%,#0B1533_100%)]',
+  brand: 'bg-[linear-gradient(140deg,#5A52FF_0%,#1509F3_55%,#0F06B8_100%)]',
+  navy: 'bg-[linear-gradient(140deg,#2A2480_0%,#140C55_50%,#0C0640_100%)]',
 };
 
 /** Icône portefeuille bicolore (reprend la pastille de la maquette, aux couleurs Event509). */
@@ -29,7 +29,7 @@ function WalletMark({ size = 44 }: { size?: number }) {
   return (
     <span aria-hidden className="relative grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-navy" style={{ width: size, height: size }}>
       <span className="absolute -bottom-2 -left-2 h-2/3 w-2/3 rounded-full bg-brand" />
-      <span className="absolute right-1.5 top-1.5 h-1/3 w-1/3 rounded-full bg-[#93B3FF]" />
+      <span className="absolute right-1.5 top-1.5 h-1/3 w-1/3 rounded-full bg-[#9C97FF]" />
     </span>
   );
 }
@@ -44,7 +44,7 @@ function TargetRing({ value, size = 78, tone }: { value: number; size?: number; 
     <div className="relative shrink-0" style={{ width: size, height: size }} role="img" aria-label={`${Math.round(v * 100)} %`}>
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
         <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,.28)" strokeWidth={stroke} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r} stroke={tone === 'brand' ? '#0B1533' : '#93B3FF'} strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v)} className="transition-[stroke-dashoffset] duration-700" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke={tone === 'brand' ? '#0C0640' : '#9C97FF'} strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v)} className="transition-[stroke-dashoffset] duration-700" />
       </svg>
       <span aria-hidden className="absolute inset-[13px] grid place-items-center rounded-full bg-white text-sm font-extrabold text-navy">{Math.round(v * 100)}%</span>
     </div>
@@ -311,7 +311,7 @@ export default function Overview() {
           {/* Santé financière */}
           <section
             aria-label={t('Santé financière')}
-            className={cx('flex items-center gap-4 rounded-[1.75rem] p-5 text-white shadow-[0_18px_40px_-18px_rgba(31,94,255,.6)]', s.health === 'critical' ? 'bg-[linear-gradient(140deg,#E5484D_0%,#B42318_100%)]' : s.health === 'watch' ? gradients.navy : gradients.brand)}
+            className={cx('flex items-center gap-4 rounded-[1.75rem] p-5 text-white shadow-[0_18px_40px_-18px_rgba(21,9,243,.6)]', s.health === 'critical' ? 'bg-[linear-gradient(140deg,#E5484D_0%,#B42318_100%)]' : s.health === 'watch' ? gradients.navy : gradients.brand)}
           >
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-white/75">{t('Santé financière')}</div>

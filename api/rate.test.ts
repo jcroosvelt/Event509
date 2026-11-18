@@ -53,9 +53,12 @@ describe.skipIf(!DB)('facturation selon le pays (intégration)', () => {
     process.env.JWT_SECRET = 'q'.repeat(40);
     const { handle } = await import('./_lib/handler.js');
     const mk = async (country: string, n: number) => {
-      const r = await handle({ method: 'POST', path: '/auth/signup', query: {}, body: { name: `Orga ${country}`, email: `bill${n}-${Date.now()}@sec.test`, password: 'Soleil2026x', acceptTerms: true, orgName: `Org ${country} ${n}`, country }, ip: `10.7.0.${n}` });
+      const r = await handle({ method: 'POST', path: '/auth/signup', query: {}, body: { name: `Orga ${country}`, email: `bill${n}-${Date.now()}@sec.test`, password: 'Soleil2026x', acceptTerms: true }, ip: `10.7.0.${n}` });
       expect(r.status, JSON.stringify(r.body)).toBe(200);
-      return (r.body as { token: string }).token;
+      const token = (r.body as { token: string }).token;
+      const up = await handle({ method: 'POST', path: '/auth/organizer', query: {}, body: { orgName: `Org ${country} ${n}`, country }, authorization: `Bearer ${token}`, ip: `10.7.0.${n}` });
+      expect(up.status, JSON.stringify(up.body)).toBe(200);
+      return token;
     };
     for (const [country, expected, n] of [['US', 'USD', 1], ['HT', 'HTG', 2]] as const) {
       const token = await mk(country, n);

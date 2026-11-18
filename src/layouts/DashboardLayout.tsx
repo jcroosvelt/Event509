@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CalendarPlus, Download, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { Logo } from '@/components/brand';
-import { Avatar, Badge, Button, EmptyState, IconButton } from '@/components/ui';
+import { Avatar, Badge, Button, ButtonLink, EmptyState, IconButton } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AccessDenied } from '@/components/guards';
 import { BottomNav, NotificationsMenu, OfflineBanner, SkipLink } from './PublicLayout';
@@ -58,7 +58,7 @@ export default function DashboardLayout({
   bottom: NavItem[];
   center: NavItem;
 }) {
-  const { user, t, updateUser, toast, logout } = useApp();
+  const { user, t, logout } = useApp();
   const nav = useNavigate();
   const signOut = () => {
     logout();
@@ -91,9 +91,7 @@ export default function DashboardLayout({
               title={t('Organisez votre premier événement')}
               body={t('Activez l’espace organisateur pour créer des événements, vendre des billets et scanner les entrées. C’est gratuit : Event509 prélève une commission uniquement sur les billets payants.')}
               action={
-                <Button onClick={() => { updateUser({ role: 'organizer', teamRole: 'admin' }); toast(t('Espace organisateur activé')); }}>
-                  {t('Activer l’espace organisateur')}
-                </Button>
+                <ButtonLink to="/compte/devenir-organisateur">{t('Devenir organisateur')}</ButtonLink>
               }
             />
           </div>
@@ -229,7 +227,7 @@ export default function DashboardLayout({
         </ErrorBoundary>
       </main>
 
-      <BottomNav label={title} items={bottomItems} center={can(user, center.perm) ? center : undefined} />
+      <BottomNav label={title} title={title} items={bottomItems} center={can(user, center.perm) ? center : undefined} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { CalendarDays, Heart, MapPin, Receipt, Ticket, Undo2, Wallet } from 'lucide-react';
+import { CalendarDays, Heart, LayoutDashboard, MapPin, Receipt, Rocket, Ticket, Undo2, Wallet } from 'lucide-react';
+import { hasOrganizerAccess } from '@/lib/permissions';
 import { events, organizers } from '@/data/mock';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
@@ -74,6 +75,19 @@ export default function BuyerDashboard() {
           </ul>
         </section>
       )}
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 text-brand-ink">{hasOrganizerAccess(user) ? <LayoutDashboard className="h-5 w-5" aria-hidden /> : <Rocket className="h-5 w-5" aria-hidden />}</span>
+            <div>
+              <h2 className="font-bold">{hasOrganizerAccess(user) ? t('Espace organisateur') : t('Devenir organisateur')}</h2>
+              <p className="text-sm text-ink-soft">{hasOrganizerAccess(user) ? t('Gérez vos événements, vos ventes et vos entrées.') : t('Organisez vos événements avec le même compte.')}</p>
+            </div>
+          </div>
+          <ButtonLink to={hasOrganizerAccess(user) ? '/organisateur' : '/compte/devenir-organisateur'} variant="outline">{hasOrganizerAccess(user) ? t('Ouvrir') : t('Commencer')}</ButtonLink>
+        </div>
+      </Card>
 
       {refunds.length > 0 && (
         <Card>

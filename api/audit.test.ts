@@ -20,9 +20,16 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     return o.status === 204 ? { ...o, status: 200 } : o;
   };
   async function signup(withOrg: boolean, email = `aud${++seq}-${Date.now()}@audit.test`) {
-    const r = await call('POST', '/auth/signup', { name: `Audit Test${seq}`, email, password: 'Soleil2026x', acceptTerms: true, ...(withOrg ? { orgName: `Org Audit ${seq}`, country: 'HT' } : {}) });
+    const r = await call('POST', '/auth/signup', { name: `Audit Test${seq}`, email, password: 'Soleil2026x', acceptTerms: true });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    return { token: r.body.token as string, id: r.body.user.id as string, orgId: r.body.user.organizerId as string, email };
+    // Un seul type de compte : l'organisation se crée ensuite depuis le compte
+    let orgId = r.body.user.organizerId as string;
+    if (withOrg) {
+      const o = await call('POST', '/auth/organizer', { orgName: `Org Audit ${seq}`, country: 'HT' }, r.body.token);
+      expect(o.status, JSON.stringify(o.body)).toBe(200);
+      orgId = o.body.organizerId as string;
+    }
+    return { token: r.body.token as string, id: r.body.user.id as string, orgId, email };
   }
   const fill = (p: string) => p.replace(/:\w+/g, 'x');
   /** Compte acheteur (obligatoire pour acheter). */
@@ -297,9 +304,23 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     expect(o.status, JSON.stringify(o.body)).toBe(200);
     expect(o.body.order.buyerEmail).toBe(email);
     expect((await pool.query(`select user_id from orders where id = $1`, [o.body.order.id])).rows[0].user_id).toBe(r.body.user.id);
-    // Inscription « organisateur » : organisation créée
+    // L'inscription ignore tout choix de type : même avec accountType / orgName, le compte est commun (aucune organisation)
     const org = await call('POST', '/auth/signup', { name: 'Marie Orga', email: `orga${Date.now()}@audit.test`, password: 'Soleil2026x', acceptTerms: true, accountType: 'organizer', orgName: 'Kompa Prod' });
-    expect(org.body.user.role).toBe('organizer');
-    expect(org.body.user.organizerId).toBeTruthy();
+    expect(org.body.user.role).toBe('participant');
+    expect(org.body.user.organizerId ?? null).toBeNull();
+    // « Devenir organisateur » : nom et pays obligatoires, puis l'organisation est créée pour le compte connecté
+    expect((await call('POST', '/auth/organizer', {}, org.body.token)).status).toBe(422);
+    expect((await call('POST', '/auth/organizer', { orgName: 'Kompa Prod', country: 'Haïti' }, org.body.token)).status).toBe(422);
+    expect((await call('POST', '/auth/organizer', { orgName: 'Kompa Prod', country: 'HT' })).status).toBe(401);
+    const up = await call('POST', '/auth/organizer', { orgName: 'Kompa Prod', country: 'ht' }, org.body.token);
+    expect(up.status, JSON.stringify(up.body)).toBe(200);
+    expect(up.body).toMatchObject({ role: 'organizer', teamRole: 'admin' });
+    expect(up.body.organizerId).toBeTruthy();
+    const row = (await pool.query(`select data from organizers where id = $1`, [up.body.organizerId])).rows[0].data;
+    expect(row).toMatchObject({ name: 'Kompa Prod', country: 'HT' });
+    // Déjà organisateur : même organisation, pas de doublon
+    const again = await call('POST', '/auth/organizer', { orgName: 'Autre nom', country: 'US' }, org.body.token);
+    expect(again.body.organizerId).toBe(up.body.organizerId);
+    expect((await call('GET', '/org/events', undefined, org.body.token)).status).toBe(200);
   });
 });

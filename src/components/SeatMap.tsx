@@ -70,7 +70,7 @@ export function SeatMap({
                         config.aisleAfter > 0 && i === config.aisleAfter && 'ml-4',
                         editable
                           ? blocked ? 'hatch ring-1 ring-red-400' : zi >= 0 ? zoneColors[zi % zoneColors.length] : 'bg-canvas ring-1 ring-line'
-                          : isTaken ? 'hatch cursor-not-allowed' : isSel ? 'bg-brand text-white' : zi >= 0 ? zoneColors[zi % zoneColors.length] : 'bg-canvas',
+                          : isTaken ? 'hatch cursor-not-allowed' : isSel ? 'bg-brand-grad text-white' : zi >= 0 ? zoneColors[zi % zoneColors.length] : 'bg-canvas',
                       )}
                     >
                       {isSel ? i + 1 : ''}

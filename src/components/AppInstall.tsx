@@ -171,7 +171,7 @@ export function InstallButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-dark active:scale-[.98]"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-brand-grad px-3 text-xs font-semibold text-white transition hover:brightness-125 active:scale-[.98]"
       >
         <Download className="h-3.5 w-3.5" aria-hidden /> {t('Installer')}
       </button>

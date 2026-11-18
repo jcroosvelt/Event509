@@ -37,7 +37,7 @@ export default function Orders() {
     }
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
     const rows = o.items.map((i) => `<tr><td>${i.qty} × ${esc(t('billet'))}</td><td style="text-align:right">${moneyRaw(i.unitPrice * i.qty, o.currency, lang)}</td></tr>`).join('');
-    w.document.write(`<html lang="${lang === 'en' ? 'en' : 'fr'}"><head><title>${esc(t('Facture'))} ${esc(o.id)}</title><style>body{font-family:system-ui;padding:40px;color:#0B1533}table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #eee}h1{margin:0}</style></head><body>
+    w.document.write(`<html lang="${lang === 'en' ? 'en' : 'fr'}"><head><title>${esc(t('Facture'))} ${esc(o.id)}</title><style>body{font-family:system-ui;padding:40px;color:#0C0640}table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #eee}h1{margin:0}</style></head><body>
     <img src="/logo-full.png" height="48" alt="Event509"/><h1 style="margin-top:24px">${esc(t('Facture'))} ${esc(o.id)}</h1><p>${dateNumeric(o.createdAt, lang)} · ${esc(o.buyerName)} · ${esc(o.buyerEmail)}</p><h2>${esc(title)}</h2>
     <table>${rows}<tr><td>${esc(t('Réduction'))}</td><td style="text-align:right">-${moneyRaw(o.discount, o.currency, lang)}</td></tr><tr><td>${esc(t('Frais de service'))}</td><td style="text-align:right">${moneyRaw(o.fees, o.currency, lang)}</td></tr><tr><td><b>${esc(t('Total'))}</b></td><td style="text-align:right"><b>${moneyRaw(o.total, o.currency, lang)}</b></td></tr></table>
     <p>${esc(t('Payé par {method}', { method: t(methodLabel[o.method]) }))}</p></body></html>`);

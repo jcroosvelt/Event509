@@ -157,7 +157,7 @@ describe('fichiers envoyés', () => {
     expect('error' in checkFile('verification', Buffer.concat([pdf, Buffer.alloc(3 * 1024 * 1024)]))).toBe(true);
   });
   it('ne garde que des affiches sûres', () => {
-    expect(validCover('linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)')).toBe(true);
+    expect(validCover('linear-gradient(135deg, #1509F3 0%, #0C0640 100%)')).toBe(true);
     expect(validCover('/api/files/f_abc123XY')).toBe(true);
     expect(validCover('https://exemple.com/a.jpg')).toBe(true);
     for (const bad of ['javascript:alert(1)', 'data:text/html;base64,AAAA', 'http://exemple.com/a.jpg', '/api/files/../../x', 'url(javascript:1)', 'linear-gradient(red);}</style>']) expect(validCover(bad)).toBe(false);

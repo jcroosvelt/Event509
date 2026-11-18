@@ -232,7 +232,7 @@ export default function Home() {
             <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{t('Vous organisez un événement ?')}</h2>
             <p className="mt-2 max-w-xl text-white/75">{t('Billetterie, paiements MonCash, NatCash et cartes, check-in QR hors ligne et tableau de bord en temps réel. Publiez en quelques minutes.')}</p>
           </div>
-          <Link to="/organisateur/evenements/nouveau" className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-brand px-7 font-semibold text-white hover:bg-brand-dark">
+          <Link to="/organisateur/evenements/nouveau" className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-brand-grad px-7 font-semibold text-white hover:brightness-125">
             {t('Créer un événement')} <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
         </div>

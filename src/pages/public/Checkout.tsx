@@ -174,7 +174,7 @@ export default function Checkout() {
     </div>
   );
 
-  // Un compte acheteur est obligatoire pour acheter : connexion ou inscription, puis retour ici
+  // Un compte est obligatoire pour acheter : connexion ou inscription, puis retour ici
   if (!DEMO && !app.user) {
     const back = encodeURIComponent(location.pathname + location.search);
     return (
@@ -182,10 +182,10 @@ export default function Checkout() {
         <Card className="text-center">
           <IconBadge className="mx-auto"><Lock className="h-[18px] w-[18px]" /></IconBadge>
           <h1 className="mt-4 text-xl font-extrabold">{t('Connectez-vous pour acheter')}</h1>
-          <p className="mt-2 text-sm text-ink-soft">{t('Un compte acheteur gratuit est nécessaire : vos billets y restent toujours disponibles, même si vous changez de téléphone.')}</p>
+          <p className="mt-2 text-sm text-ink-soft">{t('Un compte gratuit est nécessaire : vos billets y restent toujours disponibles, même si vous changez de téléphone.')}</p>
           <div className="mt-6 flex flex-col gap-2">
-            <Link to={`/connexion?next=${back}`} className="inline-flex h-12 items-center justify-center rounded-full bg-brand px-6 font-semibold text-white hover:bg-brand-dark">{t('Se connecter')}</Link>
-            <Link to={`/inscription?next=${back}`} className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 font-semibold hover:bg-canvas">{t('Créer un compte acheteur')}</Link>
+            <Link to={`/connexion?next=${back}`} className="inline-flex h-12 items-center justify-center rounded-full bg-brand-grad px-6 font-semibold text-white hover:brightness-125">{t('Se connecter')}</Link>
+            <Link to={`/inscription?next=${back}`} className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 font-semibold hover:bg-canvas">{t('Créer un compte')}</Link>
           </div>
         </Card>
       </div>

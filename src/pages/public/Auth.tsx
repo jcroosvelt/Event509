@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
-import { AccountTypePicker, type AccountType } from '@/components/AccountTypePicker';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { isEmail, isPhone, useForm } from '@/lib/form';
 import { hasOrganizerAccess } from '@/lib/permissions';
-import { Button, ButtonLink, Card, Field, Input, Segmented, Select } from '@/components/ui';
-import { COUNTRIES, countryName } from '@/data/countries';
+import { Button, ButtonLink, Card, Field, Input, Segmented } from '@/components/ui';
 import type { AppUser } from '@/types';
 import { DEMO, otpEnabled, otpRegisterSend, otpRegisterVerify, signIn, signUp } from '@/services/api';
 import { OtpChallenge, PhoneField } from '@/components/otp/OtpChallenge';
@@ -35,26 +33,25 @@ const demoAccounts = [
 ];
 
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
-  const { login, startSession, updateUser, toast, t, lang, place } = useApp();
+  const { login, startSession, updateUser, toast, t } = useApp();
   const signup = mode === 'signup';
-  useTitle(signup ? t('Créer un compte organisateur') : t('Connexion organisateur'));
+  useTitle(signup ? t('Créer un compte') : t('Connexion'));
   const nav = useNavigate();
   const [params] = useSearchParams();
   const next = safeInternalPath(params.get('next')) ?? null;
   const [via, setVia] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
-  // Inscription en 2 étapes (mode serveur) : 1 = le compte, 2 = l'organisation et les conditions
+  // Inscription en 2 étapes (mode serveur) : 1 = le compte, 2 = téléphone et conditions
   const [step, setStep] = useState<1 | 2>(1);
-  const [accountType, setAccountType] = useState<AccountType>('buyer');
-  const [org, setOrg] = useState({ orgName: '', kind: 'individual', country: place.country, phone: '', terms: false, website: '' });
+  const [org, setOrg] = useState({ phone: '', terms: false, website: '' });
   // Vérification du numéro par WhatsApp : active seulement si le serveur est configuré ; la preuve vient du serveur
   const [otpOn, setOtpOn] = useState(false);
   const [phoneProof, setPhoneProof] = useState('');
   useEffect(() => {
     if (!DEMO && signup) void otpEnabled().then(setOtpOn);
   }, [signup]);
-  const [orgErr, setOrgErr] = useState<{ orgName?: string; phone?: string; terms?: string }>({});
+  const [orgErr, setOrgErr] = useState<{ phone?: string; terms?: string }>({});
 
   const form = useForm(
     { name: '', email: '', password: '', phone: '', otp: '' },
@@ -86,7 +83,6 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
       const s = signup
         ? await signUp({
             name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password,
-            accountType, orgName: accountType === 'organizer' ? org.orgName.trim() || undefined : undefined, kind: org.kind as 'individual' | 'company' | 'association', country: org.country,
             phone: org.phone.trim() || undefined, phoneProof: phoneProof || undefined, acceptTerms: org.terms, website: org.website,
           })
         : await signIn(form.values.email.trim(), form.values.password);
@@ -128,17 +124,17 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
         <img src="/logo-mark.png" alt="" className="h-14 w-auto self-start brightness-[1.8] contrast-75" />
         <div>
           <p className="text-4xl font-extrabold leading-tight tracking-tight">
-            {t('Découvrez des événements.')}<br />{t('Obtenez votre billet.')}<br /><span className="text-[#93B3FF]">{t('Soyez là.')}</span>
+            {t('Découvrez des événements.')}<br />{t('Obtenez votre billet.')}<br /><span className="text-[#9C97FF]">{t('Soyez là.')}</span>
           </p>
           <p className="mt-4 text-white/70">{t('Vos billets QR dans l’app, par email et sur WhatsApp. Paiement MonCash, NatCash, carte ou PayPal.')}</p>
         </div>
       </div>
 
       <Card className="p-6 sm:p-8">
-        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte organisateur') : t('Bon retour !')}</h1>
-        <p className="mt-1 text-sm text-ink-soft">{t('Les comptes sont réservés aux organisateurs. Pour acheter un billet, aucun compte n’est nécessaire.')}</p>
+        <h1 className="text-2xl font-extrabold tracking-tight">{signup ? t('Créer un compte') : t('Bon retour !')}</h1>
+        <p className="mt-1 text-sm text-ink-soft">{t('Un seul compte pour acheter vos billets et, si vous le souhaitez, organiser vos événements.')}</p>
         <p className="mt-1 text-sm text-ink-soft">
-          {signup ? t('Déjà inscrit ?') : t('Pas encore de compte organisateur ?')}{' '}
+          {signup ? t('Déjà inscrit ?') : t('Pas encore de compte ?')}{' '}
           <Link to={`${signup ? '/connexion' : '/inscription'}${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-brand-ink">{signup ? t('Se connecter') : t('S’inscrire')}</Link>
         </p>
 
@@ -180,7 +176,6 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
             if (!DEMO && signup) {
               if (step === 1) { setStep(2); return; }
               const err: typeof orgErr = {};
-              if (org.orgName.trim() && org.orgName.trim().length < 2) err.orgName = t('Indiquez le nom de votre organisation');
               if (org.phone.trim() && !isPhone(org.phone)) err.phone = t('Saisissez un numéro comme +509 3712 3456');
               else if (otpOn && !phoneProof) err.phone = t('Confirmez votre numéro WhatsApp avec le code reçu');
               if (!org.terms) err.terms = t('Vous devez accepter les conditions pour continuer');
@@ -199,28 +194,10 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
           }}
         >
           {!DEMO && signup && (
-            <p className="text-xs font-semibold text-ink-muted" aria-live="polite">{t('Étape {n} sur 2', { n: String(step) })} — {step === 1 ? t('Votre compte') : t('Type de compte')}</p>
+            <p className="text-xs font-semibold text-ink-muted" aria-live="polite">{t('Étape {n} sur 2', { n: String(step) })} — {step === 1 ? t('Votre compte') : t('Contact et conditions')}</p>
           )}
           {!DEMO && signup && step === 2 ? (
             <>
-              <AccountTypePicker value={accountType} onChange={setAccountType} />
-              {accountType === 'organizer' && <>
-              <Field label={t('Nom de l’organisation ou de l’événement')} error={orgErr.orgName} hint={t('Affiché sur votre page publique. Par défaut : votre nom.')}>
-                <Input autoComplete="organization" value={org.orgName} onChange={(e) => setOrg({ ...org, orgName: e.target.value })} />
-              </Field>
-              <Field label={t('Vous êtes')}>
-                <Select value={org.kind} onChange={(e) => setOrg({ ...org, kind: e.target.value })}>
-                  <option value="individual">{t('Organisateur indépendant')}</option>
-                  <option value="company">{t('Entreprise')}</option>
-                  <option value="association">{t('Association')}</option>
-                </Select>
-              </Field>
-              <Field label={t('Pays')}>
-                <Select value={org.country} onChange={(e) => setOrg({ ...org, country: e.target.value })}>
-                  {[...COUNTRIES].sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang)).map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
-                </Select>
-              </Field>
-              </>}
               {otpOn ? (
                 <div className="space-y-3">
                   <PhoneField value={org.phone} onChange={(v) => { setOrg({ ...org, phone: v }); setPhoneProof(''); }} error={orgErr.phone} disabled={!!phoneProof} />

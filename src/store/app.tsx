@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
-import { becomeOrganizer, claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, serverLogout, updateProfile, type Session_ } from '@/services/api';
+import { claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, serverLogout, updateProfile, type Session_ } from '@/services/api';
 import { DEFAULT_PLACE, type Place, type TasteProfile } from '@/data/countries';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
@@ -325,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateUser: (patch) => {
         setUser((u) => (u ? { ...u, ...patch } : u));
         if (DEMO) return;
-        const save = patch.role === 'organizer' ? becomeOrganizer() : updateProfile({ name: patch.name, phone: patch.phone, city: patch.city });
+        const save = updateProfile({ name: patch.name, phone: patch.phone, city: patch.city });
         save
           .then((u) => {
             setUser(u);

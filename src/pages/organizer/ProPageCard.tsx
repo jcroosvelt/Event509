@@ -13,7 +13,7 @@ import { Button, Card, Field, IconBadge, Input } from '@/components/ui';
 import { ApiError } from '@/lib/errors';
 import type { Organizer } from '@/types';
 
-const DEFAULT_COVER = 'linear-gradient(135deg, #1F5EFF 0%, #0B1533 100%)';
+const DEFAULT_COVER = 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)';
 const SOCIALS = [['facebook', 'Facebook'], ['youtube', 'YouTube'], ['linkedin', 'LinkedIn'], ['tiktok', 'TikTok'], ['x', 'X']] as const;
 
 /**
@@ -116,8 +116,8 @@ function Form({ org, theme, toast, t }: { org: Organizer; theme: string; toast: 
         <div style={preview}>
           <Field label={t('Couleur de marque')} error={!colorOk ? t('Trop claire : le texte blanc des boutons ne serait pas lisible') : undefined} hint={color && HEX.test(color) ? t('Contraste avec le texte blanc : {n} : 1', { n: contrastWithWhite(color).toFixed(1) }) : t('Appliquée à votre page publique')}>
             <div className="flex gap-2">
-              <input type="color" aria-label={t('Choisir une couleur')} value={HEX.test(color) ? color : '#1F5EFF'} onChange={(e) => setColor(e.target.value)} className="h-11 w-14 cursor-pointer rounded-xl border border-line bg-surface p-1" />
-              <Input value={color} placeholder="#1F5EFF" maxLength={7} onChange={(e) => setColor(e.target.value.trim())} />
+              <input type="color" aria-label={t('Choisir une couleur')} value={HEX.test(color) ? color : '#1509F3'} onChange={(e) => setColor(e.target.value)} className="h-11 w-14 cursor-pointer rounded-xl border border-line bg-surface p-1" />
+              <Input value={color} placeholder="#1509F3" maxLength={7} onChange={(e) => setColor(e.target.value.trim())} />
               {color && <Button type="button" variant="ghost" onClick={() => setColor('')}>{t('Effacer')}</Button>}
             </div>
           </Field>

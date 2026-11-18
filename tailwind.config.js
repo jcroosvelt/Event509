@@ -25,12 +25,12 @@ export default {
           300: v('brand-300'),
         },
         // Bleu nuit du logo, identique dans les deux thèmes (panneaux de marque, voiles sur images)
-        navy: '#0B1533',
+        navy: '#0C0640',
       },
       borderRadius: { '4xl': '2rem' },
       boxShadow: {
         card: 'var(--shadow-card)',
-        float: '0 12px 30px -8px rgba(31,94,255,0.55)',
+        float: '0 12px 30px -8px rgba(21,9,243,0.5)',
       },
     },
   },

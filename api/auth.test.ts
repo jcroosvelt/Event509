@@ -204,7 +204,7 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     { question: 'Quel était le titre de mon premier projet créatif ?', answer: 'Kanaval Pam' },
     { question: 'Où ai-je rangé mon vieux carnet rouge ?', answer: 'Sous le lit de grand-père' },
   ];
-  const profile = (extra: Record<string, unknown> = {}) => ({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', questions: qs3, acceptTerms: true, acceptPrivacy: true, accountType: 'organizer', ...extra });
+  const profile = (extra: Record<string, unknown> = {}) => ({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', questions: qs3, acceptTerms: true, acceptPrivacy: true, ...extra });
   const google = (n: number, extra: Record<string, unknown> = {}) => ({ sub: `g-sub-${n}-${seq}`, email: `user${n}-${Date.now()}${seq}@gmail.test`, given_name: 'Marie', family_name: 'Claire', ...extra });
 
   /** Crée un compte complet via Google ; renvoie le navigateur connecté et ses informations. */
@@ -215,7 +215,10 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect(loc(cb)).toBe('/inscription/profil');
     const done = await b.call('POST', '/auth/signup/complete', profile());
     expect(done.status, JSON.stringify(done.body)).toBe(200);
-    return { b, claims, user: done.body.user, id: done.body.user.id as string };
+    // Compte commun à l'inscription ; ces tests ont besoin d'une organisation : « Devenir organisateur »
+    const up = await b.call('POST', '/auth/organizer', { orgName: 'Collectif Test', country: 'HT' });
+    expect(up.status, JSON.stringify(up.body)).toBe(200);
+    return { b, claims, user: up.body, id: done.body.user.id as string };
   }
   const events = async (userId: string) => (await pool.query(`select event from security_events where user_id = $1 order by at`, [userId])).rows.map((r) => r.event as string);
   const lastCodes = async (b: Browser) => {
@@ -298,19 +301,19 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect((await b.call('GET', '/auth/signup/pending')).body.pending).toBe(true);
     const done = await b.call('POST', '/auth/signup/complete', profile({ username: 'Joseph.R' }));
     expect(done.status).toBe(200);
-    expect(done.body.user).toMatchObject({ email: claims.email, name: 'Marie Claire', role: 'organizer', authComplete: true, username: 'joseph.r' });
+    expect(done.body.user).toMatchObject({ email: claims.email, name: 'Marie Claire', role: 'participant', authComplete: true, username: 'joseph.r' });
     expect(done.body.token).toBeUndefined(); // aucun jeton dans le navigateur
     expect(JSON.stringify(done.body)).not.toMatch(/answer|hash|\$argon2/);
     const cookie = [...b.jar.keys()].find((k) => k.includes('e509_session'));
     expect(cookie).toBeTruthy();
     expect((await b.call('GET', '/auth/me')).body.email).toBe(claims.email);
-    // Compte, identité Google (par « sub »), 3 questions, organisation
+    // Compte commun (sans organisation), identité Google (par « sub »), 3 questions
     const u = (await pool.query(`select id, role, team_role, organizer_id, auth_complete, password_hash from users where email = $1`, [claims.email])).rows[0];
-    expect(u).toMatchObject({ role: 'organizer', team_role: 'admin', auth_complete: true, password_hash: null });
+    expect(u).toMatchObject({ role: 'participant', team_role: null, organizer_id: null, auth_complete: true, password_hash: null });
     expect(u.id).toMatch(/^u_/); // identifiant interne, pas l'e-mail
     expect((await pool.query(`select subject, status from auth_identities where user_id = $1`, [u.id])).rows).toEqual([{ subject: claims.sub, status: 'active' }]);
     expect((await pool.query(`select count(*)::int as n from security_questions where user_id = $1`, [u.id])).rows[0].n).toBe(3);
-    expect((await pool.query(`select 1 from organizers where id = $1`, [u.organizer_id])).rowCount).toBe(1);
+    expect((await pool.query(`select 1 from organizers where id = $1`, [u.organizer_id])).rowCount).toBe(0);
     // L'inscription provisoire est supprimée ; elle ne peut pas servir deux fois
     expect((await pool.query(`select 1 from pending_signups where google_sub = $1`, [claims.sub])).rowCount).toBe(0);
     const again = await b.call('POST', '/auth/signup/complete', profile());
@@ -893,7 +896,7 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     expect((await pool.query(`select count(*)::int as n from auth_identities where subject = $1`, [claims.sub])).rows[0].n).toBe(1);
     // Même Google dans un autre navigateur : connexion, pas de second compte
     const b2 = new Browser();
-    expect(loc((await b2.google('login', claims)).cb)).toBe('/organisateur');
+    expect(loc((await b2.google('login', claims)).cb)).toBe('/compte');
     // Nom d'utilisateur unique (sans tenir compte de la casse)
     const u1 = new Browser();
     await u1.google('login', google(91));

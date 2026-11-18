@@ -545,6 +545,35 @@ test.describe('commission', () => {
   });
 });
 
+test.describe('barre flottante (mobile)', () => {
+  test('onglets en pilule, repli en bouton rond · contexte · avatar, menu de pastilles, partout', async ({ page }) => {
+    test.skip(!isMobile(page), 'barre réservée au téléphone');
+    await fresh(page, '/compte');
+    const bar = page.getByRole('navigation', { name: 'Mon espace' }).last();
+    await expect(bar.getByRole('link', { name: 'Accueil' })).toBeVisible();
+    await expect(bar.getByRole('link', { name: 'Explorer' })).toBeVisible();
+    // Toucher l'onglet actif : la barre se replie (bouton rond · pilule du contexte · avatar)
+    await bar.getByRole('link', { name: 'Accueil' }).click();
+    await expect(bar.getByRole('button', { name: 'Afficher les onglets' })).toBeVisible();
+    await expect(bar.getByRole('link', { name: 'Explorer' })).toBeHidden();
+    // L'avatar ouvre le menu de pastilles
+    await bar.getByRole('button', { name: 'Menu du compte' }).click();
+    const menu = bar.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Mes billets' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Devenir organisateur' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu.getByRole('menuitem', { name: 'Mes billets' })).toBeHidden();
+    // Le bouton rond redéploie les onglets
+    await bar.getByRole('button', { name: 'Afficher les onglets' }).click();
+    await expect(bar.getByRole('link', { name: 'Explorer' })).toBeVisible();
+    // Même barre sur les pages publiques
+    await page.goto('/explorer');
+    const pub = page.getByRole('navigation', { name: 'Navigation principale' }).last();
+    await expect(pub.getByRole('link', { name: 'Explorer' })).toBeVisible();
+    await expect(pub.getByRole('button', { name: 'Menu du compte' })).toBeVisible();
+  });
+});
+
 test.describe('espace acheteur', () => {
   test('tableau de bord, billets, achats et remboursements dans le même espace', async ({ page }) => {
     await fresh(page, '/compte');
@@ -559,5 +588,15 @@ test.describe('espace acheteur', () => {
     // Un participant n'a pas accès à l'espace organisateur
     await page.goto('/compte/profil');
     await expect(page.getByText('Administration')).toHaveCount(0);
+  });
+
+  test('« Devenir organisateur » : un seul compte, l’espace organisateur s’ouvre après le nom et le pays', async ({ page }) => {
+    await fresh(page, '/compte');
+    await expect(page.getByRole('heading', { name: 'Devenir organisateur' })).toBeVisible();
+    await page.getByRole('link', { name: 'Commencer' }).click();
+    await expect(page).toHaveURL(/\/compte\/devenir-organisateur$/);
+    await page.getByLabel(/Nom de l’organisation/).fill('Kompa Prod');
+    await page.getByRole('button', { name: 'Activer l’espace organisateur' }).click();
+    await expect(page).toHaveURL(/\/organisateur/);
   });
 });
