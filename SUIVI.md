@@ -172,4 +172,5 @@
 - 2026-11-18 : versements : 3 niveaux de sécurité (identité récente + empreinte/passkey + questions de sécurité), site et serveur.
 - 2026-11-18 : compte unique (devenir organisateur depuis « Mon espace »), nouveau bleu en dégradé #1509F3 → noir, barre de navigation flottante animée sur tout le site et dans l'application, test des dégradés d'image, vérification « aucune exécution de code ».
 - 2026-11-18 : application publiée (build n° 60, compilation réussie, branche `apk-release` et artifact `Android-APK`). **La publication automatique dans `public/app` n'a pas eu lieu** : l'étape « Publish APK to the site repository » est ignorée tant que le secret GitHub `SITE_REPO_TOKEN` (dépôt de l'application) n'est pas défini ; le site sert donc encore la version 1.0.51.
+- 2026-11-18 : APK 1.0.60 copié à la main dans `public/app` (somme SHA-256 vérifiée, 29 Mo). **Reste à faire plus tard** : définir le secret `SITE_REPO_TOKEN` (et `ANNOUNCE_SECRET`) pour que la publication et l'annonce de mise à jour soient automatiques ; en attendant, l'APK se copie à la main depuis la branche `apk-release` du dépôt de l'application.
 
