@@ -57,7 +57,7 @@ export function multiEventRoutes(h: PremiumDeps): [string, string, Handler][] {
     if (count >= 30) fail(409, 'Limite de 30 modèles atteinte : supprimez-en un');
     const tpl: Partial<EventItem> = {
       title: e!.title, description: e!.description, cover: e!.cover, images: e!.images, categories: e!.categories, venue: e!.venue, online: e!.online,
-      currency: e!.currency, seated: e!.seated, seatMap: e!.seatMap, maxPerPerson: e!.maxPerPerson, tags: e!.tags, pixels: e!.pixels, recurring: e!.recurring,
+      currency: e!.currency, seated: e!.seated, seatMap: e!.seatMap, maxPerPerson: e!.maxPerPerson, tags: e!.tags, recurring: e!.recurring,
       tickets: e!.tickets.map((t) => ({ ...t, sold: 0 })),
     };
     const id = newId('tp');

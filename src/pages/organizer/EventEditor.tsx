@@ -536,12 +536,6 @@ export default function EventEditor() {
                   <Input value={(ev.tags ?? []).join(', ')} onChange={(e) => up({ tags: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
                 </Field>
               </Card>
-              <Card className="space-y-4">
-                <h2 className="font-bold">{t('Pixels de suivi')}</h2>
-                <p className="text-sm text-ink-soft">{t('Mesurez vos campagnes : vues de page, débuts de paiement et achats sont envoyés automatiquement.')}</p>
-                <Field label="Facebook Pixel ID" hint={t('Laissez vide pour utiliser le pixel par défaut de votre organisation')}><Input inputMode="numeric" value={ev.pixels?.fb ?? ''} onChange={(e) => up({ pixels: { ...ev.pixels, fb: e.target.value.replace(/\D/g, '') } })} placeholder="123456789012345" /></Field>
-                <Field label="Google Analytics (GA4)"><Input value={ev.pixels?.ga ?? ''} onChange={(e) => up({ pixels: { ...ev.pixels, ga: e.target.value.toUpperCase() } })} placeholder="G-XXXXXXXXXX" /></Field>
-              </Card>
             </>
           )}
 

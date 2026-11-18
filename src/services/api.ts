@@ -89,10 +89,6 @@ function cacheOrganizer(o: Organizer) {
   else db.organizers.push(o);
   return clone(o);
 }
-function replaceCommission(c: { organizerId: string; rate?: number; reason?: string }) {
-  const rest = db.customCommissions.filter((x) => x.organizerId !== c.organizerId);
-  replaceAll(db.customCommissions, c.rate == null ? rest : [...rest, { organizerId: c.organizerId, rate: c.rate, reason: c.reason ?? '' }]);
-}
 
 interface Bootstrap {
   events: EventItem[];
@@ -105,7 +101,7 @@ interface Bootstrap {
   /** Taux de toutes les devises : gourdes pour 1 unité. */
   rates?: Partial<Record<DisplayCurrency, number>>;
   site?: Partial<SiteInfo>;
-  customCommissions: { organizerId: string; rate: number; reason: string }[];
+  customCommissions?: { organizerId: string; rate: number; reason: string }[];
 }
 const BOOT_KEY = 'e509.cache.bootstrap';
 
@@ -113,7 +109,7 @@ function applyBootstrap(b: Bootstrap) {
   replaceAll(db.events, b.events);
   replaceAll(db.organizers, b.organizers);
   replaceAll(db.ambassadors, (b.ambassadors ?? []).map((a) => ({ clicks: 0, sales: 0, revenue: 0, ...a })));
-  replaceAll(db.customCommissions, b.customCommissions);
+  replaceAll(db.customCommissions, []);
   Object.assign(feeSettings, b.fees);
   if (typeof b.rate === 'number') setUsdToHtg(b.rate);
   if (b.rates) setRates(b.rates);
@@ -950,7 +946,6 @@ export async function verifyTicket(code: string, eventId?: string): Promise<Tick
 // ---------- Commissions ----------
 
 const FEES_KEY = 'e509.demo.fees';
-const CUSTOM_KEY = 'e509.demo.customFees';
 function readLocal<T>(k: string): T | null {
   try {
     const v = localStorage.getItem(k);
@@ -974,8 +969,8 @@ export function currentFeeSettings(): FeeSettings {
   return { ...feeSettings };
 }
 /** Taux de commission d'un organisateur : taux négocié, sinon taux par défaut. */
-export function feeRateFor(orgId: string) {
-  return db.customCommissions.find((c) => c.organizerId === orgId)?.rate ?? feeSettings.percent;
+export function feeRateFor(_orgId?: string) {
+  return feeSettings.percent;
 }
 export async function saveFeeSettings(next: FeeSettings) {
   if (!DEMO) return void Object.assign(feeSettings, await http<FeeSettings>('/admin/fees', { method: 'PUT', body: JSON.stringify(next) }));
@@ -1024,32 +1019,6 @@ export async function saveSiteInfo(next: SiteInfo) {
 /** Taux de change en vigueur : gourdes pour 1 dollar (mis à jour automatiquement par le serveur). */
 export function currentExchangeRates(): Record<DisplayCurrency, number> {
   return { ...RATES };
-}
-export async function listCustomCommissions() {
-  if (!DEMO) return http<typeof db.customCommissions>('/admin/commissions');
-  await wait(); return clone(db.customCommissions);
-}
-export async function saveCustomCommission(c: { organizerId: string; rate: number; reason: string }) {
-  if (!DEMO) {
-    await http('/admin/commissions', { method: 'PUT', body: JSON.stringify(c) });
-    return void replaceCommission(c);
-  }
-  await wait(200);
-  const i = db.customCommissions.findIndex((x) => x.organizerId === c.organizerId);
-  if (i >= 0) db.customCommissions[i] = c; else db.customCommissions.push(c);
-  writeLocal(CUSTOM_KEY, db.customCommissions);
-  audit('Taux personnalisé enregistré', `${db.organizers.find((o) => o.id === c.organizerId)?.name} — ${c.rate} %`);
-}
-export async function removeCustomCommission(organizerId: string) {
-  if (!DEMO) {
-    await http(`/admin/commissions/${organizerId}`, { method: 'DELETE' });
-    return void replaceCommission({ organizerId });
-  }
-  await wait(200);
-  const i = db.customCommissions.findIndex((x) => x.organizerId === organizerId);
-  if (i >= 0) db.customCommissions.splice(i, 1);
-  writeLocal(CUSTOM_KEY, db.customCommissions);
-  audit('Taux personnalisé supprimé', db.organizers.find((o) => o.id === organizerId)?.name ?? organizerId);
 }
 
 // ---------- Administration ----------

@@ -80,8 +80,6 @@ export interface EventItem {
   status: EventStatus;
   seated: boolean; // plan de salle (places numérotées)
   seatMap?: SeatMapConfig;
-  /** Pixels de suivi propres à l'événement. */
-  pixels?: { fb?: string; ga?: string };
   maxPerPerson: number;
   views: number;
   featured?: boolean;

@@ -186,10 +186,6 @@ export async function refreshRate(force = false) {
     void updateMarketRate().catch(() => {});
   }
 }
-async function rateFor(orgId: string, q: Q = db()) {
-  const r = await one<{ rate: string }>(`select rate from custom_commissions where organizer_id = $1`, [orgId], q);
-  return r ? Number(r.rate) : undefined;
-}
 async function audit(c: Ctx, action: string, target: string, q: Q = db()) {
   const e: AuditEntry = { id: newId('al'), at: new Date().toISOString(), actor: (c.user?.data.name as string) ?? 'Admin', action, target };
   await upsert('audit_log', { id: e.id, at: e.at, data: e }, q);
@@ -475,14 +471,12 @@ const bootstrap: Handler = async (c) => {
     [u?.organizer_id ?? '', u?.role === 'admin'],
   );
   const organizers = await docs<Organizer>(`select data from organizers order by data->>'name'`);
-  const commissions = await all<{ organizerId: string; rate: string }>(`select organizer_id as "organizerId", rate from custom_commissions`);
   return {
     events: events.map((e) => publicEvent(e, u)), organizers,
     fees: await feeSettings(),
     rate: USD_TO_HTG,
     rates: { ...RATES },
     site: await siteInfo(),
-    customCommissions: commissions.map((x) => ({ organizerId: x.organizerId, rate: Number(x.rate), reason: '' })),
   };
 };
 
@@ -619,7 +613,7 @@ const createOrder: Handler = async (c) => {
         discount = Math.min(eligibleSubtotal, promo!.type === 'percent' ? Math.round(eligibleSubtotal * promo!.value) / 100 : c2(promo!.value));
       }
       const paidTickets = lines.filter((l) => l.tt.price > 0).reduce((a, l) => a + l.qty, 0);
-      const fb = computeFees(await feeSettings(q), subtotal - discount, paidTickets, cur, await rateFor(ev!.organizerId, q));
+      const fb = computeFees(await feeSettings(q), subtotal - discount, paidTickets, cur);
 
       const order: Order = {
         id: newId('o'), eventId: ev!.id, createdAt: now.toISOString(),
@@ -1489,7 +1483,7 @@ const decideRefund: Handler = async (c) => {
 async function balanceOf(orgId: string) {
   const evs = await docs<EventItem>(`select data from events where organizer_id = $1`, [orgId]);
   const fees = await feeSettings();
-  const rate = (await rateFor(orgId)) ?? fees.percent;
+  const rate = fees.percent;
   const refunds = await docs<RefundRequest>(`select data from refunds where organizer_id = $1 and status = 'approved'`, [orgId]);
   const payouts = await docs<Payout>(`select data from payouts where organizer_id = $1`, [orgId]);
   const by = (cur: Currency) => {
@@ -1654,26 +1648,6 @@ const saveFees: Handler = async (c) => {
   await upsert('settings', { key: 'fees', value: next });
   await audit(c, 'Commission par défaut modifiée', `${next.percent} % + ${next.fixedHTG} HTG, ${next.buyerShare} % payés par l’acheteur`);
   return next;
-};
-const listCommissions: Handler = async (c) => {
-  admin(c);
-  return (await all<{ organizerId: string; rate: string; reason: string }>(`select organizer_id as "organizerId", rate, reason from custom_commissions`))
-    .map((x) => ({ ...x, rate: Number(x.rate) }));
-};
-const saveCommission: Handler = async (c) => {
-  admin(c);
-  const organizerId = str(c.body.organizerId, 60);
-  const rate = num(c.body.rate);
-  if (!(rate >= 0 && rate <= 50)) fail(422, 'Taux invalide');
-  await upsert('custom_commissions', { organizer_id: organizerId, rate, reason: str(c.body.reason, 300) });
-  await audit(c, 'Taux personnalisé enregistré', `${await orgName(organizerId)} — ${rate} %`);
-  return null;
-};
-const removeCommission: Handler = async (c) => {
-  admin(c);
-  await db().query(`delete from custom_commissions where organizer_id = $1`, [c.params.id]);
-  await audit(c, 'Taux personnalisé supprimé', await orgName(c.params.id));
-  return null;
 };
 const listAudit: Handler = async (c) => {
   admin(c);
@@ -2222,9 +2196,6 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/legal', getLegal],
   ['PUT', '/admin/legal', saveLegal],
   ['PUT', '/admin/site', saveSite],
-  ['GET', '/admin/commissions', listCommissions],
-  ['PUT', '/admin/commissions', saveCommission],
-  ['DELETE', '/admin/commissions/:id', removeCommission],
   ['GET', '/admin/audit', listAudit],
   ['GET', '/admin/stats', platformStats],
   ['PUT', '/admin/targets', saveTarget],

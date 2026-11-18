@@ -8,7 +8,6 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { rememberGuestOrder, useApp } from '@/store/app';
 import { convert, currencyName, cx, dateLong, money, moneyRaw, time } from '@/lib/format';
 import { isEmail, useForm } from '@/lib/form';
-import { trackPixel } from '@/lib/pixels';
 import { Button, Card, Field, IconBadge, Input, Loading, Segmented, Select, Toggle } from '@/components/ui';
 import { trackingCode } from '@/lib/tracking';
 import { EventCover } from '@/components/events';
@@ -157,7 +156,6 @@ export default function Checkout() {
       app.addOrder(order);
       app.addTickets(tickets);
       app.pushNotification({ title: t('Commande confirmée'), body: `${ev.title} — ${order.id}`, kind: 'sale' });
-      trackPixel('Purchase', { value: total, currency, event: ev.id });
       // Sans compte : la clé du lien permet de retrouver la commande ; on la garde sur cet appareil pour la rattacher à un compte plus tard
       if (!app.user && accessKey) rememberGuestOrder(order.id, accessKey);
       nav(`/commande/${order.id}${accessKey ? `?k=${encodeURIComponent(accessKey)}` : ''}`, { state: { order, tickets, emailSent } });

@@ -2,7 +2,7 @@ import { AppLockCard } from '@/components/AppLockCard';
 import { ProPageCard } from './ProPageCard';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, Globe, ImagePlus } from 'lucide-react';
+import { BadgeCheck, CheckCircle2, ExternalLink, FileUp, ImagePlus } from 'lucide-react';
 import { organizers } from '@/data/mock';
 import { DEMO, orgVerification, saveOrganizer, uploadFile } from '@/services/api';
 import { shrinkImage } from '@/lib/image';
@@ -42,10 +42,6 @@ export default function OrgSettings() {
       website: (v) => (v && !/^https?:\/\/\S+\.\S+/.test(String(v)) ? t('Saisissez une adresse comme https://monsite.ht') : undefined),
     },
   );
-  const pixels = useForm(load('e509.orgPixels', DEMO ? { fb: '1234567890', ga: 'G-7Q2XKD91' } : { fb: '', ga: '' }), {
-    fb: (v) => (v && !/^\d{10,20}$/.test(String(v)) ? t('Un identifiant Facebook Pixel contient 10 à 20 chiffres') : undefined),
-    ga: (v) => (v && !/^G-[A-Z0-9]{6,12}$/.test(String(v)) ? t('Format attendu : G-XXXXXXXXXX') : undefined),
-  });
 
   const saveProfile = async () => {
     if (!profile.validate()) return;
@@ -57,11 +53,6 @@ export default function OrgSettings() {
   const setDisplay = (p: typeof display) => {
     setDisplayState(p);
     persist('e509.orgDisplay', p);
-  };
-  const savePixels = () => {
-    if (!pixels.validate()) return;
-    persist('e509.orgPixels', pixels.values);
-    toast(t('Pixels enregistrés'));
   };
   const onDoc = async (f?: File) => {
     if (!f) return;
@@ -188,20 +179,6 @@ export default function OrgSettings() {
           </Card>
         )}
 
-        <Card>
-          <div className="mb-4 flex items-center gap-3">
-            <IconBadge><Globe className="h-[18px] w-[18px]" /></IconBadge>
-            <div><h2 className="font-bold">{t('Pixels de suivi par défaut')}</h2><p className="text-sm text-ink-muted">{t('Appliqués à toutes vos pages événement')}</p></div>
-          </div>
-          <form noValidate onSubmit={(e) => { e.preventDefault(); savePixels(); }}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Facebook Pixel ID" error={pixels.errors.fb}><Input inputMode="numeric" {...pixels.bind('fb')} /></Field>
-              <Field label="Google Analytics (GA4)" error={pixels.errors.ga}><Input {...pixels.bind('ga')} onChange={(e) => pixels.set('ga', e.target.value.toUpperCase())} /></Field>
-            </div>
-            <p className="mt-3 text-xs text-ink-muted">{t('Événements envoyés : PageView, ViewContent, InitiateCheckout, Purchase (avec montant et devise).')}</p>
-            <Button type="submit" className="mt-4" variant="dark">{t('Enregistrer')}</Button>
-          </form>
-        </Card>
       </div>
     </div>
   );

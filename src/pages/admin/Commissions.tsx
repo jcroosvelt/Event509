@@ -1,39 +1,28 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { organizers } from '@/data/mock';
-import { currentExchangeRates, currentFeeSettings, listCustomCommissions, removeCustomCommission, saveCustomCommission, saveFeeSettings } from '@/services/api';
-import { useAsync, useTitle } from '@/lib/hooks';
+import { currentExchangeRates, currentFeeSettings, saveFeeSettings } from '@/services/api';
+import { useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { moneyRaw } from '@/lib/format';
 import { computeFees, type FeeSettings } from '@/lib/fees';
 import { useForm, cleanNumber } from '@/lib/form';
-import { Button, Card, Field, Input, Loading, Modal, PageHeader, Select, Table, Td, Toggle } from '@/components/ui';
+import { Button, Card, Field, Input, PageHeader, Toggle } from '@/components/ui';
 
 export default function Commissions() {
   const { toast, lang, t } = useApp();
   useTitle(t('Commissions'));
-  const { data, loading, reload } = useAsync(() => listCustomCommissions(), []);
   const [rules, setRules] = useState<FeeSettings>(currentFeeSettings);
   const [share, setShare] = useState(() => String(currentFeeSettings().buyerShare));
   const [shareErr, setShareErr] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const main = useForm({ fee: String(rules.percent), fixed: String(rules.fixedHTG) }, {
     fee: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
     fixed: (v) => (!(Number(v) >= 0) ? t('Indiquez un montant positif ou 0') : undefined),
   });
-  const custom = useForm({ organizerId: organizers[0].id, rate: '4', reason: '' }, {
-    rate: (v) => (!(Number(v) >= 0 && Number(v) <= 20) ? t('Entre 0 et 20 %') : undefined),
-    reason: (v) => (!String(v).trim() ? t('Indiquez le motif') : undefined),
-  });
 
-  if (loading) return <Loading />;
   // Aperçu en direct avec les valeurs saisies (pas encore enregistrées)
   const preview: FeeSettings = { ...rules, percent: Number(main.values.fee) || 0, fixedHTG: Number(main.values.fixed) || 0 };
   const example = 2500;
   const fb = computeFees(preview, example, 1, 'HTG');
-  const orgName = (id: string | null) => organizers.find((o) => o.id === id)?.name ?? '';
 
   const save = async () => {
     if (!main.validate()) return;
@@ -54,19 +43,6 @@ export default function Commissions() {
     await saveFeeSettings(next);
     toast(t('Règle enregistrée'));
   };
-  const openCustom = (orgId?: string) => {
-    const c = data?.find((x) => x.organizerId === orgId);
-    custom.reset({ organizerId: orgId ?? organizers.find((o) => !data?.some((x) => x.organizerId === o.id))?.id ?? organizers[0].id, rate: String(c?.rate ?? 4), reason: c?.reason ?? '' });
-    setEditing(orgId ?? 'new');
-  };
-  const saveCustom = async () => {
-    if (!custom.validate()) return;
-    await saveCustomCommission({ organizerId: custom.values.organizerId, rate: Number(custom.values.rate), reason: custom.values.reason });
-    setEditing(null);
-    toast(t('Taux personnalisé enregistré'));
-    reload();
-  };
-
   return (
     <div className="max-w-4xl">
       <PageHeader title={t('Commissions de service')} subtitle={t('Frais appliqués à chaque billet payant. Les changements valent pour les nouvelles commandes.')} />
@@ -105,56 +81,6 @@ export default function Commissions() {
         </Card>
       </div>
 
-      <Card className="mt-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="font-bold">{t('Taux personnalisés')}</h2>
-            <p className="text-sm text-ink-soft">{t('Remplacent le pourcentage par défaut pour un organisateur ; les frais fixes restent appliqués.')}</p>
-          </div>
-          <Button size="sm" variant="soft" onClick={() => openCustom()}><Plus className="h-4 w-4" aria-hidden /> {t('Ajouter')}</Button>
-        </div>
-        <Table caption={t('Taux personnalisés')} head={[t('Organisateur'), t('Taux'), t('Motif'), '']}>
-          {(data ?? []).map((c) => (
-            <tr key={c.organizerId}>
-              <Td className="font-semibold">{orgName(c.organizerId)}</Td>
-              <Td>{c.rate.toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR')} %</Td>
-              <Td className="text-ink-soft">{t(c.reason)}</Td>
-              <Td>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => openCustom(c.organizerId)}>{t('Modifier')}</Button>
-                  <Button size="sm" variant="ghost" aria-label={t('Supprimer le taux de {name}', { name: orgName(c.organizerId) })} onClick={() => setRemoving(c.organizerId)}><Trash2 className="h-4 w-4" aria-hidden /></Button>
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </Table>
-      </Card>
-
-      <Modal
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        title={t('Supprimer le taux de {name} ?', { name: orgName(removing) })}
-        description={t('Cet organisateur repassera au taux par défaut ({n} %) pour ses prochaines commandes.', { n: rules.percent })}
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" className="flex-1" onClick={() => setRemoving(null)}>{t('Annuler')}</Button>
-            <Button variant="danger" className="flex-1" onClick={async () => { await removeCustomCommission(removing!); setRemoving(null); toast(t('Taux personnalisé supprimé')); reload(); }}>{t('Supprimer le taux')}</Button>
-          </>
-        }
-      >
-        <span />
-      </Modal>
-
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('Taux personnalisé')} size="sm" footer={<Button className="flex-1" onClick={saveCustom}>{t('Enregistrer')}</Button>}>
-        <form noValidate onSubmit={(e) => { e.preventDefault(); saveCustom(); }} className="space-y-4">
-          <Field label={t('Organisateur')}>
-            <Select {...custom.bind('organizerId')} disabled={editing !== 'new'}>{organizers.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select>
-          </Field>
-          <Field label={t('Taux (%)')} error={custom.errors.rate} required><Input type="text" inputMode="decimal" autoComplete="off" {...custom.bind('rate')} onChange={(e) => custom.set('rate', cleanNumber(e.target.value, true))} /></Field>
-          <Field label={t('Motif')} error={custom.errors.reason} required><Input {...custom.bind('reason')} placeholder={t('Ex. Association, gros volume…')} /></Field>
-        </form>
-      </Modal>
     </div>
   );
 }

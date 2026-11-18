@@ -204,10 +204,7 @@ describe('administration', () => {
     expect((await api.listAllPayouts()).find((x) => x.id === p.id)?.status).toBe('paid');
   });
 
-  it('applique un taux personnalisé au calcul du taux de l’organisateur', async () => {
-    await api.saveCustomCommission({ organizerId: 'org3', rate: 2, reason: 'Test' });
-    expect(api.feeRateFor('org3')).toBe(2);
-    await api.removeCustomCommission('org3');
+  it('applique le même taux à tous les organisateurs (pas de taux personnalisé)', () => {
     expect(api.feeRateFor('org3')).toBe(api.currentFeeSettings().percent);
   });
 });

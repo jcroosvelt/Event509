@@ -11,7 +11,6 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, cx, dateLong, dateShort, money, num, time } from '@/lib/format';
 import { downloadICS } from '@/lib/export';
-import { trackPixel } from '@/lib/pixels';
 import { ReviewItem, Stars } from '@/components/Reviews';
 import { Avatar, Badge, Button, Card, Field, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, Select, Textarea, type Tone } from '@/components/ui';
 import { CategoryIcon, EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
@@ -55,7 +54,6 @@ export default function EventDetail() {
   useTitle(ev?.title);
 
   useEffect(() => {
-    if (ev) trackPixel('ViewContent', { event: ev.id });
   }, [ev]);
 
   // Les événements consultés comptent dans les goûts de l'utilisateur (« Pour vous »)
@@ -103,7 +101,6 @@ export default function EventDetail() {
       return;
     }
     const sel = Object.entries(qty).filter(([, n]) => n > 0).map(([id, n]) => `${id}:${n}`).join(',');
-    trackPixel('InitiateCheckout', { event: ev.id, value: total, currency: ev.currency });
     nav(`/e/${ev.slug}/achat?t=${sel}${occ ? `&s=${encodeURIComponent(occ)}` : ''}`);
   };
 
