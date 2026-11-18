@@ -24,7 +24,7 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
-import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured } from './push.js';
+import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyAudience, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured, type PushMessage } from './push.js';
 import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
 import { computeFees, convert, DEFAULT_FEES, DEFAULT_RATES, isDisplayCurrency, RATES, round as roundCur, setRates, USD_TO_HTG, type Currency, type FeeSettings } from './fees.js';
@@ -739,6 +739,34 @@ async function notifyTeamSale(ev: EventItem, count: number) {
   });
 }
 
+/** Acheteur (email, compte) et organisation d'une commande, pour les notifications. */
+async function orderParties(orderId: string) {
+  return one<{ email: string | null; user_id: string | null; organizer_id: string | null; title: string | null }>(
+    `select lower(o.data->>'buyerEmail') as email, o.user_id, e.organizer_id, e.data->>'title' as title
+     from orders o left join events e on e.id = o.event_id where o.id = $1`, [orderId]);
+}
+
+/** Prévient l'acheteur d'une commande (compte et email d'achat, un seul envoi par appareil). Jamais bloquant. */
+async function tellBuyer(orderId: string, m: PushMessage) {
+  if (!pushConfigured()) return;
+  await safely(async () => {
+    const p = await orderParties(orderId);
+    if (p) await notifyAudience({ userIds: [p.user_id], emails: [p.email] }, m);
+  });
+}
+
+/** Prévient l'équipe d'une organisation. Jamais bloquant. */
+async function tellOrg(orgId: string | null | undefined, m: PushMessage) {
+  if (!pushConfigured() || !orgId) return;
+  await safely(async () => { await notifyUsers(await organizerUserIds(orgId), m); });
+}
+
+/** Prévient les administrateurs. Jamais bloquant. */
+async function tellAdmins(m: PushMessage) {
+  if (!pushConfigured()) return;
+  await safely(async () => { await notifyUsers((await adminAccounts()).map((a) => a.id), m); });
+}
+
 /** Modification importante ou annulation : tous les détenteurs de billets valables sont prévenus. */
 async function notifyEventChange(before: EventItem | undefined, after: EventItem) {
   if (!pushConfigured() || !before) return;
@@ -843,6 +871,7 @@ const requestRefund: Handler = async (c) => {
     await upsert('refunds', { id: r.id, organizer_id: ev?.organizerId ?? null, order_id: o!.id, status: r.status, created_at: r.createdAt, data: r }, q);
     await q.query(`update orders set data = data || $2::jsonb where id = $1`, [o!.id, JSON.stringify({ refundRequest })]);
   });
+  await tellOrg(ev?.organizerId, { title: 'Demande de remboursement', body: `${o!.buyerName} · ${ev?.title ?? ''}`.trim(), url: '/organisateur/remboursements', channel: 'sales' });
   return refundRequest;
 };
 
@@ -1519,6 +1548,7 @@ const decideRefund: Handler = async (c) => {
   const orgId = org(c, 'refunds');
   const status = str(c.body.status, 20) as RefundRequest['status'];
   if (status !== 'approved' && status !== 'declined') fail(422, 'Décision invalide');
+  let decided: { orderId: string; title: string } | null = null;
   await tx(async (q) => {
     const r = await one<{ order_id: string; data: RefundRequest }>(`select order_id, data from refunds where id = $1 and organizer_id = $2 for update`, [c.params.id, orgId], q);
     if (!r) fail(404, 'Demande introuvable');
@@ -1530,8 +1560,10 @@ const decideRefund: Handler = async (c) => {
     // Billets remboursés : leurs codes ne passent plus au contrôle et les places sont libérées
     if (status === 'approved')
       await q.query(`update tickets set status = 'refunded', seat = null, data = data || '{"status":"refunded"}'::jsonb where order_id = $1 and status in ('valid','resale')`, [r!.order_id]);
+    decided = { orderId: r!.order_id, title: r!.data.eventTitle };
   });
   await act(c, orgId, status === 'approved' ? 'Remboursement accepté' : 'Remboursement refusé', c.params.id);
+  if (decided) await tellBuyer((decided as { orderId: string }).orderId, { title: status === 'approved' ? 'Remboursement accepté' : 'Remboursement refusé', body: (decided as { title: string }).title, url: '/compte/remboursements', channel: 'tickets' });
   return null;
 };
 
@@ -1627,6 +1659,7 @@ const requestPayout: Handler = async (c) => {
   const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}`, ...(priority ? { priority: true } : {}) };
   await upsert('payouts', { id: p.id, organizer_id: orgId, status: p.status, created_at: new Date().toISOString(), data: p });
   await logSecurity(c.user!.id, 'payout_requested', { payout: p.id, amount, currency, method }, c.ip);
+  await tellAdmins({ title: 'Demande de versement', body: `${amount} ${currency} · ${method}`, url: '/admin/versements', channel: 'sales' });
   await notifySecurity(c.user!.id, 'Demande de versement', [`Une demande de versement de ${amount} ${currency} vers ${method} vient d’être faite depuis votre compte.`, 'Si ce n’est pas vous, changez immédiatement vos accès et contactez Event509.']).catch(() => {});
   return p;
 };
@@ -2019,9 +2052,11 @@ const resolveDispute: Handler = async (c) => {
   const status = str(c.body.status, 20) as Dispute['status'];
   const decision = c.body.decision as Dispute['decision'];
   const note = str(c.body.note, 2000);
+  let resolvedOrder: string | null = null;
   await tx(async (q) => {
     const d = (await docs<Dispute>(`select data from disputes where id = $1 for update`, [c.params.id], q))[0];
     if (!d) return;
+    if (status === 'resolved') resolvedOrder = d.orderId;
     d.status = status;
     if (note) d.note = note;
     if (status === 'resolved' && decision) {
@@ -2039,6 +2074,11 @@ const resolveDispute: Handler = async (c) => {
     await q.query(`update disputes set status = $2, data = $3 where id = $1`, [d.id, d.status, JSON.stringify(d)]);
     await audit(c, status === 'resolved' ? 'Litige résolu' : 'Litige passé en enquête', d.orderId, q);
   });
+  if (resolvedOrder) {
+    const oid = resolvedOrder as string;
+    await tellBuyer(oid, { title: 'Litige résolu', body: 'Notre équipe a rendu sa décision.', url: '/compte/remboursements', channel: 'updates' });
+    await safely(async () => { const p = await orderParties(oid); await tellOrg(p?.organizer_id, { title: 'Litige résolu', body: p?.title ?? 'Un litige est résolu.', url: '/organisateur/remboursements', channel: 'updates' }); });
+  }
   return null;
 };
 const disputeMessage: Handler = async (c) => {
@@ -2059,6 +2099,10 @@ const setPayoutStatus: Handler = async (c) => {
   const status = str(c.body.status, 20) as Payout['status'];
   if (!['processing', 'paid', 'rejected', 'scheduled'].includes(status)) fail(422, 'Statut invalide');
   const p = await one<{ data: Payout }>(`update payouts set status = $2, data = data || $3::jsonb where id = $1 returning data`, [c.params.id, status, JSON.stringify({ status })]);
+  if (p) {
+    const titles: Record<string, string> = { paid: 'Versement envoyé', processing: 'Versement approuvé', rejected: 'Versement refusé', scheduled: 'Versement programmé' };
+    await tellOrg(p.data.organizerId, { title: titles[status] ?? 'Versement', body: `${p.data.amount} ${p.data.currency} · ${p.data.method}`, url: '/organisateur/versements', channel: 'sales' });
+  }
   if (p) await audit(c, status === 'paid' ? 'Versement payé' : status === 'processing' ? 'Versement approuvé' : 'Versement refusé', `${await orgName(p.data.organizerId)} — ${p.data.amount} ${p.data.currency}`);
   return null;
 };
@@ -2092,6 +2136,19 @@ const registerDevice: Handler = async (c) => {
 };
 
 /** Déconnexion : l'appareil ne reçoit plus les notifications du compte (celles des commandes restent). */
+/**
+ * Test des notifications : envoie un message à tous les appareils du compte connecté et dit pourquoi rien n'arrive
+ * (service Firebase non réglé côté serveur, ou aucun appareil enregistré). Limité à 5 essais par 10 minutes.
+ */
+const pushTest: Handler = async (c) => {
+  const u = auth(c);
+  await rateLimit(`pushtest:${u.id}`, 5, 10);
+  const configured = pushConfigured();
+  const devices = Number((await one<{ n: string }>(`select count(distinct token) as n from device_tokens where user_id = $1`, [u.id]))?.n ?? 0);
+  const sent = configured && devices ? await notifyUsers([u.id], { title: 'Notification de test', body: 'Tout fonctionne : vos billets, rappels et alertes arriveront ici.', url: '/compte/notifications', channel: 'updates' }) : 0;
+  return { configured, devices, sent };
+};
+
 const unregisterDevice: Handler = async (c) => {
   const u = auth(c);
   await db().query(`delete from device_tokens where token = $1 and owner = $2`, [str(c.query.token, 4096), `u:${u.id}`]);
@@ -2167,9 +2224,10 @@ const replyReview: Handler = async (c) => {
   const orgId = org(c, 'marketing');
   const body = str(c.body.body, 1000);
   if (!body) fail(422, 'Écrivez une réponse');
-  const r = await one<{ data: Review }>(`select r.data from reviews r join events e on e.id = r.event_id where r.id = $1 and e.organizer_id = $2`, [c.params.id, orgId]);
+  const r = await one<{ data: Review; order_id: string }>(`select r.data, r.order_id from reviews r join events e on e.id = r.event_id where r.id = $1 and e.organizer_id = $2`, [c.params.id, orgId]);
   if (!r) fail(404, 'Avis introuvable');
   await db().query(`update reviews set data = data || $2::jsonb where id = $1`, [c.params.id, JSON.stringify({ reply: { body, at: new Date().toISOString() } })]);
+  await tellBuyer(r!.order_id, { title: 'L’organisateur a répondu à votre avis', body: body.slice(0, 120), url: '/compte/achats', channel: 'updates' });
   return null;
 };
 
@@ -2269,6 +2327,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/orders/:id/verify', verifyOrder],
   ['POST', '/pay/webhook', payWebhook],
   ['POST', '/devices', registerDevice],
+  ['POST', '/me/push-test', pushTest],
   ['DELETE', '/devices', unregisterDevice],
   ['GET', '/cron/reminders', runReminders],
   ['GET', '/me/tickets', myTickets],

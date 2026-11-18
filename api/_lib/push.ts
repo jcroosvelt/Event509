@@ -119,6 +119,15 @@ export async function notifyEmails(emails: string[], m: PushMessage) {
   return sendPush(rows.map((r) => r.token), m);
 }
 
+/** Notifie une personne par ses comptes ET ses emails d'achat en un seul envoi (un appareil connu des deux ne reçoit qu'un message). */
+export async function notifyAudience(who: { userIds?: (string | null | undefined)[]; emails?: (string | null | undefined)[] }, m: PushMessage) {
+  const users = (who.userIds ?? []).filter((x): x is string => !!x);
+  const emails = (who.emails ?? []).filter((x): x is string => !!x).map((e) => e.toLowerCase());
+  if (!pushConfigured() || (!users.length && !emails.length)) return 0;
+  const rows = await all<{ token: string }>(`select distinct token from device_tokens where user_id = any($1) or buyer_email = any($2)`, [users, emails]);
+  return sendPush(rows.map((r) => r.token), m);
+}
+
 /** Comptes de l'organisation (propriétaire et équipe) actifs. */
 export async function organizerUserIds(organizerId: string) {
   return (await all<{ id: string }>(`select id from users where organizer_id = $1 and status = 'active'`, [organizerId])).map((r) => r.id);

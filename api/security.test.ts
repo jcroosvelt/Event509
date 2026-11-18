@@ -1,8 +1,8 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, generateKeyPairSync, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { boundedNumber, safeWebUrl } from './_lib/safety.js';
 import { privateIp, checkWebhookUrl } from './_lib/devapi.js';
 
@@ -296,6 +296,89 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     const other = await organizer();
     expect((await call('GET', `/org/events/${ev.id}/live`, undefined, other.token)).status).toBe(404);
     expect((await call('GET', '/org/events/inconnu/live', undefined, a.token)).status).toBe(404);
+  });
+
+  it('S3d. notifications push : remboursement, versement et litige préviennent la bonne personne, jamais les autres', async () => {
+    // Firebase simulé : on enregistre chaque envoi (jeton, titre) sans rien envoyer pour de vrai
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({ project_id: 'p-test', client_email: 'x@p-test.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() });
+    const sent: { token: string; title: string }[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      if (u.startsWith('https://fcm.googleapis.com/')) {
+        const m = JSON.parse(String(init?.body)).message as { token: string; notification: { title: string } };
+        sent.push({ token: m.token, title: m.notification.title });
+        return new Response('{}', { status: 200 });
+      }
+      return real(url as string, init);
+    });
+    try {
+      const a = await organizer();
+      const other = await organizer();
+      const ev = await eventOf(a);
+      const buyerTokenValue = await buyerToken();
+      const buyerId = (await pool.query(`select id from users where data->>'name' = 'Acheteur Sec' limit 1`)).rows[0].id as string;
+      const adm = await adminUser();
+      const dev = async (token: string, userId: string) => pool.query(`insert into device_tokens (token, owner, user_id) values ($1,$2,$3) on conflict do nothing`, [token, `u:${userId}`, userId]);
+      await dev(`tok-org-${a.id}-xxxxxxxxxxxx`, a.id);
+      await dev(`tok-other-${other.id}-xxxxxxxxxxx`, other.id);
+      await dev(`tok-buy-${buyerId}-xxxxxxxxxxx`, buyerId);
+      await dev(`tok-adm-${adm.id}-xxxxxxxxxxxx`, adm.id);
+      const to = (who: string) => sent.filter((x) => x.token.startsWith(`tok-${who}-`)).map((x) => x.title);
+      const o = await order(ev.id, { method: 'transfer' });
+      expect(o.status).toBe(200);
+      await pool.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [o.body.order.id]);
+      sent.length = 0;
+
+      // Demande de remboursement : l'organisation est prévenue (pas une autre organisation, pas l'acheteur)
+      expect((await call('POST', `/orders/${o.body.order.id}/refund`, { reason: 'Empêchement' }, buyerTokenValue)).status).toBe(200);
+      expect(to('org')).toEqual(['Demande de remboursement']);
+      expect(to('other')).toEqual([]);
+      expect(to('buy')).toEqual([]);
+
+      // Décision : l'acheteur est prévenu, une seule fois
+      sent.length = 0;
+      const rid = (await pool.query(`select id from refunds where order_id = $1`, [o.body.order.id])).rows[0].id as string;
+      expect((await call('POST', `/org/refunds/${rid}`, { status: 'approved' }, a.token)).status).toBe(200);
+      expect(to('buy')).toEqual(['Remboursement accepté']);
+      expect(to('other')).toEqual([]);
+
+      // Versement : décision de l'administration → l'organisation (jamais une autre)
+      sent.length = 0;
+      const py = { id: `py_t${Date.now()}`, organizerId: a.orgId, amount: 500, currency: 'HTG', method: 'moncash', destination: { name: 'Marie', phone: '+50937000000' }, status: 'requested', date: '2026-11-18', reference: 'VRS-T' };
+      await pool.query(`insert into payouts (id, organizer_id, status, data) values ($1,$2,'requested',$3)`, [py.id, a.orgId, JSON.stringify(py)]);
+      expect((await call('POST', `/admin/payouts/${py.id}`, { status: 'paid' }, adm.token)).status).toBe(200);
+      expect(to('org')).toEqual(['Versement envoyé']);
+      expect(to('other')).toEqual([]);
+
+      // Litige résolu : l'acheteur et l'organisation, pas les autres
+      sent.length = 0;
+      const dp = { id: `dp_t${Date.now()}`, orderId: o.body.order.id, opener: 'Acheteur', against: ev.id, subject: 'Test', amount: 500, currency: 'HTG', status: 'open', createdAt: '2026-11-18T10:00:00Z', messages: [] };
+      await pool.query(`insert into disputes (id, order_id, status, data) values ($1,$2,'open',$3)`, [dp.id, dp.orderId, JSON.stringify(dp)]);
+      expect((await call('POST', `/admin/disputes/${dp.id}/resolve`, { status: 'resolved', decision: 'reject', note: 'Refusé' }, adm.token)).status).toBe(200);
+      expect(to('buy')).toEqual(['Litige résolu']);
+      expect(to('org')).toEqual(['Litige résolu']);
+      expect(to('other')).toEqual([]);
+      // Passer un litige « en enquête » ne notifie personne
+      sent.length = 0;
+      await pool.query(`update disputes set status = 'open' where id = $1`, [dp.id]);
+      expect((await call('POST', `/admin/disputes/${dp.id}/resolve`, { status: 'investigating' }, adm.token)).status).toBe(200);
+      expect(sent).toEqual([]);
+      // Bouton « Tester les notifications » : n'écrit qu'aux appareils du compte qui le demande
+      sent.length = 0;
+      expect((await call('POST', '/me/push-test', {})).status).toBe(401);
+      const t1 = await call('POST', '/me/push-test', {}, buyerTokenValue);
+      expect(t1.body).toEqual({ configured: true, devices: 1, sent: 1 });
+      expect(to('buy')).toEqual(['Notification de test']);
+      expect(to('org') .concat(to('other'), to('adm'))).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.FIREBASE_SERVICE_ACCOUNT;
+    }
+    // Sans réglage Firebase côté serveur : le test l'explique, rien n'est envoyé
+    expect((await call('POST', '/me/push-test', {}, await buyerToken())).body).toEqual({ configured: false, devices: 1, sent: 0 });
   });
 
   // ---- Téléversement de fichiers
