@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Smartphone } from 'lucide-react';
 import { AppInstallInfo, useRelease } from '@/components/AppInstall';
-import { APK_RAW_URL, isNewer } from '@/lib/appRelease';
+import { APK_PATH, isNewer } from '@/lib/appRelease';
 import { inApp, postApp, useAppBuild } from '@/lib/appBridge';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
@@ -29,7 +29,7 @@ export default function DownloadApp() {
   // Dans l'application : une ancienne version ne répond pas à « update:open », on ouvre alors l'adresse externe du fichier
   const update = () => {
     if (installed) postApp('update:open');
-    else window.location.assign(APK_RAW_URL);
+    else window.location.assign(APK_PATH);
   };
 
   return (

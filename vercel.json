@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/app/event509.apk",
+      "destination": "https://github.com/jcroosvelt/Event509/releases/latest/download/event509.apk"
+    },
+    {
       "source": "/api/whatsapp/webhook",
       "destination": "/api/whatsapp-webhook"
     },

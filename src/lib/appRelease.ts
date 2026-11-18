@@ -16,8 +16,6 @@ export interface AppRelease {
 }
 
 export const APK_PATH = '/app/event509.apk';
-/** Copie du fichier dans le dépôt public du site : même contenu, utilisable depuis l'application (adresse externe, ouverte dans le navigateur). */
-export const APK_RAW_URL = 'https://raw.githubusercontent.com/jcroosvelt/event509/main/public/app/event509.apk';
 
 /** Lit et vérifie la fiche de version ; null si elle est absente ou invalide (aucune invitation n'est alors affichée). */
 export async function fetchRelease(): Promise<AppRelease | null> {
