@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-18 : APK 1.0.51 publié : espace administration recopié du site page par page (vue d'ensemble, modération, utilisateurs, vérification, récupérations, programme vérifié, support, boosts, transactions, versements, litiges, commissions, contenu et réglages, journal), pages légales identiques au site, sauvegarde Android désactivée.
 - 2026-11-18 : audit de sécurité, nouvelle suite api/audit.test.ts (toutes les routes testées par rôle, IDOR systématique entre organisations) ; corrigé : lien du direct des événements en ligne publié à tous (désormais réservé aux billets payés et à l'organisation), liste des ambassadeurs publique dans /bootstrap (remplacée par la vérification d'un code), parrainage crédité sur les ventes d'une autre organisation, e-mails et téléphones des acheteurs visibles par le rôle « contrôle d'entrée ».
 - 2026-11-18 : APK 1.0.48 publié : suite de l'espace organisateur recopié du site (statistiques avancées, contrôle d'entrée avec caméra intégrée et mode hors ligne, abonnement, paramètres, organisateur vérifié, API et intégrations, éditeur d'événement en 5 étapes) ; menu organisateur identique au site.
 - 2026-11-18 : APK 1.0.45 publié : espace organisateur de l'application recopié page par page depuis le site (événements, participants, versements, codes promo, remboursements, finances, équipe, statistiques d'un événement, avis, activité, liens de suivi, calendrier, support, campagnes, ambassadeurs, boost, e-mails automatiques).
