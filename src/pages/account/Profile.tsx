@@ -13,10 +13,10 @@ export default function Profile() {
   if (!user) return null;
 
   const links: { to: string; i: typeof Ticket; l: string; tone: Tone }[] = [
-    { to: '/billets', i: Ticket, l: t('Mes billets'), tone: 'orange' },
+    { to: '/compte/billets', i: Ticket, l: t('Mes billets'), tone: 'orange' },
     { to: '/compte/achats', i: Receipt, l: t('Historique des achats'), tone: 'brand' },
-    { to: '/favoris', i: Heart, l: t('Favoris'), tone: 'red' },
-    { to: '/notifications', i: Bell, l: t('Notifications'), tone: 'amber' },
+    { to: '/compte/favoris', i: Heart, l: t('Favoris'), tone: 'red' },
+    { to: '/compte/notifications', i: Bell, l: t('Notifications'), tone: 'amber' },
     { to: '/revente', i: Repeat2, l: t('Billets en revente'), tone: 'green' },
     { to: '/ambassadeurs', i: Megaphone, l: t('Ambassadeurs'), tone: 'violet' },
     { to: '/compte/parametres', i: Settings, l: t('Paramètres'), tone: 'gray' },

@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-18 : espace acheteur (/compte) sur le même gabarit que les espaces organisateur et administration : tableau de bord (prochain événement, billets à venir, dépenses, favoris, organisateurs suivis), billets, historique des achats, favoris, remboursements (suivi), notifications, profil, paramètres, sécurité. Test e2e « espace acheteur ».
 - 2026-11-18 : comptes acheteur : un compte est obligatoire pour acheter (le serveur refuse les achats sans compte) ; à l'inscription (Google ou e-mail), choix « J'achète des billets » (par défaut, sans organisation) ou « J'organise des événements ». Paiement par carte en premier. Test A9.
 - 2026-11-18 : corrigé (urgent) : une commande non payée comptait comme billet vendu et comme argent disponible pour l'organisateur. Désormais un billet ne compte qu'au paiement confirmé (quota vérifié à la confirmation) ; les commandes non payées n'apparaissent plus nulle part ; seule la place numérotée choisie reste bloquée pendant le paiement. Test A8 ajouté.
 - 2026-11-18 : retirés à la demande de Joseph : pixels de suivi (paramètres de l'organisation, éditeur d'événement, envoi depuis les pages) et taux de commission personnalisés (administration, serveur) ; un seul taux pour tous les organisateurs.

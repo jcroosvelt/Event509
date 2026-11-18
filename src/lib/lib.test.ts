@@ -47,7 +47,7 @@ describe('permissions', () => {
   });
 
   it('limite le staff d’entrée au check-in', () => {
-    expect(permsOf(byId('u8'))).toEqual(['checkin']);
+    expect(permsOf(byId('u8'))).toEqual(['checkin', 'buyer']);
   });
 
   it('donne au comptable les ventes mais pas les événements ni le check-in', () => {

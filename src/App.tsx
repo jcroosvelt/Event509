@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  FileText, LifeBuoy, ScanLine, Settings, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  FileText, Heart, LifeBuoy, Bell, Repeat2, ScanLine, Search, Settings, Ticket, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
@@ -36,6 +36,8 @@ const Profile = lazy(() => import('@/pages/account/Profile'));
 const Orders = lazy(() => import('@/pages/account/Orders'));
 const AccountSettings = lazy(() => import('@/pages/account/Settings'));
 const Notifications = lazy(() => import('@/pages/account/Notifications'));
+const BuyerDashboard = lazy(() => import('@/pages/buyer/BuyerDashboard'));
+const BuyerRefunds = lazy(() => import('@/pages/buyer/BuyerRefunds'));
 
 // Organisateurs
 const OrgDashboard = lazy(() => import('@/pages/organizer/Dashboard'));
@@ -146,13 +148,55 @@ export default function App() {
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
             <Route path="favoris" element={<Favorites />} />
             <Route path="notifications" element={auth(<Notifications />)} />
-            <Route path="compte" element={auth(<Profile />)} />
-            <Route path="compte/achats" element={auth(<Orders />)} />
-            <Route path="compte/parametres" element={auth(<AccountSettings />)} />
-            <Route path="compte/securite" element={auth(<Security />)} />
-            <Route path="compte/appareils" element={auth(<Security />)} />
             <Route path="compte/completer" element={auth(<CompleteProfile />)} />
             <Route path="*" element={<NotFound />} />
+          </Route>
+
+          {/* Espace acheteur : tout compte connecté */}
+          <Route
+            path="/compte"
+            element={auth(
+              <DashboardLayout
+                title={t('Mon espace')}
+                base="/compte"
+                sections={[
+                  { items: [
+                    { to: '/compte', label: t('Tableau de bord'), icon: LayoutDashboard, end: true, perm: 'buyer' },
+                    { to: '/compte/billets', label: t('Mes billets'), icon: Ticket, perm: 'buyer' },
+                    { to: '/compte/achats', label: t('Historique des achats'), icon: Receipt, perm: 'buyer' },
+                    { to: '/compte/favoris', label: t('Favoris'), icon: Heart, perm: 'buyer' },
+                  ] },
+                  { title: t('Après l’achat'), items: [
+                    { to: '/compte/remboursements', label: t('Remboursements'), icon: Undo2, perm: 'buyer' },
+                    { to: '/revente', label: t('Billets en revente'), icon: Repeat2, perm: 'buyer' },
+                    { to: '/compte/notifications', label: t('Notifications'), icon: Bell, perm: 'buyer' },
+                  ] },
+                  { title: t('Compte'), items: [
+                    { to: '/compte/profil', label: t('Profil'), icon: Users, perm: 'buyer' },
+                    { to: '/compte/parametres', label: t('Paramètres'), icon: Settings, perm: 'buyer' },
+                    { to: '/compte/securite', label: t('Sécurité'), icon: ShieldCheck, perm: 'buyer' },
+                  ] },
+                ]}
+                bottom={[
+                  { to: '/compte', label: t('Accueil'), icon: Home, end: true, perm: 'buyer' },
+                  { to: '/compte/achats', label: t('Achats'), icon: Receipt, perm: 'buyer' },
+                  { to: '/compte/favoris', label: t('Favoris'), icon: Heart, perm: 'buyer' },
+                  { to: '/explorer', label: t('Explorer'), icon: Search, perm: 'buyer' },
+                ]}
+                center={{ to: '/compte/billets', label: t('Billets'), icon: Ticket, perm: 'buyer' }}
+              />,
+            )}
+          >
+            <Route index element={<BuyerDashboard />} />
+            <Route path="billets" element={<Wallet_ />} />
+            <Route path="achats" element={<Orders />} />
+            <Route path="favoris" element={<Favorites />} />
+            <Route path="remboursements" element={<BuyerRefunds />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="profil" element={<Profile />} />
+            <Route path="parametres" element={<AccountSettings />} />
+            <Route path="securite" element={<Security />} />
+            <Route path="appareils" element={<Security />} />
           </Route>
 
           <Route

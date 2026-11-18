@@ -3,7 +3,9 @@ import type { AppUser, TeamRole } from '@/types';
 /** Permissions de l'espace organisateur et de l'administration. */
 export type Perm =
   | 'dashboard' | 'events' | 'attendees' | 'checkin' | 'promos' | 'refunds' | 'payouts'
-  | 'marketing' | 'team' | 'settings' | 'admin';
+  | 'marketing' | 'team' | 'settings' | 'admin'
+  /** Espace acheteur : tout compte connecté. */
+  | 'buyer';
 
 export const teamPerms: Record<TeamRole, Perm[]> = {
   admin: ['dashboard', 'events', 'attendees', 'checkin', 'promos', 'refunds', 'payouts', 'marketing', 'team', 'settings'],
@@ -30,9 +32,9 @@ export const teamRoleLabel: Record<TeamRole, string> = {
 
 export function permsOf(user: AppUser | null): Perm[] {
   if (!user) return [];
-  if (user.role === 'admin') return [...teamPerms.admin, 'admin'];
-  if (user.role === 'organizer') return user.teamPerms ? (user.teamPerms as Perm[]) : teamPerms[user.teamRole ?? 'admin'];
-  return [];
+  if (user.role === 'admin') return [...teamPerms.admin, 'admin', 'buyer'];
+  if (user.role === 'organizer') return [...(user.teamPerms ? (user.teamPerms as Perm[]) : teamPerms[user.teamRole ?? 'admin']), 'buyer'];
+  return ['buyer'];
 }
 
 export function can(user: AppUser | null, perm: Perm) {
@@ -41,7 +43,7 @@ export function can(user: AppUser | null, perm: Perm) {
 
 /** L'utilisateur a-t-il accès à au moins une page de l'espace organisateur ? */
 export function hasOrganizerAccess(user: AppUser | null) {
-  return permsOf(user).some((p) => p !== 'admin');
+  return permsOf(user).some((p) => p !== 'admin' && p !== 'buyer');
 }
 
 /** Organisation de l'utilisateur connecté (le backend la renverra avec la session). */

@@ -171,7 +171,7 @@ test('chaque page événement a un aperçu de partage', async ({ request }) => {
 });
 
 test('la déconnexion survit au rechargement de la page', async ({ page }) => {
-  await fresh(page, '/compte');
+  await fresh(page, '/compte/profil');
   await page.getByRole('button', { name: 'Déconnexion' }).last().click();
   await page.reload();
   await page.goto('/compte');
@@ -188,6 +188,9 @@ test.describe('administration', () => {
     // Les données de démo vivent en mémoire : on navigue sans recharger la page
     const go = (path: string) => page.evaluate((p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }, path);
     await go('/connexion');
+    // La fenêtre d'installation de l'application peut s'ouvrir (téléphone) : on la ferme
+    const later = page.getByRole('button', { name: 'Plus tard' });
+    if (await later.isVisible({ timeout: 1500 }).catch(() => false)) await later.click();
     await page.getByText('Comptes de démonstration').click();
     await page.getByRole('button', { name: 'Admin plateforme' }).click();
     await page.waitForURL((u) => !u.pathname.startsWith('/connexion'));
@@ -539,5 +542,22 @@ test.describe('commission', () => {
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('e509.demo.fees') ?? '{}').percent === 7);
     await page.goto('/cgu');
     await expect(page.getByText(/7 % \+/)).toBeVisible();
+  });
+});
+
+test.describe('espace acheteur', () => {
+  test('tableau de bord, billets, achats et remboursements dans le même espace', async ({ page }) => {
+    await fresh(page, '/compte');
+    await expect(page.getByRole('heading', { name: /Bonjour Marie/ })).toBeVisible();
+    await expect(page.getByText('Billets à venir').first()).toBeVisible();
+    await page.goto('/compte/billets');
+    await expect(page.getByRole('heading', { name: 'Mes billets' })).toBeVisible();
+    await page.goto('/compte/achats');
+    await expect(page.getByRole('heading', { name: 'Historique des achats' })).toBeVisible();
+    await page.goto('/compte/remboursements');
+    await expect(page.getByRole('heading', { name: 'Remboursements' })).toBeVisible();
+    // Un participant n'a pas accès à l'espace organisateur
+    await page.goto('/compte/profil');
+    await expect(page.getByText('Administration')).toHaveCount(0);
   });
 });
