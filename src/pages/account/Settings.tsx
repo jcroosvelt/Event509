@@ -159,6 +159,7 @@ export default function Settings() {
             <Toggle checked={prefs.reminders} onChange={(v) => setPref('reminders', v)} label={t('Rappels d’événements')} description={t('24 h et 1 h avant le début')} />
             <Toggle checked={prefs.updates} onChange={(v) => setPref('updates', v)} label={t('Mises à jour des organisateurs')} description={t('Changement d’horaire, de lieu, annulation')} />
             <Toggle checked={prefs.reco} onChange={(v) => setPref('reco', v)} label={t('Événements recommandés')} />
+            <Toggle checked={user?.notifyNearby !== false} onChange={(v) => updateUser({ notifyNearby: v })} label={t('Nouveaux événements près de chez moi')} description={t('Une alerte au plus par jour, selon la ville de votre profil (application)')} />
             <Toggle checked={prefs.whatsapp} onChange={(v) => setPref('whatsapp', v)} label={t('Recevoir sur WhatsApp')} />
             <Toggle checked={prefs.sms} onChange={(v) => setPref('sms', v)} label={t('Recevoir par SMS')} />
             <Toggle checked={prefs.marketing} onChange={(v) => setPref('marketing', v)} label={t('Offres et promotions')} />

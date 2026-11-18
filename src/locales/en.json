@@ -2223,5 +2223,7 @@
   "Par agent de contrôle": "By entry agent",
   "{n} scan(s)": "{n} scan(s)",
   "Aucune entrée pour l’instant.": "No entries yet.",
-  "Dernières entrées": "Latest entries"
+  "Dernières entrées": "Latest entries",
+  "Nouveaux événements près de chez moi": "New events near me",
+  "Une alerte au plus par jour, selon la ville de votre profil (application)": "At most one alert a day, based on the city in your profile (app)"
 }

@@ -245,7 +245,7 @@ export const assistGoogle = (requestToken: string) => jpost<{ url: string }>('/a
 export interface AdminRecoveryRequest { id: string; status: string; reason: string; contact: string | null; identifier: string; created_at: string; decided_at: string | null; execute_after: string | null; note: string | null; user_id: string | null; email: string | null; name: string | null; recent_events: string; decided_by: string | null }
 export const adminRecoveryRequests = () => http<AdminRecoveryRequest[]>('/admin/recovery-requests');
 export const adminDecideRecovery = (id: string, action: 'approve' | 'reject' | 'block', note: string) => jpost(`/admin/recovery-requests/${id}/decide`, { action, note });
-export function updateProfile(patch: Partial<Pick<AppUser, 'name' | 'phone' | 'city'>>) {
+export function updateProfile(patch: Partial<Pick<AppUser, 'name' | 'phone' | 'city' | 'notifyNearby'>>) {
   return http<AppUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(patch) });
 }
 export function becomeOrganizer(input: { orgName: string; country: string }) {

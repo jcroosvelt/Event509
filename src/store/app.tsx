@@ -325,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateUser: (patch) => {
         setUser((u) => (u ? { ...u, ...patch } : u));
         if (DEMO) return;
-        const save = updateProfile({ name: patch.name, phone: patch.phone, city: patch.city });
+        const save = updateProfile({ name: patch.name, phone: patch.phone, city: patch.city, notifyNearby: patch.notifyNearby });
         save
           .then((u) => {
             setUser(u);

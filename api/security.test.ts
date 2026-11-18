@@ -381,6 +381,79 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect((await call('POST', '/me/push-test', {}, await buyerToken())).body).toEqual({ configured: false, devices: 1, sent: 0 });
   });
 
+  it('S3e. nouvel événement près de chez vous : même ville seulement, une fois, une par jour, réglage respecté', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({ project_id: 'p-test', client_email: 'x@p-test.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() });
+    const sent: { token: string; title: string; body: string }[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      if (u.startsWith('https://fcm.googleapis.com/')) {
+        const m = JSON.parse(String(init?.body)).message as { token: string; notification: { title: string; body: string } };
+        sent.push({ token: m.token, title: m.notification.title, body: m.notification.body });
+        return new Response('{}', { status: 200 });
+      }
+      return real(url as string, init);
+    });
+    try {
+      const tag = `${Date.now()}`;
+      const mk = async (key: string, data: Record<string, unknown>, device = true) => {
+        const id = `u_near_${key}_${tag}`;
+        await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant',$3,true)`, [id, `${id}@sec.test`, JSON.stringify({ name: key, ...data })]);
+        if (device) await pool.query(`insert into device_tokens (token, owner, user_id) values ($1,$2,$3)`, [`tok-${key}-${tag}-xxxxxxxxxxxxxxxx`, `u:${id}`, id]);
+        return id;
+      };
+      const got = (key: string) => sent.filter((x) => x.token === `tok-${key}-${tag}-xxxxxxxxxxxxxxxx`);
+      await mk('near', { city: 'JACMEL ', country: 'HT' });
+      await mk('accent', { city: 'Jàcmel' }); // sans pays : Haïti ; accents ignorés
+      await mk('far', { city: 'Cap-Haïtien', country: 'HT' });
+      await mk('optout', { city: 'Jacmel', country: 'HT', notifyNearby: false });
+      await mk('abroad', { city: 'Jacmel', country: 'US' });
+      await mk('nodevice', { city: 'Jacmel', country: 'HT' }, false);
+      const a = await organizer();
+      const ownerDevice = `tok-owner-${tag}-xxxxxxxxxxxxxxxx`;
+      await pool.query(`update users set data = data || '{"city":"Jacmel","country":"HT"}'::jsonb where id = $1`, [a.id]);
+      await pool.query(`insert into device_tokens (token, owner, user_id) values ($1,$2,$3)`, [ownerDevice, `u:${a.id}`, a.id]);
+
+      // Brouillon : personne n'est prévenu
+      const draft = await eventOf(a, { title: 'Soirée Jacmel', status: 'draft' });
+      expect(sent).toEqual([]);
+      // Publication : seules les personnes de la ville (avec un téléphone, alertes actives), jamais l'équipe de l'organisation
+      const pub = await call('PUT', '/org/events', evBody({ id: draft.id, slug: draft.slug, title: 'Soirée Jacmel', status: 'published' }), a.token);
+      expect(pub.status, JSON.stringify(pub.body)).toBe(200);
+      expect(pub.body.status).toBe('published');
+      expect(got('near').map((x) => x.title)).toEqual(['Nouvel événement près de chez vous']);
+      expect(got('near')[0]!.body).toBe('Soirée Jacmel · Jacmel');
+      expect(got('accent')).toHaveLength(1);
+      for (const k of ['far', 'optout', 'abroad', 'nodevice']) expect(got(k), k).toEqual([]);
+      expect(sent.filter((x) => x.token === ownerDevice)).toEqual([]);
+      // Modifier l'événement publié : pas de nouvelle alerte
+      sent.length = 0;
+      expect((await call('PUT', '/org/events', evBody({ id: draft.id, slug: draft.slug, title: 'Soirée Jacmel (nouvelle heure)', status: 'published' }), a.token)).status).toBe(200);
+      expect(sent).toEqual([]);
+      // Un autre événement le même jour dans la même ville : une alerte de proximité par personne et par jour
+      await eventOf(a, { title: 'Autre soirée' });
+      expect(sent).toEqual([]);
+      // Un événement en ligne ou déjà terminé ne prévient personne
+      await eventOf(a, { title: 'Atelier en ligne', venue: null, online: { platform: 'Zoom', url: 'https://zoom.us/j/1' } });
+      await eventOf(a, { title: 'Soirée passée', start: '2020-01-01T20:00:00', end: '2020-01-01T23:00:00' }).catch(() => null);
+      expect(sent).toEqual([]);
+      // Le réglage se change par le profil et est rendu au compte
+      const b = await mk('toggle', { city: 'Leogane', country: 'HT' });
+      const { signToken: sign } = await import('./_lib/auth.js');
+      const off = await call('PATCH', '/auth/me', { notifyNearby: false }, sign(b));
+      expect(off.body.notifyNearby).toBe(false);
+      await eventOf(a, { title: 'Fête à Léogâne', venue: { name: 'Place', address: 'Centre', city: 'Léogâne' } });
+      expect(got('toggle')).toEqual([]);
+      const on = await call('PATCH', '/auth/me', { notifyNearby: true }, sign(b));
+      expect(on.body.notifyNearby).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.FIREBASE_SERVICE_ACCOUNT;
+    }
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

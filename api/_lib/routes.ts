@@ -409,10 +409,13 @@ const updateMe: Handler = async (c) => {
   const u = auth(c);
   const patch: Record<string, string> = {};
   for (const k of ['name', 'phone', 'city'] as const) if (typeof c.body[k] === 'string') patch[k] = str(c.body[k], 120);
+  // Alertes « nouvel événement près de chez moi » : activées par défaut, désactivables
+  const flags: Record<string, boolean> = {};
+  if (typeof c.body.notifyNearby === 'boolean') flags.notifyNearby = c.body.notifyNearby;
   // Un numéro confirmé par code ne se change pas ici (sinon la vérification serait contournée)
   if (u.data.phoneVerified === true) delete patch.phone;
   if (patch.name) patch.avatar = initials(patch.name);
-  await db().query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify(patch)]);
+  await db().query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify({ ...patch, ...flags })]);
   return toAppUser((await one<UserRow>(`select * from users where id = $1`, [u.id]))!);
 };
 
@@ -768,8 +771,40 @@ async function tellAdmins(m: PushMessage) {
 }
 
 /** Modification importante ou annulation : tous les détenteurs de billets valables sont prévenus. */
+/** Nom de lieu comparable : sans accents ni ponctuation, en minuscules (« Port-au-Prince » = « port au prince »). */
+const plainPlace = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Nouvel événement publié : les personnes de la même ville (ville et pays de leur profil, au moins un téléphone enregistré)
+ * sont prévenues. Une seule fois par événement, au plus une alerte de proximité par personne et par jour, jamais l'équipe
+ * de l'organisation, et seulement pour un lieu physique pas encore terminé. Désactivable (réglage « notifyNearby »).
+ */
+async function notifyNearby(ev: EventItem) {
+  if (!pushConfigured() || !ev.venue?.city || localMs(ev.end) < Date.now()) return;
+  await safely(async () => {
+    const city = plainPlace(ev.venue!.city);
+    if (!city || !(await claimOnce(`nearby:${ev.id}`))) return;
+    const country = (ev.venue!.country || 'HT').toUpperCase();
+    const team = new Set(await organizerUserIds(ev.organizerId));
+    const rows = await all<{ id: string; city: string | null }>(
+      `select distinct u.id, u.data->>'city' as city from users u join device_tokens d on d.user_id = u.id
+       where u.status = 'active' and upper(coalesce(u.data->>'country', 'HT')) = $1
+         and coalesce(u.data->>'notifyNearby', 'true') <> 'false' and u.data->>'city' is not null limit 5000`, [country]);
+    const day = new Date().toISOString().slice(0, 10);
+    const ids: string[] = [];
+    for (const r of rows) {
+      if (team.has(r.id) || plainPlace(r.city) !== city) continue;
+      if (await claimOnce(`nearby-user:${r.id}:${day}`)) ids.push(r.id);
+    }
+    for (let i = 0; i < ids.length; i += 100)
+      await notifyUsers(ids.slice(i, i + 100), { title: 'Nouvel événement près de chez vous', body: `${ev.title} · ${ev.venue!.city}`, url: eventPath(ev), channel: 'updates' });
+  });
+}
+
 async function notifyEventChange(before: EventItem | undefined, after: EventItem) {
-  if (!pushConfigured() || !before) return;
+  if (!pushConfigured()) return;
+  if (after.status === 'published' && before?.status !== 'published') await notifyNearby(after);
+  if (!before) return;
   await safely(async () => {
     if (after.status === 'cancelled' && before.status !== 'cancelled') {
       await notifyHolders(after.id, { title: 'Événement annulé', body: `${after.title} a été annulé`, url: eventPath(after), channel: 'tickets' });

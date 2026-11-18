@@ -291,6 +291,8 @@ export interface AppUser {
   organizerId?: string;
   /** Permissions personnalisées du membre (fournies par le serveur). */
   teamPerms?: string[];
+  /** Alertes « nouvel événement près de chez moi » (activées tant que ce n'est pas faux). */
+  notifyNearby?: boolean;
 }
 
 export interface Dispute {
