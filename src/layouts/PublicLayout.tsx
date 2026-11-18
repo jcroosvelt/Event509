@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
+import { FloatingBar, type BarItem } from '@/components/FloatingBar';
 import { ApkMenuLink, InstallButton } from '@/components/AppInstall';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lookupReferral } from '@/services/api';
@@ -160,50 +161,18 @@ function UserMenu() {
   );
 }
 
-type NavIcon = LucideIcon;
-
-/** Barre de navigation basse mobile avec bouton central surélevé (comme la maquette). */
+/** Barre de navigation basse mobile : barre flottante (voir FloatingBar). */
 export function BottomNav({
-  items, center, label,
+  items, center, label, subtitle,
 }: {
-  items: { to: string; icon: NavIcon; label: string; end?: boolean }[];
-  center?: { to: string; icon: NavIcon; label: string };
+  items: BarItem[];
+  center?: BarItem;
   label: string;
+  subtitle?: string;
 }) {
-  const Item = ({ i }: { i: (typeof items)[number] }) => (
-    <NavLink
-      to={i.to}
-      end={i.end}
-      className={({ isActive }) => cx('flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] font-medium', isActive ? 'text-ink' : 'text-ink-muted')}
-    >
-      {({ isActive }) => (
-        <>
-          <i.icon className={cx('h-[22px] w-[22px]', isActive && 'stroke-[2.4]')} aria-hidden />
-          <span className={cx('max-w-full truncate', isActive && 'font-bold')}>{i.label}</span>
-        </>
-      )}
-    </NavLink>
-  );
   const half = Math.ceil(items.length / 2);
-  return (
-    <nav aria-label={label} className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-2 pt-2 backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-md items-end">
-        {(center ? items.slice(0, half) : items).map((i) => <Item key={i.to} i={i} />)}
-        {center && (
-          <div className="flex flex-1 justify-center">
-            <NavLink
-              to={center.to}
-              aria-label={center.label}
-              className="-mt-8 grid h-16 w-16 place-items-center rounded-full bg-brand text-white shadow-float ring-[6px] ring-surface transition active:scale-95"
-            >
-              <center.icon className="h-7 w-7" aria-hidden />
-            </NavLink>
-          </div>
-        )}
-        {center && items.slice(half).map((i) => <Item key={i.to} i={i} />)}
-      </div>
-    </nav>
-  );
+  const all = center ? [...items.slice(0, half), center, ...items.slice(half)] : items;
+  return <FloatingBar items={all} label={label} subtitle={subtitle} />;
 }
 
 export function OfflineBanner() {

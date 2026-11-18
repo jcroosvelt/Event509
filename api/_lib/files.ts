@@ -35,5 +35,6 @@ export function checkFile(kind: FileKind, data: Buffer): { mime: string } | { er
 
 /** Valeur acceptée pour l'image d'un événement : dégradé, fichier du site ou adresse https. */
 export function validCover(v: unknown): v is string {
-  return typeof v === 'string' && v.length <= 600 && (/^(linear|radial)-gradient\([^;{}<>]*\)$/.test(v) || /^\/api\/files\/[\w-]{6,40}$/.test(v) || /^https:\/\/[^\s"'<>]+$/.test(v));
+  // Dégradé : couleurs seulement (pas de url(), image-set(), échappements CSS) pour qu'aucune ressource externe ne soit chargée
+  return typeof v === 'string' && v.length <= 600 && ((/^(linear|radial)-gradient\([^;{}<>\\]*\)$/.test(v) && !/url\s*\(|image|expression|var\s*\(/i.test(v)) || /^\/api\/files\/[\w-]{6,40}$/.test(v) || /^https:\/\/[^\s"'<>]+$/.test(v));
 }
