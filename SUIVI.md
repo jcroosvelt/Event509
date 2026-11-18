@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-18 : APK 1.0.48 publié : suite de l'espace organisateur recopié du site (statistiques avancées, contrôle d'entrée avec caméra intégrée et mode hors ligne, abonnement, paramètres, organisateur vérifié, API et intégrations, éditeur d'événement en 5 étapes) ; menu organisateur identique au site.
 - 2026-11-18 : APK 1.0.45 publié : espace organisateur de l'application recopié page par page depuis le site (événements, participants, versements, codes promo, remboursements, finances, équipe, statistiques d'un événement, avis, activité, liens de suivi, calendrier, support, campagnes, ambassadeurs, boost, e-mails automatiques).
 - 2026-11-17 : APK 1.0.40 publié (urgent) : l'application ne capture plus les liens du site, fin de la boucle qui empêchait d'en sortir.
 - 2026-11-17 : URGENT corrigé : `assetlinks.json` ne déclare plus que l'application ouvre tous les liens du site (`handle_all_urls` retiré, seules les passkeys restent) ; avec l'application, les pages du site ouvertes dans le navigateur revenaient à l'application en boucle.
