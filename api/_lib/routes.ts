@@ -332,8 +332,10 @@ const signup: Handler = async (c) => {
       organizerId = invite.organizer_id;
       invitePerms = invite.data.perms ?? null;
       await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [email]);
+    } else if (!(c.body.accountType === 'organizer' || (c.body.accountType === undefined && str(c.body.orgName)))) {
+      // Compte acheteur (par défaut) : pas d'organisation
+      role = 'participant';
     } else {
-      // Les comptes sont réservés aux organisateurs : les participants achètent sans compte
       role = 'organizer';
       teamRole = 'admin';
       organizerId = newId('org');
@@ -552,6 +554,8 @@ function orderStatus(method: Order['method'], subtotal: number, total: number): 
 }
 
 const createOrder: Handler = async (c) => {
+  // Un compte (acheteur ou organisateur) est obligatoire pour acheter : les billets sont rattachés au compte
+  const me = auth(c);
   // Limite de débit : 30 commandes par heure et par connexion (retenue de stock, abus)
   if (c.ip) await rateLimit(`order:${c.ip}`, 30, 60);
   const b = c.body as {
@@ -562,7 +566,8 @@ const createOrder: Handler = async (c) => {
   const methods: Order['method'][] = ['card', 'moncash', 'natcash', 'kashpaw', 'paypal', 'transfer'];
   if (!methods.includes(b.method)) fail(422, 'Moyen de paiement invalide');
   if (!isDisplayCurrency(b.currency)) fail(422, 'Devise invalide');
-  const buyer = { name: str(b.buyer?.name, 80), email: str(b.buyer?.email, 160).toLowerCase(), phone: str(b.buyer?.phone, 30) || undefined };
+  // Titulaire : celui indiqué, sinon le compte qui achète
+  const buyer = { name: str(b.buyer?.name, 80) || str(me.data.name, 80), email: (str(b.buyer?.email, 160) || me.email).toLowerCase(), phone: str(b.buyer?.phone, 30) || undefined };
   if (!buyer.name || !isEmail(buyer.email)) fail(422, 'Nom et email de l’acheteur requis');
   if (!Array.isArray(b.items) || !b.items.length) fail(422, 'Panier vide');
 

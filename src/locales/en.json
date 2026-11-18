@@ -1926,7 +1926,6 @@
   "Vous devez accepter les conditions pour continuer": "You must accept the terms to continue",
   "Étape {n} sur 2": "Step {n} of 2",
   "Votre compte": "Your account",
-  "Votre organisation": "Your organization",
   "Nom de l’organisation ou de l’événement": "Organization or event name",
   "Affiché sur votre page publique. Par défaut : votre nom.": "Shown on your public page. Default: your name.",
   "Vous êtes": "You are",
@@ -2175,5 +2174,13 @@
   "Taux de change": "Exchange rate",
   "Le site gère deux monnaies : la gourde (HTG) et le dollar américain (USD). Le taux est mis à jour automatiquement chaque jour : vous n’avez rien à régler. Le paiement est toujours prélevé en gourdes ; les commandes déjà passées ne changent pas.": "The site handles two currencies: the gourde (HTG) and the US dollar (USD). The rate is updated automatically every day: there is nothing to set. Payment is always charged in gourdes; existing orders do not change.",
   "1 USD = {rate} HTG": "1 USD = {rate} HTG",
-  "Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.": "Billed in US dollars. Payment is charged in gourdes at today's rate."
+  "Facturé en dollars américains. Le paiement est prélevé en gourdes au taux du jour.": "Billed in US dollars. Payment is charged in gourdes at today's rate.",
+  "J’achète des billets": "I buy tickets",
+  "Compte acheteur : vos billets, commandes et favoris au même endroit.": "Buyer account: your tickets, orders and favorites in one place.",
+  "J’organise des événements": "I organize events",
+  "Compte organisateur : billetterie, contrôle d’entrée et versements.": "Organizer account: ticketing, entry check and payouts.",
+  "Type de compte": "Account type",
+  "Connectez-vous pour acheter": "Log in to buy",
+  "Un compte acheteur gratuit est nécessaire : vos billets y restent toujours disponibles, même si vous changez de téléphone.": "A free buyer account is required: your tickets stay available there, even if you change phones.",
+  "Créer un compte acheteur": "Create a buyer account"
 }

@@ -24,6 +24,7 @@ export default function CompleteSignup() {
     );
   return (
     <ProfileWizard
+      askType
       title={t('Terminez votre inscription')}
       email={data.email ?? ''}
       initial={{ givenName: data.givenName, familyName: data.familyName, country: data.country, city: data.city }}

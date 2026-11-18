@@ -25,6 +25,16 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     return { token: r.body.token as string, id: r.body.user.id as string, orgId: r.body.user.organizerId as string, email };
   }
   const fill = (p: string) => p.replace(/:\w+/g, 'x');
+  /** Compte acheteur (obligatoire pour acheter). */
+  let buyerTok = '';
+  async function buyer() {
+    if (buyerTok) return buyerTok;
+    const id = `u_audbuy${Date.now()}`;
+    await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant','{"name":"Acheteur"}', true)`, [id, `${id}@audit.test`]);
+    const { signToken } = await import('./_lib/auth.js');
+    buyerTok = signToken(id);
+    return buyerTok;
+  }
   const payload = { id: 'x', status: 'approved', role: 'admin', email: 'x@audit.test', name: 'X', code: 'X', amount: 1, price: 1, verified: true, note: 'xxxxxxxxxx', message: 'xxxxxxxxxx' };
 
   beforeAll(async () => {
@@ -167,7 +177,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     // L'organisation le voit
     expect(JSON.stringify((await call('GET', `/events/${ev.body.id}`, undefined, a.token)).body)).toContain('SECRETLINK');
     // Commande en attente de paiement : pas de lien ; commande payée : lien
-    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Acheteur', email: `b${Date.now()}@audit.test` } });
+    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Acheteur', email: `b${Date.now()}@audit.test` } }, await buyer());
     expect(o.status, JSON.stringify(o.body)).toBe(200);
     const k = { k: o.body.accessKey as string };
     expect(JSON.stringify((await call('GET', `/orders/${o.body.order.id}`, undefined, undefined, k)).body)).not.toContain('SECRETLINK');
@@ -193,12 +203,12 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     // Vente chez B avec le code de A : aucun crédit pour l'ambassadeur de A
     const evB = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Salle', address: 'Rue', city: 'Jacmel' } }, b.token);
     expect(evB.status).toBe(200);
-    expect((await call('POST', '/orders', { eventId: evB.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', referral: code, buyer: { name: 'Acheteur', email: `r${Date.now()}@audit.test` } })).status).toBe(200);
+    expect((await call('POST', '/orders', { eventId: evB.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', referral: code, buyer: { name: 'Acheteur', email: `r${Date.now()}@audit.test` } }, await buyer())).status).toBe(200);
     const row = (await pool.query(`select data from ambassadors where code = $1`, [code])).rows[0];
     expect(Number(row.data.sales ?? 0)).toBe(0);
     // Vente chez A : crédit normal
     const evA = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Salle', address: 'Rue', city: 'Jacmel' } }, a.token);
-    expect((await call('POST', '/orders', { eventId: evA.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', referral: code, buyer: { name: 'Acheteur', email: `s${Date.now()}@audit.test` } })).status).toBe(200);
+    expect((await call('POST', '/orders', { eventId: evA.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', referral: code, buyer: { name: 'Acheteur', email: `s${Date.now()}@audit.test` } }, await buyer())).status).toBe(200);
     expect(Number((await pool.query(`select data from ambassadors where code = $1`, [code])).rows[0].data.sales)).toBe(2);
   });
 
@@ -207,7 +217,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [a.orgId]);
     const ev = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Salle', address: 'Rue', city: 'Jacmel' } }, a.token);
     const email = `achat${Date.now()}@audit.test`;
-    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Marie Achat', email, phone: '+50937000000' } });
+    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Marie Achat', email, phone: '+50937000000' } }, await buyer());
     expect(o.status).toBe(200);
     await pool.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where order_id = $1`, [o.body.order.id]);
     const inv = await call('POST', '/org/team', { email: `scan${Date.now()}@audit.test`, name: 'Scan', role: 'staff' }, a.token);
@@ -246,7 +256,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [a.orgId]);
     const ev = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Le pingouin', address: 'Rue', city: 'Port-au-Prince' } }, a.token);
     expect(ev.status).toBe(200);
-    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Acheteur', email: `np${Date.now()}@audit.test` } });
+    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Acheteur', email: `np${Date.now()}@audit.test` } }, await buyer());
     expect(o.status).toBe(200);
     expect(o.body.order.status).toBe('pending');
     const sold = async () => (await call('GET', '/org/events', undefined, a.token)).body.find((e: { id: string }) => e.id === ev.body.id).tickets[0].sold as number;
@@ -268,5 +278,28 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     expect(await balance()).toBe(1000);
     expect(await attendees()).toBe(2);
     expect(JSON.stringify((await call('GET', '/admin/orders', undefined, adm)).body)).toContain(o.body.order.id);
+  });
+  it('A9. comptes : acheter exige un compte ; un compte acheteur n’a pas d’organisation ni d’accès organisateur', async () => {
+    const a = await signup(true);
+    await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [a.orgId]);
+    const ev = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Salle', address: 'Rue', city: 'Jacmel' } }, a.token);
+    const body = { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'card', currency: 'HTG', buyer: { name: 'Anonyme', email: `anon${Date.now()}@audit.test` } };
+    expect((await call('POST', '/orders', body)).status).toBe(401);
+    // Inscription « acheteur » (par défaut) : rôle participant, aucune organisation
+    const email = `acheteur${Date.now()}@audit.test`;
+    const r = await call('POST', '/auth/signup', { name: 'Paul Acheteur', email, password: 'Soleil2026x', acceptTerms: true, accountType: 'buyer' });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.user.role).toBe('participant');
+    expect(r.body.user.organizerId ?? null).toBeNull();
+    expect((await call('GET', '/org/events', undefined, r.body.token)).status).toBe(403);
+    // Il achète : la commande est à lui, titulaire par défaut = son compte
+    const o = await call('POST', '/orders', { ...body, buyer: undefined }, r.body.token);
+    expect(o.status, JSON.stringify(o.body)).toBe(200);
+    expect(o.body.order.buyerEmail).toBe(email);
+    expect((await pool.query(`select user_id from orders where id = $1`, [o.body.order.id])).rows[0].user_id).toBe(r.body.user.id);
+    // Inscription « organisateur » : organisation créée
+    const org = await call('POST', '/auth/signup', { name: 'Marie Orga', email: `orga${Date.now()}@audit.test`, password: 'Soleil2026x', acceptTerms: true, accountType: 'organizer', orgName: 'Kompa Prod' });
+    expect(org.body.user.role).toBe('organizer');
+    expect(org.body.user.organizerId).toBeTruthy();
   });
 });

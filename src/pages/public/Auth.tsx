@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
+import { AccountTypePicker, type AccountType } from '@/components/AccountTypePicker';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { isEmail, isPhone, useForm } from '@/lib/form';
@@ -45,6 +46,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const [loading, setLoading] = useState(false);
   // Inscription en 2 étapes (mode serveur) : 1 = le compte, 2 = l'organisation et les conditions
   const [step, setStep] = useState<1 | 2>(1);
+  const [accountType, setAccountType] = useState<AccountType>('buyer');
   const [org, setOrg] = useState({ orgName: '', kind: 'individual', country: place.country, phone: '', terms: false, website: '' });
   // Vérification du numéro par WhatsApp : active seulement si le serveur est configuré ; la preuve vient du serveur
   const [otpOn, setOtpOn] = useState(false);
@@ -84,7 +86,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
       const s = signup
         ? await signUp({
             name: form.values.name.trim(), email: form.values.email.trim(), password: form.values.password,
-            orgName: org.orgName.trim() || undefined, kind: org.kind as 'individual' | 'company' | 'association', country: org.country,
+            accountType, orgName: accountType === 'organizer' ? org.orgName.trim() || undefined : undefined, kind: org.kind as 'individual' | 'company' | 'association', country: org.country,
             phone: org.phone.trim() || undefined, phoneProof: phoneProof || undefined, acceptTerms: org.terms, website: org.website,
           })
         : await signIn(form.values.email.trim(), form.values.password);
@@ -197,10 +199,12 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
           }}
         >
           {!DEMO && signup && (
-            <p className="text-xs font-semibold text-ink-muted" aria-live="polite">{t('Étape {n} sur 2', { n: String(step) })} — {step === 1 ? t('Votre compte') : t('Votre organisation')}</p>
+            <p className="text-xs font-semibold text-ink-muted" aria-live="polite">{t('Étape {n} sur 2', { n: String(step) })} — {step === 1 ? t('Votre compte') : t('Type de compte')}</p>
           )}
           {!DEMO && signup && step === 2 ? (
             <>
+              <AccountTypePicker value={accountType} onChange={setAccountType} />
+              {accountType === 'organizer' && <>
               <Field label={t('Nom de l’organisation ou de l’événement')} error={orgErr.orgName} hint={t('Affiché sur votre page publique. Par défaut : votre nom.')}>
                 <Input autoComplete="organization" value={org.orgName} onChange={(e) => setOrg({ ...org, orgName: e.target.value })} />
               </Field>
@@ -216,6 +220,7 @@ export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
                   {[...COUNTRIES].sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang)).map((c) => <option key={c} value={c}>{countryName(c, lang)}</option>)}
                 </Select>
               </Field>
+              </>}
               {otpOn ? (
                 <div className="space-y-3">
                   <PhoneField value={org.phone} onChange={(v) => { setOrg({ ...org, phone: v }); setPhoneProof(''); }} error={orgErr.phone} disabled={!!phoneProof} />

@@ -391,7 +391,9 @@ export function authFlowRoutes(d: AuthFlowDeps) {
     if (!/^[A-Z]{2}$/.test(country)) fail(422, 'Choisissez votre pays.', 'profile_invalid');
     if (city.length < 2) fail(422, 'Indiquez votre ville.', 'profile_invalid');
     if (username && !/^[a-z0-9][a-z0-9_.-]{2,29}$/.test(username)) fail(422, 'Nom d’utilisateur : 3 à 30 caractères (lettres, chiffres, point, tiret, tiret bas).', 'profile_invalid');
-    return { givenName, familyName, country, city, username: username || null, orgName };
+    // Type de compte : acheteur par défaut (aucune organisation) ; organisateur sur demande
+    const accountType = b.accountType === 'organizer' || (b.accountType === undefined && orgName) ? 'organizer' as const : 'buyer' as const;
+    return { givenName, familyName, country, city, username: username || null, orgName, accountType };
   }
   function checkConsent(b: Record<string, unknown>) {
     if (b.acceptTerms !== true || b.acceptPrivacy !== true) fail(422, 'Acceptez les conditions d’utilisation et la politique de confidentialité.', 'consent_required');
@@ -419,9 +421,9 @@ export function authFlowRoutes(d: AuthFlowDeps) {
         if (await one(`select 1 from users where lower(email) = $1`, [pend.email], q)) fail(409, 'Un compte existe déjà avec cette adresse.', 'legacy_account');
         const id = newId('u');
         const name = `${prof.givenName} ${prof.familyName}`;
-        const role: AppUser['role'] = 'organizer';
+        let role: AppUser['role'] = 'organizer';
         let teamRole: TeamRole | null = 'admin';
-        let organizerId: string;
+        let organizerId: string | null;
         let perms: string[] | null = null;
         // Invitation d'équipe en attente : le compte rejoint l'organisation avec son rôle (comme avant la refonte)
         const invite = await one<{ organizer_id: string; data: TeamMember }>(`select organizer_id, data from team_members where lower(email) = $1`, [pend.email], q);
@@ -430,6 +432,11 @@ export function authFlowRoutes(d: AuthFlowDeps) {
           organizerId = invite.organizer_id;
           perms = invite.data.perms ?? null;
           await q.query(`update team_members set data = data || '{"status":"active"}'::jsonb where lower(email) = $1`, [pend.email]);
+        } else if (prof.accountType === 'buyer') {
+          // Compte acheteur : pas d'organisation (il pourra en créer une plus tard depuis son compte)
+          role = 'participant';
+          teamRole = null;
+          organizerId = null;
         } else {
           organizerId = newId('org');
           const orgName = prof.orgName || name;

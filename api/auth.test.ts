@@ -204,7 +204,7 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     { question: 'Quel était le titre de mon premier projet créatif ?', answer: 'Kanaval Pam' },
     { question: 'Où ai-je rangé mon vieux carnet rouge ?', answer: 'Sous le lit de grand-père' },
   ];
-  const profile = (extra: Record<string, unknown> = {}) => ({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', questions: qs3, acceptTerms: true, acceptPrivacy: true, ...extra });
+  const profile = (extra: Record<string, unknown> = {}) => ({ givenName: 'Marie', familyName: 'Claire', country: 'HT', city: 'Jacmel', questions: qs3, acceptTerms: true, acceptPrivacy: true, accountType: 'organizer', ...extra });
   const google = (n: number, extra: Record<string, unknown> = {}) => ({ sub: `g-sub-${n}-${seq}`, email: `user${n}-${Date.now()}${seq}@gmail.test`, given_name: 'Marie', family_name: 'Claire', ...extra });
 
   /** Crée un compte complet via Google ; renvoie le navigateur connecté et ses informations. */

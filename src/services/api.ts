@@ -155,6 +155,8 @@ export interface SignUpInput {
   name: string;
   email: string;
   password: string;
+  /** Acheteur (par défaut) ou organisateur. */
+  accountType?: 'buyer' | 'organizer';
   orgName?: string;
   kind?: 'individual' | 'company' | 'association';
   country?: string;
@@ -196,7 +198,7 @@ export function serverLogout() {
 export interface SignupPending { pending: boolean; email?: string; givenName?: string; familyName?: string; picture?: string; country?: string; city?: string }
 export const signupPending = () => http<SignupPending>('/auth/signup/pending');
 export interface QuestionDraft { question: string; answer: string }
-export interface ProfileDraft { givenName: string; familyName: string; country: string; city: string; username?: string; orgName?: string; questions: QuestionDraft[]; acceptTerms: boolean; acceptPrivacy: boolean }
+export interface ProfileDraft { givenName: string; familyName: string; country: string; city: string; username?: string; orgName?: string; accountType?: 'buyer' | 'organizer'; questions: QuestionDraft[]; acceptTerms: boolean; acceptPrivacy: boolean }
 export const signupComplete = (p: ProfileDraft) => http<Session_>('/auth/signup/complete', { method: 'POST', body: JSON.stringify(p) });
 export const profileComplete = (p: ProfileDraft) => http<{ user: AppUser }>('/auth/profile/complete', { method: 'POST', body: JSON.stringify(p) });
 

@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-18 : comptes acheteur : un compte est obligatoire pour acheter (le serveur refuse les achats sans compte) ; à l'inscription (Google ou e-mail), choix « J'achète des billets » (par défaut, sans organisation) ou « J'organise des événements ». Paiement par carte en premier. Test A9.
 - 2026-11-18 : corrigé (urgent) : une commande non payée comptait comme billet vendu et comme argent disponible pour l'organisateur. Désormais un billet ne compte qu'au paiement confirmé (quota vérifié à la confirmation) ; les commandes non payées n'apparaissent plus nulle part ; seule la place numérotée choisie reste bloquée pendant le paiement. Test A8 ajouté.
 - 2026-11-18 : retirés à la demande de Joseph : pixels de suivi (paramètres de l'organisation, éditeur d'événement, envoi depuis les pages) et taux de commission personnalisés (administration, serveur) ; un seul taux pour tous les organisateurs.
 - 2026-11-18 : APK 1.0.51 publié : espace administration recopié du site page par page (vue d'ensemble, modération, utilisateurs, vérification, récupérations, programme vérifié, support, boosts, transactions, versements, litiges, commissions, contenu et réglages, journal), pages légales identiques au site, sauvegarde Android désactivée.

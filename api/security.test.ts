@@ -91,8 +91,17 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     return r.body as { id: string; slug: string; status: string; tickets: { id: string }[] };
   }
-  const order = (eventId: string, extra: Record<string, unknown> = {}, ip?: string) =>
-    call('POST', '/orders', { eventId, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'moncash', currency: 'HTG', buyer: { name: 'Acheteur', email: `buyer${++seq}@sec.test` }, ...extra }, undefined, ip);
+  /** Compte acheteur (obligatoire pour acheter). */
+  let buyerTok = '';
+  async function buyerToken() {
+    if (buyerTok) return buyerTok;
+    const id = `u_secbuy${Date.now()}`;
+    await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant','{"name":"Acheteur Sec"}', true)`, [id, `${id}@sec.test`]);
+    buyerTok = signToken(id);
+    return buyerTok;
+  }
+  const order = async (eventId: string, extra: Record<string, unknown> = {}, ip?: string) =>
+    call('POST', '/orders', { eventId, items: [{ ticketTypeId: 't1', qty: 1 }], method: 'moncash', currency: 'HTG', buyer: { name: 'Acheteur', email: `buyer${++seq}@sec.test` }, ...extra }, await buyerToken(), ip);
 
   beforeAll(async () => {
     process.env.DATABASE_URL = DB;
