@@ -1206,6 +1206,57 @@ const checkin: Handler = async (c) => {
   return { ok: false, reason: 'inactive', attendee: a };
 };
 
+/**
+ * Entrées en direct d'un événement : compteurs, rythme minute par minute (60 dernières minutes), répartition par billet et
+ * par agent, dernières entrées. Aucune donnée d'acheteur au-delà de « Prénom N. » (déjà visible de l'agent au scan).
+ * Le site et l'application relisent cette route toutes les quelques secondes (pas de connexion permanente sur Vercel).
+ */
+const eventLive: Handler = async (c) => {
+  const orgId = org(c, 'checkin');
+  const e = await eventById(c.params.id);
+  if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
+  const ev = e!;
+  const rows = await all<{ type_id: string; status: string; n: string }>(
+    `select t.data->>'ticketTypeId' as type_id, t.status, count(*) as n from tickets t
+     where t.event_id = $1 and t.status in ('valid','used','resale') group by 1, 2`, [ev.id]);
+  const types = ev.tickets.map((tt) => {
+    const mine = rows.filter((r) => r.type_id === tt.id);
+    const entered = mine.filter((r) => r.status === 'used').reduce((a, r) => a + Number(r.n), 0);
+    const total = mine.reduce((a, r) => a + Number(r.n), 0);
+    return { id: tt.id, name: tt.name, entered, total };
+  });
+  const entered = types.reduce((a, x) => a + x.entered, 0);
+  const total = types.reduce((a, x) => a + x.total, 0);
+  const perMinute = await all<{ m: Date; n: string }>(
+    `select date_trunc('minute', t.checked_in_at) as m, count(*) as n from tickets t
+     where t.event_id = $1 and t.status = 'used' and t.checked_in_at > now() - interval '60 minutes' group by 1`, [ev.id]);
+  const now = Date.now();
+  const series = Array.from({ length: 60 }, (_, i) => {
+    const minute = new Date(Math.floor(now / 60000) * 60000 - (59 - i) * 60000);
+    const hit = perMinute.find((r) => r.m.getTime() === minute.getTime());
+    return { at: minute.toISOString(), n: hit ? Number(hit.n) : 0 };
+  });
+  const agents = await all<{ id: string | null; name: string; scans: string; last: Date }>(
+    `select t.data->>'checkedInBy' as id, coalesce(t.data->>'checkedInByName', 'Inconnu') as name, count(*) as scans, max(t.checked_in_at) as last
+     from tickets t where t.event_id = $1 and t.status = 'used' group by 1, 2 order by scans desc limit 20`, [ev.id]);
+  const recent = await all<{ holder: string | null; type_id: string | null; at: Date; agent: string | null }>(
+    `select t.data->>'holderName' as holder, t.data->>'ticketTypeId' as type_id, t.checked_in_at as at, t.data->>'checkedInByName' as agent
+     from tickets t where t.event_id = $1 and t.status = 'used' and t.checked_in_at is not null order by t.checked_in_at desc limit 10`, [ev.id]);
+  const short = (n: string | null) => {
+    const w = (n ?? '').trim().split(/\s+/).filter(Boolean);
+    return w.length > 1 ? `${w[0]} ${w[w.length - 1]![0]!.toUpperCase()}.` : w[0] ?? '';
+  };
+  return {
+    eventId: ev.id, title: ev.title, at: new Date(now).toISOString(),
+    entered, total, remaining: Math.max(0, total - entered),
+    last5: series.slice(-5).reduce((a, x) => a + x.n, 0),
+    last15: series.slice(-15).reduce((a, x) => a + x.n, 0),
+    series, types,
+    agents: agents.map((a) => ({ id: a.id, name: a.name, scans: Number(a.scans), last: a.last?.toISOString() ?? null })),
+    recent: recent.map((r) => ({ name: short(r.holder), type: ev.tickets.find((tt) => tt.id === r.type_id)?.name ?? '', at: r.at.toISOString(), agent: r.agent ?? '' })),
+  };
+};
+
 /** Suivi des équipes (avantage « équipes avancées ») : entrées par agent et journal d'activité. */
 const teamActivity: Handler = async (c) => {
   const orgId = org(c, 'team');
@@ -2235,6 +2286,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/org/events/:id/status', setEventStatus],
   ['DELETE', '/org/events/:id', deleteEvent],
   ['GET', '/org/events/:id/stats', eventStats],
+  ['GET', '/org/events/:id/live', eventLive],
   ['PUT', '/org/profile', saveOrganizer],
   ['GET', '/org/attendees', attendees],
   ['POST', '/org/checkin/lookup', checkinLookup],

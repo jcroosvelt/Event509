@@ -918,6 +918,50 @@ export async function eventStats(eventId: string) {
   });
 }
 
+/** Entrées en direct d'un événement (relues toutes les quelques secondes par la page « En direct »). */
+export interface LiveEntries {
+  eventId: string;
+  title: string;
+  at: string;
+  entered: number;
+  total: number;
+  remaining: number;
+  last5: number;
+  last15: number;
+  /** 60 dernières minutes, une valeur par minute (la plus ancienne en premier). */
+  series: { at: string; n: number }[];
+  types: { id: string; name: string; entered: number; total: number }[];
+  agents: { id: string | null; name: string; scans: number; last: string | null }[];
+  recent: { name: string; type: string; at: string; agent: string }[];
+}
+
+export async function eventLive(eventId: string): Promise<LiveEntries | null> {
+  if (!DEMO) return http<LiveEntries>(`/org/events/${eventId}/live`).catch(() => null);
+  const e = db.events.find((x) => x.id === eventId);
+  if (!e) return null;
+  const att = db.attendees.filter((a) => a.eventId === eventId);
+  const inside = att.filter((a) => a.checkedIn);
+  const now = Date.now();
+  const series = Array.from({ length: 60 }, (_, i) => {
+    const minute = new Date(Math.floor(now / 60000) * 60000 - (59 - i) * 60000);
+    const n = inside.filter((a) => a.checkedInAt && Math.floor(new Date(a.checkedInAt).getTime() / 60000) * 60000 === minute.getTime()).length;
+    return { at: minute.toISOString(), n };
+  });
+  const short = (name: string) => {
+    const w = name.trim().split(/\s+/);
+    return w.length > 1 ? `${w[0]} ${w[w.length - 1][0].toUpperCase()}.` : w[0];
+  };
+  return clone({
+    eventId, title: e.title, at: new Date(now).toISOString(),
+    entered: inside.length, total: att.length, remaining: att.length - inside.length,
+    last5: series.slice(-5).reduce((a, x) => a + x.n, 0), last15: series.slice(-15).reduce((a, x) => a + x.n, 0),
+    series,
+    types: e.tickets.map((t) => ({ id: t.id, name: t.name, entered: inside.filter((a) => a.ticketType === t.name).length, total: att.filter((a) => a.ticketType === t.name).length })),
+    agents: inside.length ? [{ id: 'demo', name: 'Contrôle d’entrée', scans: inside.length, last: inside[0].checkedInAt ?? null }] : [],
+    recent: [...inside].sort((a, b) => (b.checkedInAt ?? '').localeCompare(a.checkedInAt ?? '')).slice(0, 10).map((a) => ({ name: short(a.name), type: a.ticketType, at: a.checkedInAt ?? '', agent: 'Contrôle d’entrée' })),
+  });
+}
+
 export type TicketCheck =
   | { ok: true; attendee: Attendee }
   | { ok: false; reason: 'unknown' | 'used' | 'wrong_event' | 'inactive'; attendee?: Attendee };

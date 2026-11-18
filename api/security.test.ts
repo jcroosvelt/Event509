@@ -268,6 +268,36 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect((await call('POST', '/org/checkin', { code }, a.token)).body.ok).toBe(false); // un billet ne passe qu'une fois
   });
 
+  it('S3c. entrées en direct : compteurs, rythme, agents et dernières entrées ; réservé à l’organisation de l’événement', async () => {
+    const a = await organizer();
+    const ev = await eventOf(a);
+    const o = await order(ev.id, { method: 'transfer' });
+    expect(o.status).toBe(200);
+    const row = (await pool.query(`select id, code from tickets where order_id = $1`, [o.body.order.id])).rows[0] as { id: string; code: string };
+    await pool.query(`update tickets set status = 'valid' where id = $1`, [row.id]);
+    const before = await call('GET', `/org/events/${ev.id}/live`, undefined, a.token);
+    expect(before.status, JSON.stringify(before.body)).toBe(200);
+    expect(before.body).toMatchObject({ eventId: ev.id, entered: 0 });
+    expect(before.body.total).toBeGreaterThanOrEqual(1);
+    expect(before.body.series).toHaveLength(60);
+    expect((await call('POST', '/org/checkin', { code: row.code }, a.token)).body.ok).toBe(true);
+    const live = await call('GET', `/org/events/${ev.id}/live`, undefined, a.token);
+    expect(live.body.entered).toBe(1);
+    expect(live.body.remaining).toBe(live.body.total - 1);
+    expect(live.body.last5).toBe(1);
+    expect(live.body.series.at(-1).n + live.body.series.at(-2).n).toBe(1);
+    expect(live.body.types.find((t: { id: string }) => t.id === ev.tickets[0].id)).toMatchObject({ entered: 1 });
+    expect(live.body.agents[0]).toMatchObject({ scans: 1 });
+    expect(live.body.recent).toHaveLength(1);
+    // Prénom et initiale seulement : ni e-mail ni nom complet
+    expect(live.body.recent[0].name).toMatch(/^\S+( \S\.)?$/);
+    expect(JSON.stringify(live.body)).not.toMatch(/@/);
+    // Une autre organisation et un événement inconnu : introuvable
+    const other = await organizer();
+    expect((await call('GET', `/org/events/${ev.id}/live`, undefined, other.token)).status).toBe(404);
+    expect((await call('GET', '/org/events/inconnu/live', undefined, a.token)).status).toBe(404);
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

@@ -2207,5 +2207,21 @@
   "Un seul compte pour acheter vos billets et, si vous le souhaitez, organiser vos événements.": "One account to buy your tickets and, if you wish, organize your events.",
   "Pas encore de compte ?": "No account yet?",
   "Contact et conditions": "Contact and terms",
-  "Un compte gratuit est nécessaire : vos billets y restent toujours disponibles, même si vous changez de téléphone.": "A free account is required: your tickets stay available there, even if you change phones."
+  "Un compte gratuit est nécessaire : vos billets y restent toujours disponibles, même si vous changez de téléphone.": "A free account is required: your tickets stay available there, even if you change phones.",
+  "Entrées en direct": "Live entries",
+  "En direct — {event}": "Live — {event}",
+  "Connexion perdue : dernier relevé à {time}": "Connection lost: last update at {time}",
+  "En direct · mis à jour à {time}": "Live · updated at {time}",
+  "personnes déjà entrées": "people already inside",
+  "5 dernières minutes": "Last 5 minutes",
+  "15 dernières minutes": "Last 15 minutes",
+  "Pas encore entrés": "Not in yet",
+  "Rythme moyen": "Average pace",
+  "par minute": "per minute",
+  "Entrées par minute (30 dernières minutes)": "Entries per minute (last 30 minutes)",
+  "{n} entrées au total sur 30 minutes": "{n} entries in total over 30 minutes",
+  "Par agent de contrôle": "By entry agent",
+  "{n} scan(s)": "{n} scan(s)",
+  "Aucune entrée pour l’instant.": "No entries yet.",
+  "Dernières entrées": "Latest entries"
 }

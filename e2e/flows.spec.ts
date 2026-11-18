@@ -99,6 +99,19 @@ test.describe('accès et rôles', () => {
 });
 
 test.describe('organisateur', () => {
+  test('entrées en direct : compteurs et rythme, depuis le contrôle d’entrée', async ({ page }) => {
+    await loginAs(page, /Organisateur \(admin\)/);
+    await page.goto('/organisateur/checkin');
+    await page.getByRole('link', { name: /Festival Kompa Live 2026/ }).click();
+    await page.waitForURL(/\/organisateur\/checkin\/.+/);
+    await page.getByRole('link', { name: 'Entrées en direct' }).click();
+    await expect(page).toHaveURL(/\/direct$/);
+    await expect(page.getByText('personnes déjà entrées')).toBeVisible();
+    await expect(page.getByTestId('live-entered')).toContainText(/\/ [1-9]/);
+    await expect(page.getByText(/En direct · mis à jour à/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Entrées par minute (30 dernières minutes)' })).toBeVisible();
+  });
+
   test('contrôle d’entrée : choix de l’événement, vérification puis validation, refus d’un doublon et d’un faux billet, puis hors ligne', async ({ page }) => {
     await loginAs(page, /Organisateur \(admin\)/);
     await page.goto('/organisateur/checkin');

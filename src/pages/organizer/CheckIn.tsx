@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import jsQR from 'jsqr';
 import { inApp, postApp } from '@/lib/appBridge';
-import { ArrowLeft, Armchair, Camera, CameraOff, CheckCircle2, CloudOff, CloudUpload, Keyboard, RefreshCw, ScanLine, Wifi, XCircle } from 'lucide-react';
+import { ArrowLeft, Armchair, Radio, Camera, CameraOff, CheckCircle2, CloudOff, CloudUpload, Keyboard, RefreshCw, ScanLine, Wifi, XCircle } from 'lucide-react';
 import { events } from '@/data/mock';
 import { getEvent, listAttendees, lookupTicket, verifyTicket, DEMO, type TicketCheck } from '@/services/api';
 import { ApiError } from '@/lib/errors';
@@ -286,6 +286,7 @@ function CheckIn({ eventId, title, start }: { eventId: string; title: string; st
   return (
     <div>
       <Link to="/organisateur/checkin" className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-ink-soft"><ArrowLeft className="h-4 w-4" aria-hidden /> {t('Tous les événements')}</Link>
+      <Link to={`/organisateur/checkin/${eventId}/direct`} className="mb-3 ml-4 inline-flex items-center gap-2 text-sm font-semibold text-brand-ink"><Radio className="h-4 w-4" aria-hidden /> {t('Entrées en direct')}</Link>
       <PageHeader title={title} subtitle={`${dateShort(start, lang)} · ${t('Scannez les QR codes à l’entrée. Chaque billet n’est valable qu’une seule fois.')}`} />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">

@@ -38,6 +38,7 @@ const AccountSettings = lazy(() => import('@/pages/account/Settings'));
 const Notifications = lazy(() => import('@/pages/account/Notifications'));
 const BuyerDashboard = lazy(() => import('@/pages/buyer/BuyerDashboard'));
 const BuyerRefunds = lazy(() => import('@/pages/buyer/BuyerRefunds'));
+const LiveEntries = lazy(() => import('@/pages/organizer/LiveEntries'));
 const BecomeOrganizer = lazy(() => import('@/pages/buyer/BecomeOrganizer'));
 
 // Organisateurs
@@ -258,6 +259,7 @@ export default function App() {
             <Route path="participants" element={<Attendees />} />
             <Route path="checkin" element={<CheckInHome />} />
             <Route path="checkin/:id" element={<CheckIn />} />
+            <Route path="checkin/:id/direct" element={<LiveEntries />} />
             <Route path="codes-promo" element={<Promos />} />
             <Route path="remboursements" element={<Refunds />} />
             <Route path="marketing" element={<Marketing />} />

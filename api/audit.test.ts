@@ -100,7 +100,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     const inv = await call('POST', '/org/team', { email: `staff${Date.now()}@audit.test`, name: 'Staff', role: 'staff' }, orga.token);
     expect(inv.status).toBe(200);
     const staff = await signup(false, inv.body.email);
-    const allowed = ['GET /org/attendees', 'POST /org/checkin/lookup', 'POST /org/checkin'];
+    const allowed = ['GET /org/attendees', 'POST /org/checkin/lookup', 'POST /org/checkin', 'GET /org/events/:id/live'];
     const bad: string[] = [];
     for (const [method, pattern] of routes.filter(([, p]) => /^\/org\//.test(p))) {
       const r = await call(method, fill(pattern), payload, part.token);
