@@ -104,6 +104,7 @@
 
 ## Journal
 
+- 2026-11-18 : corrigé (urgent) : une commande non payée comptait comme billet vendu et comme argent disponible pour l'organisateur. Désormais un billet ne compte qu'au paiement confirmé (quota vérifié à la confirmation) ; les commandes non payées n'apparaissent plus nulle part ; seule la place numérotée choisie reste bloquée pendant le paiement. Test A8 ajouté.
 - 2026-11-18 : retirés à la demande de Joseph : pixels de suivi (paramètres de l'organisation, éditeur d'événement, envoi depuis les pages) et taux de commission personnalisés (administration, serveur) ; un seul taux pour tous les organisateurs.
 - 2026-11-18 : APK 1.0.51 publié : espace administration recopié du site page par page (vue d'ensemble, modération, utilisateurs, vérification, récupérations, programme vérifié, support, boosts, transactions, versements, litiges, commissions, contenu et réglages, journal), pages légales identiques au site, sauvegarde Android désactivée.
 - 2026-11-18 : audit de sécurité, nouvelle suite api/audit.test.ts (toutes les routes testées par rôle, IDOR systématique entre organisations) ; corrigé : lien du direct des événements en ligne publié à tous (désormais réservé aux billets payés et à l'organisation), liste des ambassadeurs publique dans /bootstrap (remplacée par la vérification d'un code), parrainage crédité sur les ventes d'une autre organisation, e-mails et téléphones des acheteurs visibles par le rôle « contrôle d'entrée ».

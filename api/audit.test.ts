@@ -241,4 +241,32 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     expect(row.data.views ?? 0).toBe(0);
     expect(row.data.tickets[0].sold).toBe(0);
   });
+  it('A8. paiement non abouti : rien de vendu, aucun argent, aucun participant, aucune commande visible', async () => {
+    const a = await signup(true);
+    await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [a.orgId]);
+    const ev = await call('PUT', '/org/events', { ...onlineEvent(), online: null, venue: { name: 'Le pingouin', address: 'Rue', city: 'Port-au-Prince' } }, a.token);
+    expect(ev.status).toBe(200);
+    const o = await call('POST', '/orders', { eventId: ev.body.id, items: [{ ticketTypeId: 't1', qty: 2 }], method: 'transfer', currency: 'HTG', buyer: { name: 'Acheteur', email: `np${Date.now()}@audit.test` } });
+    expect(o.status).toBe(200);
+    expect(o.body.order.status).toBe('pending');
+    const sold = async () => (await call('GET', '/org/events', undefined, a.token)).body.find((e: { id: string }) => e.id === ev.body.id).tickets[0].sold as number;
+    const balance = async () => (await call('GET', '/org/balance', undefined, a.token)).body.HTG.gross as number;
+    const attendees = async () => ((await call('GET', '/org/attendees', undefined, a.token)).body as unknown[]).length;
+    expect(await sold()).toBe(0);
+    expect(await balance()).toBe(0);
+    expect(await attendees()).toBe(0);
+    const adm = await (async () => {
+      const id = `u_audadm${Date.now()}`;
+      await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','admin','{"name":"Adm"}', true)`, [id, `${id}@audit.test`]);
+      const { signToken } = await import('./_lib/auth.js');
+      return signToken(id);
+    })();
+    expect(JSON.stringify((await call('GET', '/admin/orders', undefined, adm)).body)).not.toContain(o.body.order.id);
+    // Paiement confirmé : tout apparaît
+    expect((await call('POST', `/admin/orders/${o.body.order.id}/confirm`, {}, adm)).status).toBe(200);
+    expect(await sold()).toBe(2);
+    expect(await balance()).toBe(1000);
+    expect(await attendees()).toBe(2);
+    expect(JSON.stringify((await call('GET', '/admin/orders', undefined, adm)).body)).toContain(o.body.order.id);
+  });
 });

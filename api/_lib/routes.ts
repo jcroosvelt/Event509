@@ -1,6 +1,6 @@
 import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, Dispute, EventItem, IssuedTicket, Order, Organizer, Payout,
-  PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, VerificationRequest,
+  PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, TicketType, VerificationRequest,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
@@ -209,6 +209,12 @@ function publicEvent(e: EventItem, u?: UserRow | null): EventItem {
   return { ...e, online: { platform: e.online.platform, url: '' } };
 }
 const PAID_ORDER = ['paid', 'partially_refunded'];
+
+/** Billets d'un type dans une commande. */
+const qtyOf = (o: Order, ticketTypeId: string) => o.items.filter((i) => i.ticketTypeId === ticketTypeId).reduce((a, i) => a + i.qty, 0);
+/** Commande annulée ou supprimée : ses billets ne comptent plus comme vendus (une commande en attente n'a jamais été comptée). */
+const release = (t: TicketType, n: number, status: Order['status']): TicketType =>
+  !n || status === 'pending' ? t : { ...t, sold: Math.max(0, t.sold - n) };
 
 async function eventById(id: string, q: Q = db()) {
   return (await docs<EventItem>(`select data from events where id = $1 or slug = $1`, [id], q))[0] ?? null;
@@ -635,7 +641,8 @@ const createOrder: Handler = async (c) => {
 
       const tickets: IssuedTicket[] = [];
       for (const l of lines) {
-        l.tt.sold += l.qty;
+        // Pas de réservation : un billet ne compte comme vendu qu'une fois payé
+        if (order.status !== 'pending') l.tt.sold += l.qty;
         const unit = l.tt.price ? c2(l.tt.price) : 0;
         for (let i = 0; i < l.qty; i++) {
           const t: IssuedTicket & { phone?: string; purchasedAt: string; amount: number } = {
@@ -801,11 +808,12 @@ const myTickets: Handler = async (c) => {
   const u = auth(c);
   return docs<IssuedTicket>(
     `select t.data from tickets t join orders o on o.id = t.order_id
-     where o.user_id = $1 order by t.data->>'purchasedAt' desc nulls last`, [u.id]);
+     where o.user_id = $1 and o.status <> 'pending' and t.status <> 'pending' order by t.data->>'purchasedAt' desc nulls last`, [u.id]);
 };
 const myOrders: Handler = async (c) => {
   const u = auth(c);
-  return docs<Order>(`select data from orders where user_id = $1 order by created_at desc`, [u.id]);
+  // Une commande non payée n'apparaît nulle part : elle n'existe qu'au paiement confirmé
+  return docs<Order>(`select data from orders where user_id = $1 and status <> 'pending' order by created_at desc`, [u.id]);
 };
 
 async function ownTicket(c: Ctx, id: string, q: Q = db()) {
@@ -1076,7 +1084,7 @@ const deleteOrder: Handler = async (c) => {
     // Les places redeviennent disponibles
     const ev = await eventById(o!.eventId, q);
     if (ev && ['paid', 'pending'].includes(o!.status)) {
-      const tickets = ev.tickets.map((t) => ({ ...t, sold: Math.max(0, t.sold - o!.items.filter((i) => i.ticketTypeId === t.id).reduce((a, i) => a + i.qty, 0)) }));
+      const tickets = ev.tickets.map((t) => release(t, qtyOf(o!, t.id), o!.status));
       await saveEventRow({ ...ev, tickets }, q);
     }
     await purgeOrders(q, 'id = $1', [o!.id]);
@@ -1659,7 +1667,7 @@ const toHTG = (amount: number, cur: Currency) => (cur === 'USD' ? amount * USD_T
 const platformStats: Handler = async (c) => {
   admin(c);
   const now = new Date();
-  const orders = await docs<Order>(`select data from orders order by created_at desc`);
+  const orders = await docs<Order>(`select data from orders where status <> 'pending' order by created_at desc`);
   const evs = await docs<EventItem>(`select data from events`);
   const evById = new Map(evs.map((e) => [e.id, e]));
   const users = await all<{ created_at: Date }>(`select created_at from users`);
@@ -1739,7 +1747,7 @@ const adminOrders: Handler = async (c) => {
   return docs<Order>(
     `select o.data from orders o left join events e on e.id = o.event_id
      where ($1 = '' or lower(o.id || ' ' || coalesce(o.data->>'buyerName','') || ' ' || coalesce(o.buyer_email,'')) like '%' || $1 || '%')
-       and ($2 = '' or o.status = $2) and ($3 = '' or o.data->>'method' = $3) and ($4 = '' or e.organizer_id = $4)
+       and (($2 = '' and o.status <> 'pending') or o.status = $2) and ($3 = '' or o.data->>'method' = $3) and ($4 = '' or e.organizer_id = $4)
      order by o.created_at desc limit 1000`,
     [q, c.query.status ?? '', c.query.method ?? '', c.query.organizerId ?? '']);
 };
@@ -1769,7 +1777,7 @@ const userDetail: Handler = async (c) => {
   admin(c);
   const u = await one<UserRow>(`select * from users where id = $1`, [c.params.id]);
   if (!u) return null;
-  const orders = await docs<Order>(`select data from orders where user_id = $1 or lower(buyer_email) = $2 order by created_at desc`, [u.id, u.email]);
+  const orders = await docs<Order>(`select data from orders where (user_id = $1 or lower(buyer_email) = $2) and status <> 'pending' order by created_at desc`, [u.id, u.email]);
   const organization = u.organizer_id ? (await docs<Organizer>(`select data from organizers where id = $1`, [u.organizer_id]))[0] ?? null : null;
   return {
     user: toAppUser(u), organization, orders,
@@ -1787,8 +1795,26 @@ async function settleOrder(orderId: string, by?: Ctx) {
   const out = await tx(async (q) => {
     const r = await one<{ access_key: string; data: Order }>(`select access_key, data from orders where id = $1 and status = 'pending' for update`, [orderId], q);
     if (!r) return null;
+    // Les billets ne comptent comme vendus qu'au paiement : le quota se vérifie ici, une confirmation à la fois par événement
+    await q.query(`select 1 from events where id = $1 for update`, [r.data.eventId]);
+    const evNow = await eventById(r.data.eventId, q);
+    const full = evNow?.tickets.filter((t) => t.sold + qtyOf(r.data, t.id) > t.quota).map((t) => t.name) ?? [];
+    // Virement confirmé à la main : on refuse plutôt que de vendre plus que le quota (l'acheteur est à rembourser)
+    if (full.length && by) fail(409, `Plus de place (« ${full.join(', ')} ») : ne confirmez pas ce paiement, remboursez l’acheteur`);
     await q.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [orderId]);
     await q.query(`update tickets set status = 'valid', data = data || '{"status":"valid"}'::jsonb where order_id = $1 and status = 'pending'`, [orderId]);
+    // Paiement confirmé : les billets comptent maintenant comme vendus
+    const ev = await eventById(r.data.eventId, q);
+    if (ev) {
+      const tickets = ev.tickets.map((t) => ({ ...t, sold: t.sold + qtyOf(r.data, t.id) }));
+      await saveEventRow({ ...ev, tickets }, q);
+      // Deux paiements simultanés pour les dernières places : l'administration est prévenue pour rembourser
+      const over = tickets.filter((t) => t.sold > t.quota).map((t) => t.name);
+      if (over.length) {
+        const e: AuditEntry = { id: newId('al'), at: new Date().toISOString(), actor: 'Système', action: 'Survente à rembourser', target: `${r.data.id} — ${ev.title} (${over.join(', ')})` };
+        await upsert('audit_log', { id: e.id, at: e.at, data: e }, q);
+      }
+    }
     if (by) await audit(by, 'Paiement confirmé', `${r.data.id} — ${r.data.buyerName}`, q);
     return { order: { ...r.data, status: 'paid' as const }, key: r.access_key, tickets: await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [orderId], q), event: await eventById(r.data.eventId, q) };
   });
@@ -1817,7 +1843,7 @@ async function dropOrder(orderId: string) {
   await tx(async (q) => {
     const ev = await eventById(o.eventId, q);
     if (ev && ['paid', 'pending'].includes(o.status)) {
-      const tickets = ev.tickets.map((t) => ({ ...t, sold: Math.max(0, t.sold - o.items.filter((i) => i.ticketTypeId === t.id).reduce((a, i) => a + i.qty, 0)) }));
+      const tickets = ev.tickets.map((t) => release(t, qtyOf(o, t.id), o.status));
       await saveEventRow({ ...ev, tickets }, q);
     }
     await purgeOrders(q, 'id = $1', [o.id]);

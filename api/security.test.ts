@@ -390,19 +390,24 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     payStates.set(o2.body.order.id, 'failed');
     await call('POST', '/pay/webhook', { transaction: { reference_id: o2.body.order.id } });
     expect((await pool.query(`select 1 from orders where id = $1`, [o2.body.order.id])).rowCount).toBe(0);
-    expect(await sold()).toBe(before - 1);
+    expect(await sold()).toBe(before); // une commande non payée n'a jamais compté comme vendue
     for (const ref of ["x'; drop table orders;--", 'sp_inconnu', 'bo_inconnu', '', 'a'.repeat(500)]) expect((await call('POST', '/pay/webhook', { transaction: { reference_id: ref } })).status).toBe(200);
     expect((await call('POST', '/pay/webhook', 'pas un objet')).status).toBeLessThan(500);
   });
 
   it('S8. concurrence : quota, code promo à usage limité et places numérotées tiennent sous charge', async () => {
     const a = await organizer();
-    // Quota de 3 billets, 8 acheteurs simultanés : jamais plus de 3 vendus
+    // Quota de 3 billets, 8 commandes non payées : aucune ne compte comme vendue ; 8 confirmations simultanées → 3 seulement
     const ev = await eventOf(a, { tickets: [{ id: 't1', name: 'Rare', kind: 'paid', price: 500, quota: 3, sold: 0, salesStart: '2026-01-01T00:00:00', salesEnd: '2030-06-01T20:00:00', maxPerOrder: 5 }] });
     const res = await Promise.all(Array.from({ length: 8 }, () => order(ev.id, { method: 'transfer' })));
-    expect(res.filter((r) => r.status === 200)).toHaveLength(3);
-    expect(res.filter((r) => r.status === 409)).toHaveLength(5);
-    expect((await pool.query(`select data from events where id = $1`, [ev.id])).rows[0].data.tickets[0].sold).toBe(3);
+    expect(res.filter((r) => r.status === 200)).toHaveLength(8);
+    const soldOf = async () => (await pool.query(`select data from events where id = $1`, [ev.id])).rows[0].data.tickets[0].sold as number;
+    expect(await soldOf()).toBe(0);
+    const adm = await adminUser();
+    const conf = await Promise.all(res.map((r) => call('POST', `/admin/orders/${r.body.order.id}/confirm`, {}, adm.token)));
+    expect(conf.filter((r) => r.status === 200)).toHaveLength(3);
+    expect(conf.filter((r) => r.status === 409)).toHaveLength(5);
+    expect(await soldOf()).toBe(3);
     // Code promo utilisable une seule fois : une seule remise sous 6 achats simultanés
     const ev2 = await eventOf(a);
     const code = `RACE${Date.now() % 1000000}`;

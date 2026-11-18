@@ -29,7 +29,7 @@ export function financeRoutes(h: PremiumDeps & { balanceOf: (orgId: string) => P
 
     const rows = await all<{ id: string; created_at: Date; status: string; event: string; data: Order }>(
       `select o.id, o.created_at, o.status, e.data->>'title' as event, o.data from orders o join events e on e.id = o.event_id
-       where e.organizer_id = $1 and o.created_at >= $2 and o.created_at < $3 and o.status in ('paid', 'pending', 'partially_refunded', 'refunded') order by o.created_at desc limit 5000`,
+       where e.organizer_id = $1 and o.created_at >= $2 and o.created_at < $3 and o.status in ('paid', 'partially_refunded', 'refunded') order by o.created_at desc limit 5000`,
       [orgId, from, end]);
     const htg = (o: Order, v: number) => Math.round(convert(v, o.currency as Currency, 'HTG'));
     const net = (o: Order) => htg(o, o.subtotal - o.discount);
