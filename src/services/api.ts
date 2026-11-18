@@ -97,7 +97,8 @@ function replaceCommission(c: { organizerId: string; rate?: number; reason?: str
 interface Bootstrap {
   events: EventItem[];
   organizers: Organizer[];
-  ambassadors: Pick<Ambassador, 'id' | 'name' | 'code' | 'commission'>[];
+  /** Démonstration seulement : le serveur ne publie jamais la liste des ambassadeurs. */
+  ambassadors?: Pick<Ambassador, 'id' | 'name' | 'code' | 'commission'>[];
   fees: FeeSettings;
   /** Taux de change du jour (gourdes pour 1 dollar). */
   rate?: number;
@@ -111,7 +112,7 @@ const BOOT_KEY = 'e509.cache.bootstrap';
 function applyBootstrap(b: Bootstrap) {
   replaceAll(db.events, b.events);
   replaceAll(db.organizers, b.organizers);
-  replaceAll(db.ambassadors, b.ambassadors.map((a) => ({ clicks: 0, sales: 0, revenue: 0, ...a })));
+  replaceAll(db.ambassadors, (b.ambassadors ?? []).map((a) => ({ clicks: 0, sales: 0, revenue: 0, ...a })));
   replaceAll(db.customCommissions, b.customCommissions);
   Object.assign(feeSettings, b.fees);
   if (typeof b.rate === 'number') setUsdToHtg(b.rate);
@@ -772,6 +773,15 @@ export async function requestPayout(orgId: string, amount: number, currency: Cur
 }
 
 /** Retrouver une commande sans compte grâce à la clé du lien reçu par email. */
+/** Lien de parrainage (?ref=CODE) : prénom de l'ambassadeur si le code existe, sinon null. */
+export async function lookupReferral(code: string): Promise<{ code: string; name: string } | null> {
+  if (DEMO) {
+    const a = db.ambassadors.find((x) => x.code === code);
+    return a ? { code: a.code, name: a.name } : null;
+  }
+  return http<{ code: string; name: string }>(`/referrals/${encodeURIComponent(code)}`).catch(() => null);
+}
+
 export async function getOrderByKey(id: string, key: string) {
   const r = await http<{ order: Order; tickets: IssuedTicket[]; event: EventItem | null; claimed: boolean }>(`/orders/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`);
   if (r.event) cacheEvent(r.event);

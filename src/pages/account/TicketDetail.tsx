@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { ArrowLeft, Armchair, CalendarDays, Download, MapPin, MonitorPlay, RefreshCw, Send, ShieldCheck, Sun, Tag, WalletCards } from 'lucide-react';
 import { events } from '@/data/mock';
-import { cancelResale, listForResale, transferTicket } from '@/services/api';
-import { useApp } from '@/store/app';
+import { cancelResale, getOrderByKey, listForResale, transferTicket } from '@/services/api';
+import { guestOrderKey, useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { dateLong, money, time } from '@/lib/format';
 import { isEmail, useForm, cleanNumber } from '@/lib/form';
@@ -34,7 +34,14 @@ export default function TicketDetail() {
   // Application Android : écran allumé, luminosité maximale et captures bloquées sur la page du billet
   useTicketScreen();
   const tk = tickets.find((x) => x.id === id);
+  const [, setStreamTick] = useState(0);
   const ev = events.find((e) => e.id === tk?.eventId);
+  // Le lien du direct n'est jamais publié : il est relu avec la commande (clé du lien ou compte du titulaire)
+  const needStream = !!ev?.online && !ev.online.url && !!tk?.orderId;
+  useEffect(() => {
+    if (!needStream || !tk) return;
+    getOrderByKey(tk.orderId, guestOrderKey(tk.orderId) ?? '').then(() => setStreamTick((n) => n + 1)).catch(() => {});
+  }, [needStream, tk]);
   const tt = ev?.tickets.find((x) => x.id === tk?.ticketTypeId);
   useTitle(ev ? t('Billet — {event}', { event: ev.title }) : t('Billet'));
   const { token, left, seconds } = useRotatingToken();
@@ -167,7 +174,7 @@ export default function TicketDetail() {
         </div>
       </article>
 
-      {active && ev.online && (
+      {active && ev.online?.url && (
         <a href={safeHref(ev.online.url) ?? '#'} target="_blank" rel="noreferrer noopener" className="mt-4 flex items-center gap-3 rounded-3xl bg-violet-600 p-4 font-semibold text-white">
           <MonitorPlay className="h-5 w-5" aria-hidden /> {t('Rejoindre le direct sur {platform}', { platform: ev.online.platform })}
         </a>

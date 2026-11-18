@@ -208,7 +208,7 @@ export default function EventDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => downloadICS({ title: ev.title, start: ev.start, end: ev.end, location: ev.venue ? `${ev.venue.name}, ${ev.venue.city}` : ev.online?.url, description: ev.description })}
+              onClick={() => downloadICS({ title: ev.title, start: ev.start, end: ev.end, location: ev.venue ? `${ev.venue.name}, ${ev.venue.city}` : ev.online?.platform, description: ev.description })}
             >
               <CalendarDays className="h-4 w-4" aria-hidden /> {t('Ajouter au calendrier')}
             </Button>

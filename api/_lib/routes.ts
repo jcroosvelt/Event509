@@ -204,6 +204,16 @@ async function act(c: Ctx, orgId: string, action: string, target = '', q: Q = db
     console.error('[activité]', e);
   }
 }
+/**
+ * Événement tel qu'on peut le montrer à tous : le lien du direct (événement en ligne) est réservé aux détenteurs d'un billet
+ * payé, à l'organisation et à l'administration ; il n'est jamais publié dans les listes publiques.
+ */
+function publicEvent(e: EventItem, u?: UserRow | null): EventItem {
+  if (!e.online || u?.role === 'admin' || (u?.organizer_id && u.organizer_id === e.organizerId)) return e;
+  return { ...e, online: { platform: e.online.platform, url: '' } };
+}
+const PAID_ORDER = ['paid', 'partially_refunded'];
+
 async function eventById(id: string, q: Q = db()) {
   return (await docs<EventItem>(`select data from events where id = $1 or slug = $1`, [id], q))[0] ?? null;
 }
@@ -466,10 +476,8 @@ const bootstrap: Handler = async (c) => {
   );
   const organizers = await docs<Organizer>(`select data from organizers order by data->>'name'`);
   const commissions = await all<{ organizerId: string; rate: string }>(`select organizer_id as "organizerId", rate from custom_commissions`);
-  const ambassadors = await all<Pick<Ambassador, 'id' | 'name' | 'code' | 'commission'>>(
-    `select id, data->>'name' as name, code, (data->>'commission')::numeric as commission from ambassadors`);
   return {
-    events, organizers, ambassadors,
+    events: events.map((e) => publicEvent(e, u)), organizers,
     fees: await feeSettings(),
     rate: USD_TO_HTG,
     rates: { ...RATES },
@@ -482,7 +490,15 @@ const getEvent: Handler = async (c) => {
   const e = await eventById(c.params.id);
   const u = c.user;
   if (!e || (e.status !== 'published' && e.status !== 'ended' && u?.role !== 'admin' && u?.organizer_id !== e.organizerId)) fail(404, 'Événement introuvable');
-  return { ...e, taken: await takenSeats(e!.id) };
+  return { ...publicEvent(e!, u), taken: await takenSeats(e!.id) };
+};
+
+/** Lien d'un parrainage (?ref=CODE) : seul le prénom de l'ambassadeur est montré, jamais la liste ni les commissions. */
+const referral: Handler = async (c) => {
+  if (c.ip) await rateLimit(`ref:${c.ip}`, 60, 60);
+  const r = await one<{ name: string; code: string }>(`select data->>'name' as name, code from ambassadors where code = upper($1)`, [str(c.params.code, 40)]);
+  if (!r) fail(404, 'Code inconnu');
+  return { code: r!.code, name: (r!.name ?? '').split(' ')[0] };
 };
 
 const validatePromo: Handler = async (c) => {
@@ -644,8 +660,8 @@ const createOrder: Handler = async (c) => {
       await saveEventRow(ev!, q);
       if (order.referral)
         await q.query(
-          `update ambassadors set data = jsonb_set(jsonb_set(data, '{sales}', to_jsonb((data->>'sales')::numeric + $2)), '{revenue}', to_jsonb((data->>'revenue')::numeric + $3)) where code = $1`,
-          [order.referral, tickets.length, subtotal],
+          `update ambassadors set data = jsonb_set(jsonb_set(data, '{sales}', to_jsonb((data->>'sales')::numeric + $2)), '{revenue}', to_jsonb((data->>'revenue')::numeric + $3)) where code = $1 and organizer_id = $4`,
+          [order.referral, tickets.length, subtotal, ev!.organizerId],
         );
       return { order, tickets, event: ev! };
     });
@@ -772,7 +788,8 @@ async function orderAccess(c: Ctx, id: string, key: string, q: Q = db()) {
 const getOrder: Handler = async (c) => {
   const r = await orderAccess(c, c.params.id, str(c.query.k, 60));
   const tickets = await docs<IssuedTicket>(`select data from tickets where order_id = $1 order by id`, [c.params.id]);
-  return { order: r.data, tickets, event: await eventById(r.data.eventId), claimed: !!r.user_id };
+  const ev = await eventById(r.data.eventId);
+  return { order: r.data, tickets, event: ev && (PAID_ORDER.includes(r.data.status) ? ev : publicEvent(ev, c.user)), claimed: !!r.user_id };
 };
 
 /** Rattacher une commande passée sans compte au compte connecté : la clé du lien prouve que la commande est bien la sienne. */
@@ -1156,10 +1173,14 @@ async function orgTickets(orgId: string, eventId?: string) {
 const attendees: Handler = async (c) => {
   // Le check-in hors ligne télécharge aussi cette liste
   const u = auth(c);
-  const orgId = org(c, effectivePerms(u).includes('attendees') ? 'attendees' : 'checkin');
+  const full = u.role === 'admin' || effectivePerms(u).includes('attendees');
+  const orgId = org(c, full ? 'attendees' : 'checkin');
   const evs = await docs<EventItem>(`select data from events where organizer_id = $1`, [orgId]);
   const byId = new Map(evs.map((e) => [e.id, e]));
-  return (await orgTickets(orgId, c.query.eventId)).map((t) => toAttendee(t, byId.get(t.eventId)));
+  const list = (await orgTickets(orgId, c.query.eventId)).map((t) => toAttendee(t, byId.get(t.eventId)));
+  if (full) return list;
+  // Contrôle d'entrée seulement : le strict nécessaire pour valider hors ligne (ni email, ni téléphone, ni montant)
+  return list.map((a) => ({ ...a, email: '', phone: '', amount: 0, orderId: '' }));
 };
 
 const checkin: Handler = async (c) => {
@@ -2139,6 +2160,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/auth/password', changePassword],
   ['POST', '/auth/organizer', becomeOrganizer],
   ['GET', '/events/:id', getEvent],
+  ['GET', '/referrals/:code', referral],
   ['POST', '/promo/validate', validatePromo],
   ['POST', '/reports', reportEvent],
   ['GET', '/events/:id/reviews', eventReviews],

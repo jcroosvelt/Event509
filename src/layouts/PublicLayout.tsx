@@ -7,7 +7,7 @@ import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
 import { ApkMenuLink, InstallButton } from '@/components/AppInstall';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ambassadors } from '@/data/mock';
+import { lookupReferral } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useOnline } from '@/lib/hooks';
 import { captureTrackingCode } from '@/lib/tracking';
@@ -246,13 +246,13 @@ function useReferralCapture() {
   useEffect(() => {
     const code = params.get('ref')?.toUpperCase();
     if (!code) return;
-    const am = ambassadors.find((a) => a.code === code);
-    if (am) {
+    void lookupReferral(code).then((am) => {
+      if (!am) return;
       const exp = new Date();
       exp.setDate(exp.getDate() + 30);
-      setReferral({ code, expiresAt: exp.toISOString() });
+      setReferral({ code: am.code, expiresAt: exp.toISOString() });
       toast(t('Invitation de {name} enregistrée', { name: am.name }), 'info');
-    }
+    });
     const p = new URLSearchParams(params);
     p.delete('ref');
     setParams(p, { replace: true });
