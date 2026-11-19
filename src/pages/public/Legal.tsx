@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { currentFeeSettings, currentSiteInfo, getLegalOverrides, type LegalOverrides } from '@/services/api';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
-import { fillTokens, parseDoc, type Block } from '@/lib/legalDoc';
+import { feeTokens, fillTokens, parseDoc, type Block } from '@/lib/legalDoc';
 import { legalDefaults, type LegalDoc } from '@/data/legalDefaults';
 import { Card, Loading } from '@/components/ui';
 
@@ -34,7 +34,7 @@ export default function Legal({ page }: { page: LegalDoc }) {
   const { lang } = useApp();
   const { data, loading } = useAsync(() => getLegalOverrides().catch((): LegalOverrides => ({})), []);
   const raw = data?.[page]?.[lang] ?? legalDefaults[page][lang];
-  const values = { ...currentSiteInfo(), commission: String(currentFeeSettings().percent) };
+  const values = { ...currentSiteInfo(), ...feeTokens(currentFeeSettings(), lang) };
   const doc = parseDoc(fillTokens(raw, values, lang));
   useTitle(doc.title);
   if (loading) return <Loading />;

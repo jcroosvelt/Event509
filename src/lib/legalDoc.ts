@@ -3,6 +3,7 @@
  * réglées par l'administrateur ({{email}}, {{commission}}…).
  */
 import type { Lang } from '@/types';
+import type { FeeSettings } from './fees';
 
 export interface SiteInfo {
   address: string;
@@ -34,6 +35,34 @@ export const defaultSiteInfo: SiteInfo = {
   errorHours: '48',
   supportDays: '3',
 };
+
+/** Valeurs calculées à partir des réglages de commission : jamais saisies à la main, toujours à jour. */
+export const AUTO_TOKENS = ['commission', 'commissionBuyer', 'commissionOrganizer', 'feeBuyer', 'feeOrganizer'];
+
+const num = (n: number, lang: Lang) => String(Math.round(n * 100) / 100).replace('.', lang === 'en' ? '.' : ',');
+
+/**
+ * Commission en vigueur pour les documents légaux : taux total, part de l'acheteur et part de l'organisateur
+ * (taux et frais fixes par billet partagés selon le réglage « part payée par l'acheteur »).
+ */
+export function feeTokens(f: FeeSettings, lang: Lang): Record<string, string> {
+  const share = Math.min(100, Math.max(0, Number.isFinite(f.buyerShare) ? f.buyerShare : 50));
+  const pct = (part: number) => (f.percent * part) / 100;
+  const fixed = (part: number) => (f.fixedHTG * part) / 100;
+  const text = (p: number, fx: number) => {
+    const parts: string[] = [];
+    if (p > 0) parts.push(lang === 'en' ? `${num(p, lang)}% of the ticket price` : `${num(p, lang)} % du prix du billet`);
+    if (fx > 0) parts.push(lang === 'en' ? `${num(fx, lang)} HTG per ticket` : `${num(fx, lang)} HTG par billet`);
+    return parts.length ? parts.join(' + ') : lang === 'en' ? 'no fee' : 'aucun frais';
+  };
+  return {
+    commission: num(f.percent, lang),
+    commissionBuyer: num(pct(share), lang),
+    commissionOrganizer: num(pct(100 - share), lang),
+    feeBuyer: text(pct(share), fixed(share)),
+    feeOrganizer: text(pct(100 - share), fixed(100 - share)),
+  };
+}
 
 /** Champs obligatoires pour que les documents soient complets. */
 export const REQUIRED_SITE_FIELDS: (keyof SiteInfo)[] = ['address', 'email', 'retention', 'organizerRefundDays'];

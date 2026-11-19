@@ -523,6 +523,36 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     }
   });
 
+  it('S3g. aperçus de partage : titre, date, lieu, prix et image lus dans la base, tout échappé, brouillons introuvables', async () => {
+    const a = await organizer();
+    const ev = await eventOf(a, { title: 'Concert <b>"Test"</b> & Cie', description: 'Super <script>alert(1)</script> soirée', cover: 'https://exemple.com/affiche.jpg' });
+    const r = await callQ('GET', '/share', { kind: 'e', slug: ev.slug });
+    expect(r.status).toBe(200);
+    const html = String(r.body);
+    expect(html).toContain('<meta property="og:title" content="Concert &lt;b&gt;&quot;Test&quot;&lt;/b&gt; &amp; Cie" />');
+    expect(html).not.toMatch(/<script|<b>/i);
+    expect(html).toContain('<meta property="og:image" content="https://exemple.com/affiche.jpg" />');
+    expect(html).toMatch(/og:description" content="[^"]*Jacmel[^"]*dès 500 HTG/);
+    expect(html).toMatch(/og:url" content="https:\/\/[^"]+\/e\//);
+    expect(html).toContain('summary_large_image');
+    // Affiche en dégradé : image par défaut ; fichier du site : adresse absolue
+    const grad = await eventOf(a, { title: 'Sans affiche', cover: 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)' });
+    expect(String((await callQ('GET', '/share', { kind: 'e', slug: grad.slug })).body)).toMatch(/og:image" content="https:\/\/[^"]+\/og-default\.png"/);
+    const file = await eventOf(a, { title: 'Avec fichier', cover: '/api/files/abcdef123456' });
+    expect(String((await callQ('GET', '/share', { kind: 'e', slug: file.slug })).body)).toMatch(/og:image" content="https:\/\/[^"]+\/api\/files\/abcdef123456"/);
+    // Brouillon, événement inconnu : rien n'est montré
+    const draft = await eventOf(a, { title: 'Secret', status: 'draft' });
+    expect((await callQ('GET', '/share', { kind: 'e', slug: draft.slug })).status).toBe(404);
+    expect((await callQ('GET', '/share', { kind: 'e', slug: 'inconnu' })).status).toBe(404);
+    expect((await callQ('GET', '/share', { kind: 'e' })).status).toBe(404);
+    // Organisateur
+    const slug = (await pool.query(`select slug from organizers where id = $1`, [a.orgId])).rows[0].slug as string;
+    const o = await callQ('GET', '/share', { kind: 'o', slug });
+    expect(o.status).toBe(200);
+    expect(String(o.body)).toMatch(/og:title" content="Org Sec \d+"/);
+    expect((await callQ('GET', '/share', { kind: 'o', slug: 'inconnu' })).status).toBe(404);
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

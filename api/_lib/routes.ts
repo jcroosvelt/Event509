@@ -2220,6 +2220,62 @@ const unregisterDevice: Handler = async (c) => {
   return null;
 };
 
+// ---------- Aperçus de partage (WhatsApp, Facebook, X, Telegram…) ----------
+
+const escHtml = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const clipText = (v: string, n: number) => (v.length > n ? `${v.slice(0, n - 1).trimEnd()}…` : v);
+
+/**
+ * Page d'aperçu d'un événement ou d'un organisateur pour les robots de partage (ils n'exécutent pas le JavaScript du site :
+ * sans elle, un lien partagé n'aurait ni titre ni image). Vercel y envoie seulement ces robots (voir vercel.json) ; les visiteurs
+ * reçoivent le site normal. Données lues dans la base à chaque demande : titre, date, lieu, prix et affiche toujours à jour.
+ * Seuls les événements publiés sont montrés ; tout est échappé.
+ */
+const sharePage: Handler = async (c) => {
+  const kind = c.query.kind === 'o' ? 'o' : 'e';
+  const slug = str(c.query.slug, 120);
+  const site = siteUrl() || 'https://event509.com';
+  const fileOrHttps = (v: unknown) => (typeof v === 'string' && /^\/api\/files\/[\w-]{6,40}$/.test(v) ? `${site}${v}` : typeof v === 'string' && /^https:\/\/[^\s"'<>]+$/.test(v) ? v : null);
+  let title = '';
+  let description = '';
+  let image: string | null = null;
+  let path = '';
+  if (kind === 'e') {
+    const e = slug ? (await one<{ data: EventItem }>(`select data from events where slug = $1 and data->>'status' = 'published'`, [slug]))?.data : undefined;
+    if (!e) return new Respond(404, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Événement introuvable');
+    const date = new Date(localMs(e.start)).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const where = e.venue ? [e.venue.name, e.venue.city].filter(Boolean).join(', ') : e.online?.platform ? 'En ligne' : '';
+    const paid = e.tickets.filter((t) => t.kind === 'paid' && t.price > 0).map((t) => t.price);
+    const price = e.tickets.length && !paid.length ? 'Gratuit' : paid.length ? `dès ${Math.min(...paid)} ${e.currency}` : '';
+    title = e.title;
+    description = clipText([date, where, price].filter(Boolean).join(' · ') + (e.description ? `. ${e.description.replace(/\s+/g, ' ')}` : ''), 200);
+    image = fileOrHttps(e.images?.[0]) ?? fileOrHttps(e.cover);
+    path = `/e/${e.slug}`;
+  } else {
+    const o = slug ? (await one<{ data: Organizer }>(`select data from organizers where slug = $1`, [slug]))?.data : undefined;
+    if (!o) return new Respond(404, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Organisateur introuvable');
+    title = o.name;
+    description = clipText(o.bio ? o.bio.replace(/\s+/g, ' ') : `Les événements de ${o.name} sur Event509.`, 200);
+    image = fileOrHttps(o.cover);
+    path = `/o/${o.slug}`;
+  }
+  const url = `${site}${path}`;
+  const img = image ?? `${site}/og-default.png`;
+  const t = `${title} · Event509`;
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8" /><title>${escHtml(t)}</title>
+<meta name="description" content="${escHtml(description)}" />
+<link rel="canonical" href="${escHtml(url)}" />
+<meta property="og:site_name" content="Event509" /><meta property="og:type" content="website" />
+<meta property="og:title" content="${escHtml(title)}" /><meta property="og:description" content="${escHtml(description)}" />
+<meta property="og:url" content="${escHtml(url)}" /><meta property="og:image" content="${escHtml(img)}" />
+<meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${escHtml(title)}" />
+<meta name="twitter:description" content="${escHtml(description)}" /><meta name="twitter:image" content="${escHtml(img)}" />
+<meta http-equiv="refresh" content="0;url=${escHtml(url)}" /></head>
+<body><p><a href="${escHtml(url)}">${escHtml(title)}</a></p></body></html>`;
+  // Jamais mis en cache par le réseau : la même adresse sert le site aux visiteurs et cette page aux robots
+  return Respond.html(html);
+};
+
 // ---------- Avis et notes ----------
 
 /** « Marie Dupont » → « Marie D. » : l'avis public ne montre jamais le nom complet. */
@@ -2391,6 +2447,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/orders/:id/claim', claimOrder],
   ['POST', '/orders/:id/verify', verifyOrder],
   ['POST', '/pay/webhook', payWebhook],
+  ['GET', '/share', sharePage],
   ['POST', '/devices', registerDevice],
   ['POST', '/devices/location', deviceLocation],
   ['POST', '/me/push-test', pushTest],

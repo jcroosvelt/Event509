@@ -5,7 +5,7 @@ import { currentSiteInfo, getLegalOverrides, saveLegalText, saveSiteInfo, type L
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { isEmail } from '@/lib/form';
-import { REQUIRED_SITE_FIELDS, tokensIn, type SiteInfo } from '@/lib/legalDoc';
+import { AUTO_TOKENS, REQUIRED_SITE_FIELDS, tokensIn, type SiteInfo } from '@/lib/legalDoc';
 import { legalDefaults, LEGAL_DOCS, type LegalDoc } from '@/data/legalDefaults';
 import { Button, Card, Field, Input, Loading, PageHeader, Segmented, Select, Textarea } from '@/components/ui';
 import type { Lang } from '@/types';
@@ -52,7 +52,7 @@ export default function AdminContent() {
   const value = draft ?? saved;
   const changed = draft !== null && draft !== saved;
   const missing = REQUIRED_SITE_FIELDS.filter((k) => !info[k].trim());
-  const unset = tokensIn(value).filter((k) => !(info as unknown as Record<string, string>)[k]?.trim() && k !== 'commission');
+  const unset = tokensIn(value).filter((k) => !(info as unknown as Record<string, string>)[k]?.trim() && !AUTO_TOKENS.includes(k));
 
   const saveText = async (text: string | null) => {
     setBusy(true);

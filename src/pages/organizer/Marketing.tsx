@@ -119,8 +119,9 @@ export default function Marketing() {
         footer={<Button className="flex-1" onClick={submit} loading={busy}>{t('Enregistrer le brouillon')}</Button>}
       >
         <form noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }} className="space-y-4">
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('Canal')}>
-            {(Object.keys(channel) as Campaign['channel'][]).map((k) => {
+          {/* Seul l'email est proposé : aucun envoi par SMS ni WhatsApp (les anciennes campagnes gardent leur canal affiché) */}
+          <div className="grid grid-cols-1 gap-2" role="radiogroup" aria-label={t('Canal')}>
+            {(['email'] as Campaign['channel'][]).map((k) => {
               const C = channel[k];
               return (
                 <button key={k} type="button" role="radio" aria-checked={ch === k} onClick={() => setCh(k)} className={cx('flex flex-col items-center gap-2 rounded-2xl border p-4 text-sm font-semibold', ch === k ? 'border-brand bg-brand-50' : 'border-line')}>

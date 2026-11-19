@@ -14,7 +14,7 @@ import { AppLockCard } from '@/components/AppLockCard';
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 
 const NOTIF_KEY = 'e509.notifPrefs';
-const defaultPrefs = { reminders: true, updates: true, reco: true, sms: false, whatsapp: true, marketing: false };
+const defaultPrefs = { reminders: true, updates: true, reco: true, marketing: false };
 
 export default function Settings() {
   const { lang, setLang, currency, setCurrency, theme, setTheme, user, updateUser, logout, toast, t, place, tastes } = useApp();
@@ -160,8 +160,6 @@ export default function Settings() {
             <Toggle checked={prefs.updates} onChange={(v) => setPref('updates', v)} label={t('Mises à jour des organisateurs')} description={t('Changement d’horaire, de lieu, annulation')} />
             <Toggle checked={prefs.reco} onChange={(v) => setPref('reco', v)} label={t('Événements recommandés')} />
             <Toggle checked={user?.notifyNearby !== false} onChange={(v) => updateUser({ notifyNearby: v })} label={t('Nouveaux événements près de chez moi')} description={t('Une alerte au plus par jour, selon la ville de votre profil (application)')} />
-            <Toggle checked={prefs.whatsapp} onChange={(v) => setPref('whatsapp', v)} label={t('Recevoir sur WhatsApp')} />
-            <Toggle checked={prefs.sms} onChange={(v) => setPref('sms', v)} label={t('Recevoir par SMS')} />
             <Toggle checked={prefs.marketing} onChange={(v) => setPref('marketing', v)} label={t('Offres et promotions')} />
           </div>
         </Card>

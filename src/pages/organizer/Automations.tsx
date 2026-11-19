@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, CalendarClock, CheckCircle2, Mail, MessageCircle, Pencil, RefreshCcw, Star } from 'lucide-react';
+import { Bell, CalendarClock, CheckCircle2, Mail, Pencil, RefreshCcw, Star } from 'lucide-react';
 import { load, persist, useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { useForm } from '@/lib/form';
@@ -84,7 +84,6 @@ export default function Automations() {
                 </div>
                 <div className="mt-auto flex flex-wrap items-center gap-2">
                   <Badge tone="brand"><Mail className="h-3 w-3" aria-hidden /> {t('Email')}</Badge>
-                  {a.whatsapp && <Badge tone="green"><MessageCircle className="h-3 w-3" aria-hidden /> WhatsApp</Badge>}
                   <Button size="sm" variant="ghost" className="ml-auto" onClick={() => open(a)}><Pencil className="h-4 w-4" aria-hidden /> {t('Modifier')}</Button>
                 </div>
               </Card>
@@ -110,7 +109,6 @@ export default function Automations() {
           <Field label={t('Message')} error={form.errors.body} hint={t('Variables : {prenom} {evenement} {date} {heure} {lieu} {lien}')} required>
             <Textarea className="min-h-[180px]" {...form.bind('body')} />
           </Field>
-          <Toggle checked={form.values.whatsapp === 'true'} onChange={(v) => form.set('whatsapp', String(v))} label={t('Envoyer aussi sur WhatsApp')} />
         </form>
       </Modal>
     </div>

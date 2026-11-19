@@ -32,7 +32,7 @@ Event509 est un intermédiaire technique. Nous ne sommes pas l’organisateur de
 - Un compte est personnel. Il ne peut être ni vendu ni cédé.
 
 ## 4. Pour les participants
-- Les prix sont affichés en gourdes (HTG) ou en dollars américains (USD), selon l’événement. Les frais de service éventuels sont indiqués avant le paiement.
+- Les prix sont affichés en gourdes (HTG) ou en dollars américains (USD), selon l’événement. Les frais de service d’Event509 à la charge de l’acheteur ({{feeBuyer}}) sont ajoutés au prix et indiqués avant le paiement.
 - La commande est confirmée seulement après réception du paiement. Un billet électronique (code QR) est alors envoyé par l’application et par {{sendChannel}}.
 - Chaque billet est valable une seule fois. Un billet copié, falsifié ou déjà utilisé sera refusé à l’entrée.
 - Tu dois respecter le règlement de l’événement et les consignes de sécurité du lieu. L’organisateur peut refuser l’entrée en cas de comportement dangereux ou de non-respect des règles.
@@ -43,7 +43,7 @@ Event509 est un intermédiaire technique. Nous ne sommes pas l’organisateur de
 - Tu garantis que tu as le droit d’organiser cet événement et que tu as toutes les autorisations nécessaires (lieu, autorités, droits d’auteur, etc.).
 - Tu es seul responsable du déroulement de l’événement, de la sécurité des participants et du respect des lois en vigueur.
 - Tu fixes ta politique d’annulation, dans le respect de la politique de remboursement d’Event509.
-- Les fonds des ventes te sont versés selon le calendrier indiqué dans ton espace organisateur, après déduction de la commission d’Event509 ({{commission}} % + frais de paiement). Event509 peut retenir un versement en cas de fraude suspectée, de litige ou d’annulation de l’événement.
+- Les fonds des ventes te sont versés selon le calendrier indiqué dans ton espace organisateur, après déduction de la commission d’Event509 : {{commission}} % au total, partagée entre l’acheteur ({{feeBuyer}}) et toi ({{feeOrganizer}}). Event509 peut retenir un versement en cas de fraude suspectée, de litige ou d’annulation de l’événement.
 - Tu dois verser toi-même tes impôts et taxes sur tes revenus.
 
 ## 6. Paiements
@@ -104,7 +104,7 @@ Event509 is a technical intermediary. We are not the organizer of the events pub
 - An account is personal. It cannot be sold or transferred.
 
 ## 4. For attendees
-- Prices are displayed in gourdes (HTG) or US dollars (USD), depending on the event. Any service fees are shown before payment.
+- Prices are displayed in gourdes (HTG) or US dollars (USD), depending on the event. Event509 service fees paid by the buyer ({{feeBuyer}}) are added to the price and shown before payment.
 - An order is confirmed only after payment is received. An electronic ticket (QR code) is then sent through the application and by {{sendChannel}}.
 - Each ticket is valid only once. A copied, forged or already used ticket will be refused at the entrance.
 - You must follow the event's rules and the venue's safety instructions. The organizer may refuse entry in case of dangerous behavior or failure to follow the rules.
@@ -115,7 +115,7 @@ Event509 is a technical intermediary. We are not the organizer of the events pub
 - You guarantee that you have the right to organize this event and that you hold all necessary authorizations (venue, authorities, copyright, etc.).
 - You are solely responsible for how the event is run, for the safety of attendees and for compliance with applicable laws.
 - You set your cancellation policy, in compliance with Event509's refund policy.
-- Sales proceeds are paid to you according to the schedule shown in your organizer area, after deduction of Event509's commission ({{commission}} % + payment fees). Event509 may withhold a payout in case of suspected fraud, a dispute or the cancellation of the event.
+- Sales proceeds are paid to you according to the schedule shown in your organizer area, after deduction of Event509's commission: {{commission}}% in total, shared between the buyer ({{feeBuyer}}) and you ({{feeOrganizer}}). Event509 may withhold a payout in case of suspected fraud, a dispute or the cancellation of the event.
 - You must pay your own taxes and duties on your income.
 
 ## 6. Payments

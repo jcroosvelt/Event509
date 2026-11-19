@@ -12,8 +12,14 @@
   ],
   "rewrites": [
     {
-      "source": "/app/event509.apk",
-      "destination": "https://github.com/jcroosvelt/Event509/releases/latest/download/event509.apk"
+      "source": "/e/:slug",
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*" }],
+      "destination": "/api?path=share&kind=e&slug=:slug"
+    },
+    {
+      "source": "/o/:slug",
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*" }],
+      "destination": "/api?path=share&kind=o&slug=:slug"
     },
     {
       "source": "/api/whatsapp/webhook",

@@ -554,7 +554,7 @@ test.describe('commission', () => {
     // Réglage enregistré (démonstration : gardé sur l'appareil) avant de changer de page
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('e509.demo.fees') ?? '{}').percent === 7);
     await page.goto('/cgu');
-    await expect(page.getByText(/7 % \+/)).toBeVisible();
+    await expect(page.getByText(/7 % au total/)).toBeVisible();
   });
 });
 
