@@ -42,8 +42,9 @@ Event509 est un intermédiaire technique. Nous ne sommes pas l’organisateur de
 - Tu dois fournir des informations vraies sur ton événement : date, lieu, programme, prix, conditions d’accès.
 - Tu garantis que tu as le droit d’organiser cet événement et que tu as toutes les autorisations nécessaires (lieu, autorités, droits d’auteur, etc.).
 - Tu es seul responsable du déroulement de l’événement, de la sécurité des participants et du respect des lois en vigueur.
-- Tu fixes ta politique d’annulation, dans le respect de la politique de remboursement d’Event509.
-- Les fonds des ventes te sont versés selon le calendrier indiqué dans ton espace organisateur, après déduction de la commission d’Event509 : {{commission}} % au total, partagée entre l’acheteur ({{feeBuyer}}) et toi ({{feeOrganizer}}). Event509 peut retenir un versement en cas de fraude suspectée, de litige ou d’annulation de l’événement.
+- Tu fixes le délai de remboursement de chaque événement : jusqu’à un nombre de jours avant l’événement ({{organizerRefundDays}} par défaut, 0 = aucun remboursement). Il est affiché sur la page de l’événement avant l’achat.
+- Si tu annules un événement, tu rembourses les acheteurs. Une fois un versement demandé ou effectué pour un événement, tu ne peux plus l’annuler toi-même : contacte l’administration d’Event509.
+- Les fonds des ventes te sont versés événement par événement, sur demande depuis ton espace organisateur : une fois le délai de remboursement de l’événement terminé, et seulement si au moins 40 % des billets payants sont vendus ou si l’événement a lieu dans 5 jours ou moins, après déduction de la commission d’Event509 : {{commission}} % au total, partagée entre l’acheteur ({{feeBuyer}}) et toi ({{feeOrganizer}}). Event509 peut retenir un versement en cas de fraude suspectée, de litige ou d’annulation de l’événement.
 - Tu dois verser toi-même tes impôts et taxes sur tes revenus.
 
 ## 6. Paiements
@@ -114,8 +115,9 @@ Event509 is a technical intermediary. We are not the organizer of the events pub
 - You must provide truthful information about your event: date, venue, program, prices, access conditions.
 - You guarantee that you have the right to organize this event and that you hold all necessary authorizations (venue, authorities, copyright, etc.).
 - You are solely responsible for how the event is run, for the safety of attendees and for compliance with applicable laws.
-- You set your cancellation policy, in compliance with Event509's refund policy.
-- Sales proceeds are paid to you according to the schedule shown in your organizer area, after deduction of Event509's commission: {{commission}}% in total, shared between the buyer ({{feeBuyer}}) and you ({{feeOrganizer}}). Event509 may withhold a payout in case of suspected fraud, a dispute or the cancellation of the event.
+- You set the refund period of each event: up to a number of days before the event ({{organizerRefundDays}} by default, 0 = no refunds). It is shown on the event page before purchase.
+- If you cancel an event, you refund the buyers. Once a payout has been requested or made for an event, you can no longer cancel it yourself: contact Event509's administration.
+- Sales proceeds are paid to you event by event, on request from your organizer area: once the event's refund period is over, and only if at least 40% of paid tickets are sold or the event is 5 days away or less, after deduction of Event509's commission: {{commission}}% in total, shared between the buyer ({{feeBuyer}}) and you ({{feeOrganizer}}). Event509 may withhold a payout in case of suspected fraud, a dispute or the cancellation of the event.
 - You must pay your own taxes and duties on your income.
 
 ## 6. Payments
@@ -295,7 +297,7 @@ Sauf indication contraire de l’organisateur, il n’y a pas de remboursement s
 - l’entrée t’est refusée pour comportement ou non-respect du règlement ;
 - ton billet a été perdu, partagé ou copié.
 
-Si l’organisateur propose une politique de remboursement (par exemple jusqu’à {{organizerRefundDays}} jours avant l’événement), elle s’applique, et les frais de service Event509 ne sont pas remboursés dans ce cas.
+Chaque événement indique, avant l’achat, son délai de remboursement : tu peux demander un remboursement jusqu’à un certain nombre de jours avant l’événement ({{organizerRefundDays}} jours par défaut ; l’organisateur peut choisir un autre délai, ou n’en accepter aucun). Passé ce délai, aucune demande n’est acceptée, sauf si l’événement est annulé ou en cas d’erreur de facturation (voir plus bas). Les frais de service Event509 ne sont pas remboursés dans ce cas.
 
 ## 5. Erreurs et paiements en double
 
@@ -341,7 +343,7 @@ Unless the organizer states otherwise, there is no refund if:
 - you are refused entry for behavior or failure to follow the rules;
 - your ticket was lost, shared or copied.
 
-If the organizer offers a refund policy (for example up to {{organizerRefundDays}} days before the event), it applies, and Event509 service fees are not refunded in that case.
+Each event shows its refund period before you buy: you can request a refund up to a certain number of days before the event ({{organizerRefundDays}} days by default; the organizer may choose another period, or accept none). After that period no request is accepted, unless the event is cancelled or in case of a billing error (see below). Event509 service fees are not refunded in that case.
 
 ## 5. Errors and double payments
 

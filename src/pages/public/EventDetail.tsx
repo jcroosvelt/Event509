@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
 } from 'lucide-react';
-import { getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
+import { eventRefundDays, getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
 import { useForm } from '@/lib/form';
 import { reportReason } from '@/lib/labels';
 import { useAsync, useTitle } from '@/lib/hooks';
@@ -286,6 +286,7 @@ export default function EventDetail() {
           <Card className="p-5">
             <h2 id="h-tickets" className="mb-1 text-lg font-bold">{t('Billets')}</h2>
             <p className="mb-4 flex items-center gap-1 text-xs text-ink-muted"><Info className="h-3.5 w-3.5" aria-hidden /> {t('Maximum {n} billets par personne', { n: ev.maxPerPerson })}{ev.seated && ` · ${t('places numérotées')}`}</p>
+            <p className="mb-4 text-xs text-ink-muted">{eventRefundDays(ev) === 0 ? t('Aucun remboursement (sauf annulation de l’événement)') : t('Remboursement possible jusqu’à {n} jour(s) avant l’événement', { n: eventRefundDays(ev) })}</p>
             {needsOcc && (
               <p className={cx('mb-4 rounded-2xl px-3 py-2 text-xs font-semibold', occ ? 'bg-brand-50 text-brand-dark' : 'bg-amber-50 text-amber-700')}>
                 {occ ? `${t('Pour')} ${ev.sessions?.length ? occ : sessionLabel(occ)}` : t(ev.sessions?.length ? 'Choisissez une session dans le programme' : 'Choisissez une date dans la liste')}

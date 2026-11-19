@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, Receipt, Undo2 } from 'lucide-react';
 import { events } from '@/data/mock';
-import { requestRefund } from '@/services/api';
+import { defaultRefundDays, requestRefund } from '@/services/api';
+import { ApiError } from '@/lib/errors';
+import { refundOpen } from '@/lib/payouts';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { dateNumeric, moneyRaw } from '@/lib/format';
@@ -53,12 +55,18 @@ export default function Orders() {
     if (!refund || !form.validate()) return;
     setBusy(true);
     const reason = form.values.details ? `${t(form.values.reason)} — ${form.values.details}` : t(form.values.reason);
-    const r = await requestRefund(refund, reason);
-    updateOrder(refund.id, { refundRequest: r });
-    setBusy(false);
-    setRefund(null);
-    form.reset();
-    toast(t('Demande envoyée. L’organisateur a 5 jours pour répondre.'));
+    try {
+      const r = await requestRefund(refund, reason);
+      updateOrder(refund.id, { refundRequest: r });
+      setRefund(null);
+      form.reset();
+      toast(t('Demande envoyée. L’organisateur a 5 jours pour répondre.'));
+    } catch (e) {
+      // Délai de remboursement terminé ou événement sans remboursement : le serveur explique pourquoi
+      toast(e instanceof ApiError && e.code === 'refund_closed' ? e.message : t('La demande n’a pas pu être envoyée. Réessayez.'), 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -70,7 +78,9 @@ export default function Orders() {
           const ev = events.find((e) => e.id === o.eventId);
           const s = statusMap[o.status];
           const qty = o.items.reduce((a, i) => a + i.qty, 0);
-          const canRefund = o.status === 'paid' && o.total > 0 && !o.refundRequest && ev && new Date(ev.start) > new Date();
+          const refundable = o.status === 'paid' && o.total > 0 && !o.refundRequest && ev && new Date(ev.start) > new Date();
+          // Le délai de remboursement de l'événement (sauf événement annulé) décide si la demande est encore possible
+          const canRefund = !!refundable && (ev!.status === 'cancelled' || refundOpen(ev!, Date.now(), defaultRefundDays()));
           return (
             <li key={o.id}>
               <Card className="p-4">
@@ -92,6 +102,7 @@ export default function Orders() {
                 )}
                 <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
                   <Button size="sm" variant="ghost" onClick={() => printInvoice(o, ev?.title ?? '')}><Download className="h-4 w-4" aria-hidden /> {t('Facture')}</Button>
+                  {refundable && !canRefund && <span className="text-xs text-ink-muted">{t('Délai de remboursement terminé')}</span>}
                   {canRefund && <Button size="sm" variant="ghost" onClick={() => setRefund(o)}><Undo2 className="h-4 w-4" aria-hidden /> {t('Demander un remboursement')}</Button>}
                 </div>
               </Card>

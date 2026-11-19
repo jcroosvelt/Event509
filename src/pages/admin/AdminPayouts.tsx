@@ -44,13 +44,14 @@ export default function AdminPayouts() {
         <EmptyState icon={<Wallet className="h-5 w-5" />} title={t('Aucun versement à traiter')} />
       ) : (
         <Card>
-          <Table caption={t('Versements aux organisateurs')} head={[t('Organisateur'), t('Référence'), t('Date'), t('Envoyer à'), t('Montant'), t('Statut'), '']}>
+          <Table caption={t('Versements aux organisateurs')} head={[t('Organisateur'), t('Événement'), t('Référence'), t('Date'), t('Envoyer à'), t('Montant'), t('Statut'), '']}>
             {list.map((p) => {
               const M = method[p.method] ?? { l: String(p.method ?? '—'), i: Wallet };
               const st = status[p.status] ?? { l: String(p.status ?? '—'), tone: 'gray' as Tone };
               return (
                 <tr key={p.id}>
                   <Td className="font-semibold">{orgName(p.organizerId)}</Td>
+                  <Td className="text-ink-soft">{p.eventTitle ?? '—'}</Td>
                   <Td className="font-mono text-xs">{p.reference}{p.priority && <Badge tone="violet" className="ml-2">{t('Prioritaire')}</Badge>}</Td>
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
                   <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="select-all text-xs text-ink-soft">{destinationText(p)}</span></span></span></Td>

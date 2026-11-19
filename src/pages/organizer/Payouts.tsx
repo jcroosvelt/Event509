@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, Smartphone, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { DEMO, getBalance, listPayouts, payoutSecurity, requestPayout, type PayoutProof } from '@/services/api';
+import { DEMO, listPayouts, payoutEvents, payoutSecurity, requestPayout, type PayoutEvent, type PayoutProof } from '@/services/api';
 import { ApiError } from '@/lib/errors';
 import { getPasskeyAssertion, passkeyCancelled } from '@/lib/webauthn';
 import ReauthModal from '@/components/ReauthModal';
@@ -9,12 +9,13 @@ import { organizers } from '@/data/mock';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { load, persist, useApp } from '@/store/app';
 import { dateNumeric, moneyRaw } from '@/lib/format';
+import { PAYOUT_LAST_DAYS, PAYOUT_MIN_SOLD } from '@/lib/payouts';
 import { exportCSV } from '@/lib/export';
 import { destinationText } from '@/lib/labels';
 import { orgOf } from '@/lib/permissions';
 import { cleanNumber, isEmail, isPhone, useForm } from '@/lib/form';
 import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, Segmented, Table, Td, Toggle, type Tone } from '@/components/ui';
-import type { Currency, Payout } from '@/types';
+import type { Payout } from '@/types';
 
 const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = {
   moncash: { l: 'MonCash', i: Smartphone },
@@ -36,8 +37,9 @@ export default function Payouts() {
   const { lang, toast, t, user } = useApp();
   useTitle(t('Versements'));
   const orgId = orgOf(user);
-  const { data, loading, reload } = useAsync(() => Promise.all([listPayouts(orgId), getBalance(orgId)]), [orgId]);
-  const [cur, setCur] = useState<Currency>('HTG');
+  const { data, loading, reload } = useAsync(() => Promise.all([listPayouts(orgId), payoutEvents(orgId)]), [orgId]);
+  // Événement dont on demande le versement (un versement porte toujours sur un seul événement)
+  const [target, setTarget] = useState<PayoutEvent | null>(null);
   const [reqOpen, setReqOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Avantage « finance » : demande prioritaire (traitée en premier, toujours validée par l'administration)
@@ -63,14 +65,21 @@ export default function Payouts() {
   );
 
   if (loading || !data) return <Loading />;
-  const [payouts, balance] = data;
-  const b = balance[cur];
+  const [payouts, events] = data;
+  const cur = target?.currency ?? 'HTG';
+  const max = target?.payable ?? 0;
   const m = req.values.method as Payout['method'];
+  const dateOf = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(lang === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+  /** Pourquoi l'argent d'un événement n'est pas encore versable. */
+  const why = (e: PayoutEvent) =>
+    e.reason === 'status' ? t('Événement non publié')
+    : e.reason === 'window' ? t('Délai de remboursement ouvert jusqu’au {date}', { date: dateOf(e.availableAt) })
+    : t('Il faut {min} % de billets payants vendus (vous en êtes à {n} %), ou attendre le {date}', { min: PAYOUT_MIN_SOLD, n: e.percentSold, date: dateOf(e.availableAt) });
 
   const form = () => {
     if (!req.validate()) return null;
     const amount = Number(req.values.amount);
-    if (amount > b.balance) { req.setErrors({ amount: t('Le montant dépasse votre solde disponible ({max})', { max: moneyRaw(b.balance, cur, lang) }) }); return null; }
+    if (amount > max) { req.setErrors({ amount: t('Le montant dépasse l’argent versable de cet événement ({max})', { max: moneyRaw(max, cur, lang) }) }); return null; }
     const destination = m === 'paypal' ? { email: req.values.email.trim() } : { name: req.values.name.trim(), phone: req.values.phone.trim() };
     return { amount, destination };
   };
@@ -102,9 +111,10 @@ export default function Payouts() {
     if (!f) return;
     setBusy(true);
     try {
-      await requestPayout(orgId, f.amount, cur, m, f.destination, priority, passkey ? { passkey, answers } : undefined);
+      await requestPayout(orgId, target!.eventId, f.amount, m, f.destination, priority, passkey ? { passkey, answers } : undefined);
       persist(lastKey(orgId), { method: m, name: req.values.name, phone: req.values.phone, email: req.values.email });
       setReqOpen(false);
+      setTarget(null);
       setQuestions(null);
       setPasskey(null);
       toast(t('Demande envoyée : Event509 la valide sous 24 h, puis envoie l’argent à la destination indiquée'));
@@ -114,6 +124,7 @@ export default function Payouts() {
       if (code === 'answers_invalid') toast(t('Réponses incorrectes. Réessayez.'), 'error');
       else if (code === 'reauth_required') { setQuestions(null); setReauth(true); }
       else if (code === 'passkey_required') { setQuestions(null); toast(t('Empreinte non confirmée. Recommencez.'), 'error'); }
+      else if (code === 'payout_not_available' || code === 'amount_too_high') { setReqOpen(false); setTarget(null); toast(e instanceof ApiError ? e.message : t('Versement impossible pour cet événement.'), 'error'); reload(); }
       else toast(t('La demande n’a pas pu être envoyée. Vérifiez les informations et réessayez.'), 'error');
     } finally {
       setBusy(false);
@@ -125,27 +136,32 @@ export default function Payouts() {
     <div>
       <PageHeader title={t('Versements')} subtitle={t('Demandez le versement de vos revenus nets : Event509 le valide, puis envoie l’argent là où vous l’indiquez.')} />
 
-      <Segmented label={t('Devise')} className="mb-4" value={cur} onChange={setCur} options={[{ value: 'HTG', label: 'HTG' }, { value: 'USD', label: 'USD' }]} />
-      <div className="mb-6 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <div className="rounded-3xl bg-brand-100 p-6">
-          <h2 className="text-sm font-semibold text-ink-soft">{t('Solde disponible')}</h2>
-          <div className="mt-1 text-4xl font-extrabold tracking-tight">{moneyRaw(b.balance, cur, lang)}</div>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Button onClick={() => { setQuestions(null); setPasskey(null); setSetup(null); req.reset({ amount: String(Math.floor(b.balance)), method: last.method, name: last.name, phone: last.phone, email: last.email }); setReqOpen(true); }} disabled={b.balance < 1}>{t('Demander un versement')}</Button>
-            {b.balance < 1 && <span className="text-sm text-ink-soft">{t('Aucun solde à verser pour l’instant.')}</span>}
-          </div>
-        </div>
-        <Card>
-          <h2 className="mb-3 font-bold">{t('Détail ({cur})', { cur })}</h2>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between"><dt className="text-ink-soft">{t('Ventes brutes')}</dt><dd className="font-semibold">{moneyRaw(b.gross, cur, lang)}</dd></div>
-            <div className="flex justify-between"><dt className="text-ink-soft">{t('Commission Event509 (votre part : {n} %)', { n: Math.round(b.rate * (100 - balance.buyerShare)) / 100 })}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.fees, cur, lang)}</dd></div>
-            <div className="flex justify-between"><dt className="text-ink-soft">{t('Remboursements')}</dt><dd className="font-semibold text-red-600">−{moneyRaw(b.refunded, cur, lang)}</dd></div>
-            <div className="flex justify-between"><dt className="text-ink-soft">{t('Déjà versé')}</dt><dd className="font-semibold">−{moneyRaw(b.paid, cur, lang)}</dd></div>
-            <div className="flex justify-between border-t border-line pt-3"><dt className="font-bold">{t('Solde')}</dt><dd className="font-extrabold">{moneyRaw(b.balance, cur, lang)}</dd></div>
-          </dl>
-        </Card>
-      </div>
+      <Card className="mb-6">
+        <h2 className="font-bold">{t('Argent à verser, événement par événement')}</h2>
+        <p className="mb-4 mt-1 text-sm text-ink-soft">{t('L’argent d’un événement peut être versé quand son délai de remboursement est terminé et que {min} % des billets payants sont vendus (ou à {days} jours de l’événement, quel que soit le nombre de billets vendus).', { min: PAYOUT_MIN_SOLD, days: PAYOUT_LAST_DAYS })}</p>
+        {!events.length ? (
+          <EmptyState icon={<Wallet className="h-5 w-5" />} title={t('Aucun événement publié')} body={t('Les versements apparaissent dès qu’un événement est publié.')} />
+        ) : (
+          <Table caption={t('Argent à verser par événement')} head={[t('Événement'), t('Billets vendus'), t('Net à verser'), t('Versement')]}>
+            {events.map((e) => (
+              <tr key={e.eventId}>
+                <Td><b className="block">{e.title}</b><span className="text-xs text-ink-muted">{e.refundDays === 0 ? t('Aucun remboursement') : t('Remboursement jusqu’à {n} jour(s) avant', { n: e.refundDays })}</span></Td>
+                <Td>{e.percentSold} %</Td>
+                <Td className="font-bold">{moneyRaw(e.net, e.currency, lang)}</Td>
+                <Td>
+                  {e.eligible && e.payable >= 1 ? (
+                    <Button size="sm" onClick={() => { setQuestions(null); setPasskey(null); setSetup(null); setTarget(e); req.reset({ amount: String(Math.floor(e.payable)), method: last.method, name: last.name, phone: last.phone, email: last.email }); setReqOpen(true); }}>{t('Demander')}</Button>
+                  ) : e.eligible ? (
+                    <span className="text-xs text-ink-muted">{t('Rien à verser pour l’instant')}</span>
+                  ) : (
+                    <span className="text-xs text-ink-soft">{why(e)}</span>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </Card>
 
       <Card>
         <div className="mb-4 flex items-center justify-between">
@@ -159,13 +175,14 @@ export default function Payouts() {
         {!payouts.length ? (
           <EmptyState icon={<Wallet className="h-5 w-5" />} title={t('Aucun versement pour l’instant')} />
         ) : (
-          <Table caption={t('Historique des versements')} head={[t('Référence'), t('Date'), t('Destination'), t('Montant'), t('Statut')]}>
+          <Table caption={t('Historique des versements')} head={[t('Référence'), t('Événement'), t('Date'), t('Destination'), t('Montant'), t('Statut')]}>
             {payouts.map((p) => {
               const M = method[p.method] ?? { l: String(p.method ?? '—'), i: Wallet };
               const st = status[p.status] ?? { l: String(p.status ?? '—'), tone: 'gray' as Tone };
               return (
                 <tr key={p.id}>
                   <Td className="font-mono text-xs">{p.reference}</Td>
+                  <Td className="text-ink-soft">{p.eventTitle ?? '—'}</Td>
                   <Td className="text-ink-soft">{dateNumeric(p.date, lang)}</Td>
                   <Td><span className="flex items-center gap-2"><M.i className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden /><span><b className="block">{t(M.l)}</b><span className="text-xs text-ink-muted">{destinationText(p)}</span></span></span></Td>
                   <Td className="font-bold">{moneyRaw(p.amount, p.currency, lang)}</Td>
@@ -177,7 +194,7 @@ export default function Payouts() {
         )}
       </Card>
 
-      <Modal open={reqOpen} onClose={() => setReqOpen(false)} title={t('Demander un versement')} description={t('Disponible : {max}', { max: moneyRaw(b.balance, cur, lang) })} size="sm" footer={<Button className="flex-1" onClick={() => void askPayout()} loading={busy} disabled={!!questions && answers.some((a) => !a.trim())}>{questions ? t('Envoyer la demande') : t('Continuer')}</Button>}>
+      <Modal open={reqOpen} onClose={() => setReqOpen(false)} title={t('Demander un versement')} description={t('{event} · versable : {max}', { event: target?.title ?? '', max: moneyRaw(max, cur, lang) })} size="sm" footer={<Button className="flex-1" onClick={() => void askPayout()} loading={busy} disabled={!!questions && answers.some((a) => !a.trim())}>{questions ? t('Envoyer la demande') : t('Continuer')}</Button>}>
         <p className="mb-4 rounded-2xl bg-canvas p-3 text-xs text-ink-soft">{t('Pour éviter les fraudes, un versement demande 3 vérifications : identité récente, empreinte digitale (passkey) et vos questions de sécurité.')}</p>
         {setup && (
           <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">

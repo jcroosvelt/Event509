@@ -85,6 +85,8 @@ export interface EventItem {
   featured?: boolean;
   /** Fin du boost payant (fixée par le serveur) : tant qu'elle n'est pas passée, l'événement est « Sponsorisé ». */
   boostedUntil?: string;
+  /** Remboursement possible jusqu'à N jours avant le début (0 = aucun remboursement, sauf annulation) ; absent = délai par défaut (7). */
+  refundDays?: number;
   tags?: string[];
 }
 
@@ -229,6 +231,9 @@ export interface RefundRequest {
 export interface Payout {
   id: string;
   organizerId: string;
+  /** Événement dont l'argent est versé (un versement porte toujours sur un seul événement). */
+  eventId?: string;
+  eventTitle?: string;
   amount: number;
   currency: Currency;
   method: 'moncash' | 'natcash' | 'paypal';

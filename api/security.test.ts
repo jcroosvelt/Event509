@@ -553,6 +553,123 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect((await callQ('GET', '/share', { kind: 'o', slug: 'inconnu' })).status).toBe(404);
   });
 
+  it('S3h. versements par événement : délai de remboursement terminé ET 40 % vendus (ou moins de 5 jours), montant limité, jamais le brouillon', async () => {
+    const a = await organizer();
+    const other = await organizer();
+    const soon = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 19);
+    const mkEvent = (title: string, days: number, extra: Record<string, unknown> = {}) =>
+      eventOf(a, { title, start: soon(days), end: soon(days + 0.2), ...extra });
+    const sold = (id: string, n: number) => pool.query(`update events set data = jsonb_set(data, '{tickets,0,sold}', $2::jsonb) where id = $1`, [id, String(n)]);
+    const list = async () => (await call('GET', '/org/payouts/events', undefined, a.token)).body as { eventId: string; eligible: boolean; reason: string; payable: number; net: number; percentSold: number; availableAt: string | null; refundDays: number }[];
+    const row = async (id: string) => (await list()).find((x) => x.eventId === id)!;
+
+    // Événement lointain : le délai de remboursement (7 jours par défaut) est ouvert → rien à verser, date indiquée
+    const far = await mkEvent('Lointain', 60);
+    await sold(far.id, 15);
+    const f = await row(far.id);
+    expect(f).toMatchObject({ eligible: false, reason: 'window', payable: 0, refundDays: 7, percentSold: 75 });
+    expect(Math.abs(Date.parse(f.availableAt!) - (Date.now() + 53 * 86_400_000))).toBeLessThan(2 * 3_600_000);
+
+    // Dans les 5 jours : versable quel que soit le nombre de billets vendus (ici 10 sur 20 = 5 000 HTG brut, 125 de commission)
+    const near = await mkEvent('Proche', 3);
+    await sold(near.id, 10);
+    expect(await row(near.id)).toMatchObject({ eligible: true, reason: 'ok', payable: 4875, net: 4875 });
+    await sold(near.id, 0);
+    expect(await row(near.id)).toMatchObject({ eligible: true, payable: 0 }); // rien vendu : rien à verser
+
+    // 6 jours avant : délai terminé, mais il faut 40 % vendus
+    const six = await mkEvent('Dans six jours', 6);
+    await sold(six.id, 7); // 35 %
+    expect(await row(six.id)).toMatchObject({ eligible: false, reason: 'threshold', percentSold: 35, payable: 0 });
+    await sold(six.id, 8); // 40 %
+    expect(await row(six.id)).toMatchObject({ eligible: true, reason: 'ok', percentSold: 40, payable: 3900 });
+
+    // Aucun remboursement (délai 0) : versable dès 40 % même très en avance ; en dessous, non
+    const none = await mkEvent('Sans remboursement', 90, { refundDays: 0 });
+    await sold(none.id, 8);
+    expect(await row(none.id)).toMatchObject({ eligible: true, refundDays: 0 });
+    await sold(none.id, 5);
+    expect(await row(none.id)).toMatchObject({ eligible: false, reason: 'threshold' });
+
+    // Brouillon : absent de la liste ; annulé : jamais versable
+    const draft = await mkEvent('Brouillon', 3, { status: 'draft' });
+    expect((await list()).some((x) => x.eventId === draft.id)).toBe(false);
+    await pool.query(`update events set data = data || '{"status":"cancelled"}'::jsonb where id = $1`, [near.id]);
+    expect(await row(near.id)).toMatchObject({ eligible: false, reason: 'status', payable: 0 });
+    await pool.query(`update events set data = data || '{"status":"published"}'::jsonb where id = $1`, [near.id]);
+
+    // Demande : événement obligatoire, inconnu ou d'une autre organisation, pas encore versable, montant trop élevé
+    const dest = { method: 'moncash', destination: { name: 'Marie Claire', phone: '+50937000000' } };
+    const ask = (body: Record<string, unknown>, tok = a.token) => call('POST', '/org/payouts', { amount: 100, ...dest, ...body }, tok);
+    expect((await ask({})).body.code).toBe('event_required');
+    expect((await ask({ eventId: 'e_inconnu' })).status).toBe(404);
+    expect((await ask({ eventId: six.id }, other.token)).status).toBe(404);
+    expect((await ask({ eventId: far.id })).body).toMatchObject({ code: 'payout_not_available' });
+    expect((await ask({ eventId: far.id })).status).toBe(409);
+    await sold(six.id, 7);
+    expect((await ask({ eventId: six.id })).status).toBe(409);
+    await sold(six.id, 8);
+    const tooMuch = await ask({ eventId: six.id, amount: 3900.01 });
+    expect(tooMuch.status).toBe(422);
+    expect(tooMuch.body.code).toBe('amount_too_high');
+    expect((await ask({ eventId: six.id, amount: 0 })).status).toBe(422);
+    expect([401, 403]).toContain((await ask({ eventId: six.id }, undefined)).status);
+  });
+
+  it('S3i. après un versement, l’organisateur n’annule plus seul ; le délai de remboursement ferme les demandes des acheteurs', async () => {
+    const a = await organizer();
+    const soon = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 19);
+    const ev = await eventOf(a, { title: 'À annuler', start: soon(40), end: soon(40.2) });
+    // Un versement refusé ne bloque rien ; un versement demandé, en cours ou fait bloque l'annulation
+    const py = (status: string) => ({ id: `py_c${status}${Date.now()}`, organizerId: a.orgId, eventId: ev.id, eventTitle: 'À annuler', amount: 100, currency: 'HTG', method: 'moncash', destination: {}, status, date: '2026-11-19', reference: `VRS-${status}` });
+    const insert = (p: ReturnType<typeof py>) => pool.query(`insert into payouts (id, organizer_id, status, data) values ($1,$2,$3,$4)`, [p.id, a.orgId, p.status, JSON.stringify(p)]);
+    await insert(py('rejected'));
+    const cancel = () => call('PUT', '/org/events', evBody({ id: ev.id, slug: ev.slug, title: 'À annuler', start: soon(40), end: soon(40.2), status: 'cancelled' }), a.token);
+    const viaStatus = () => call('POST', `/org/events/${ev.id}/status`, { status: 'cancelled' }, a.token);
+    // (un événement publié se repasse en brouillon pour tester sans effet de bord)
+    await insert(py('requested'));
+    for (const r of [await cancel(), await viaStatus()]) {
+      expect(r.status).toBe(409);
+      expect(r.body.code).toBe('cancel_after_payout');
+    }
+    expect((await pool.query(`select data->>'status' as s from events where id = $1`, [ev.id])).rows[0].s).toBe('published');
+    // L'administrateur, lui, peut annuler
+    const adm = await adminUser();
+    const byAdmin = await handle({ method: 'POST', path: `/org/events/${ev.id}/status`, query: { org: a.orgId }, body: { status: 'cancelled' }, authorization: `Bearer ${adm.token}`, ip: '10.8.9.9' });
+    expect(byAdmin.status, JSON.stringify(byAdmin.body)).toBe(200);
+    expect((await pool.query(`select data->>'status' as s from events where id = $1`, [ev.id])).rows[0].s).toBe('cancelled');
+
+    // Délai de remboursement : ouvert (événement dans 40 jours), fermé (dans 3 jours), aucun remboursement (0), annulé (toujours possible)
+    const buyerTokenValue = await buyerToken();
+    const paidOrder = async (id: string) => {
+      const o = await order(id, { method: 'transfer' });
+      expect(o.status, JSON.stringify(o.body)).toBe(200);
+      await pool.query(`update orders set status = 'paid', data = data || '{"status":"paid"}'::jsonb where id = $1`, [o.body.order.id]);
+      return o.body.order.id as string;
+    };
+    const askRefund = (orderId: string) => call('POST', `/orders/${orderId}/refund`, { reason: 'Empêchement' }, buyerTokenValue);
+    const refundOf = async (id: string) => askRefund(await paidOrder(id));
+    const open = await eventOf(a, { title: 'Remboursable', start: soon(40), end: soon(40.2) });
+    expect((await refundOf(open.id)).status).toBe(200);
+    const closed = await eventOf(a, { title: 'Délai passé', start: soon(3), end: soon(3.2) });
+    const closedOrder = await paidOrder(closed.id);
+    const r1 = await askRefund(closedOrder);
+    expect(r1.status).toBe(409);
+    expect(r1.body.code).toBe('refund_closed');
+    expect(String(r1.body.message)).toContain('7 jour');
+    const zero = await eventOf(a, { title: 'Aucun remboursement', start: soon(40), end: soon(40.2), refundDays: 0 });
+    const r2 = await refundOf(zero.id);
+    expect(r2.status).toBe(409);
+    expect(String(r2.body.message)).toContain('n’accepte pas de remboursement');
+    const short = await eventOf(a, { title: 'Délai court', start: soon(3), end: soon(3.2), refundDays: 2 });
+    expect((await refundOf(short.id)).status).toBe(200); // fermé seulement 2 jours avant
+    await pool.query(`update events set data = data || '{"status":"cancelled"}'::jsonb where id = $1`, [closed.id]);
+    expect((await askRefund(closedOrder)).status).toBe(200); // événement annulé : remboursement toujours possible
+    // Valeur invalide du délai : retour au délai par défaut (7)
+    const bad = await eventOf(a, { title: 'Délai invalide', start: soon(40), end: soon(40.2), refundDays: 99 });
+    expect((await pool.query(`select data->'refundDays' as d from events where id = $1`, [bad.id])).rows[0].d).toBeNull();
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

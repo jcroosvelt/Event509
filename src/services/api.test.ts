@@ -196,7 +196,18 @@ describe('administration', () => {
   });
 
   it('fait passer une demande de versement de « demandé » à « payé »', async () => {
-    const p = await api.requestPayout('org1', 1000, 'HTG', 'natcash', { name: 'Marie Claire Joseph', phone: '+509 4600 1111' });
+    // Événement versable : publié, aucun remboursement possible et tous les billets payants vendus
+    const e = events.find((x) => x.organizerId === 'org1' && x.status === 'published')!;
+    Object.assign(e, { refundDays: 0 });
+    for (const t of e.tickets) if (t.kind === 'paid') t.sold = t.quota;
+    const row = (await api.payoutEvents('org1')).find((x) => x.eventId === e.id)!;
+    expect(row).toMatchObject({ eligible: true, reason: 'ok', percentSold: 100 });
+    expect(row.payable).toBeGreaterThan(1000);
+    await expect(api.requestPayout('org1', e.id, row.payable + 1, 'natcash', { name: 'Marie Claire Joseph', phone: '+509 4600 1111' })).rejects.toMatchObject({ code: 'amount_too_high' });
+    await expect(api.requestPayout('org1', 'inconnu', 10, 'natcash', { name: 'Marie Claire Joseph', phone: '+509 4600 1111' })).rejects.toMatchObject({ status: 404 });
+    const p = await api.requestPayout('org1', e.id, 1000, 'natcash', { name: 'Marie Claire Joseph', phone: '+509 4600 1111' });
+    expect(p.eventId).toBe(e.id);
+    expect((await api.payoutEvents('org1')).find((x) => x.eventId === e.id)!.paid).toBe(1000);
     expect(p.status).toBe('requested');
     expect(p.destination).toEqual({ name: 'Marie Claire Joseph', phone: '+509 4600 1111' });
     await api.setPayoutStatus(p.id, 'processing');

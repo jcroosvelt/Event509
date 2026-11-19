@@ -26,7 +26,7 @@ const FIELDS: { key: keyof SiteInfo; label: string; sub?: string }[] = [
   { key: 'replyDays', label: 'Délai de réponse aux demandes sur les données (jours)' },
   { key: 'refundDelay', label: 'Remboursement d’un événement annulé (jours ouvrables)', sub: 'Par exemple : 7-14' },
   { key: 'postponeDays', label: 'Demande de remboursement après un report (jours)' },
-  { key: 'organizerRefundDays', label: 'Politique d’un organisateur : jours avant l’événement', sub: 'Exemple donné dans le texte' },
+  { key: 'organizerRefundDays', label: 'Délai de remboursement par défaut des événements (jours avant l’événement)', sub: 'Chaque organisateur peut le changer ; 0 = aucun remboursement' },
   { key: 'errorHours', label: 'Signalement d’un double paiement (heures)' },
   { key: 'supportDays', label: 'Réponse du support à une demande (jours ouvrables)' },
 ];

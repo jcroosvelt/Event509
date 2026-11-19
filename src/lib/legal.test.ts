@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PAYOUT_LAST_DAYS, PAYOUT_MIN_SOLD } from './payouts';
 import { AUTO_TOKENS, defaultSiteInfo, feeTokens, fillTokens, parseDoc, tokensIn } from './legalDoc';
 import { legalDefaults, LEGAL_DOCS } from '../data/legalDefaults';
 
@@ -46,5 +47,20 @@ describe('commission dans les documents légaux (calculée, jamais saisie)', () 
   it('les textes d’origine n’utilisent que des valeurs connues, en français comme en anglais', () => {
     for (const d of LEGAL_DOCS) for (const lang of ['fr', 'en'] as const)
       for (const k of tokensIn(legalDefaults[d][lang])) expect(Object.keys({ ...defaultSiteInfo, ...feeTokens(base, lang) }), `${d}/${lang}/${k}`).toContain(k);
+  });
+});
+
+describe('règles de versement et de remboursement citées dans les documents', () => {
+  it('les seuils écrits dans les conditions sont ceux du code', () => {
+    expect(legalDefaults.terms.fr).toContain(`${PAYOUT_MIN_SOLD} % des billets payants`);
+    expect(legalDefaults.terms.fr).toContain(`${PAYOUT_LAST_DAYS} jours ou moins`);
+    expect(legalDefaults.terms.en).toContain(`${PAYOUT_MIN_SOLD}% of paid tickets`);
+    expect(legalDefaults.terms.en).toContain(`${PAYOUT_LAST_DAYS} days away or less`);
+  });
+  it('le délai de remboursement et l’annulation après versement sont expliqués en français et en anglais', () => {
+    expect(legalDefaults.terms.fr).toMatch(/Une fois un versement demandé ou effectué/);
+    expect(legalDefaults.terms.en).toMatch(/Once a payout has been requested or made/);
+    expect(legalDefaults.refund.fr).toMatch(/Passé ce délai, aucune demande n’est acceptée/);
+    expect(legalDefaults.refund.en).toMatch(/After that period no request is accepted/);
   });
 });

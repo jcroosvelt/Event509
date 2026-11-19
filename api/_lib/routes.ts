@@ -25,6 +25,7 @@ import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { cityCoords, cleanPosition, distanceKm, plainPlace } from './geo.js';
+import { DEFAULT_REFUND_DAYS, MAX_REFUND_DAYS, PAYOUT_LAST_DAYS, PAYOUT_MIN_SOLD, payoutState, refundDaysOf, refundOpen, type PayoutReason } from '../../src/lib/payouts.js';
 import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyAudience, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured, type PushMessage } from './push.js';
 import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
@@ -896,6 +897,12 @@ async function ownTicket(c: Ctx, id: string, q: Q = db()) {
   return t!;
 }
 
+/** Délai de remboursement par défaut des événements (réglage de l'administrateur « jours avant l'événement », 7 sinon). */
+async function defaultRefundDays() {
+  const n = Number((await siteInfo()).organizerRefundDays);
+  return Number.isInteger(n) && n >= 0 && n <= MAX_REFUND_DAYS ? n : DEFAULT_REFUND_DAYS;
+}
+
 const requestRefund: Handler = async (c) => {
   const u = auth(c);
   const o = (await docs<Order>(`select data from orders where id = $1 and user_id = $2`, [c.params.id, u.id]))[0];
@@ -905,6 +912,12 @@ const requestRefund: Handler = async (c) => {
   if (o!.refundRequest || (await one(`select 1 from refunds where order_id = $1 and status = 'pending'`, [o!.id]))) fail(409, 'Une demande de remboursement existe déjà pour cette commande.');
   await rateLimit(`refund:${u.id}`, 10, 60);
   const ev = await eventById(o!.eventId);
+  // Délai de remboursement de l'événement : passé ce délai, plus de demande (sauf événement annulé)
+  if (ev && ev.status !== 'cancelled') {
+    const days = refundDaysOf(ev, await defaultRefundDays());
+    if (!refundOpen(ev, Date.now(), await defaultRefundDays()))
+      fail(409, days === 0 ? 'Cet événement n’accepte pas de remboursement (sauf annulation ou erreur de facturation).' : `La période de remboursement de cet événement est terminée (jusqu’à ${days} jour(s) avant l’événement).`, 'refund_closed');
+  }
   const reason = str(c.body.reason, 500);
   const r: RefundRequest = {
     id: newId('r'), orderId: o!.id, buyer: o!.buyerName, eventTitle: ev?.title ?? '', amount: o!.total, currency: o!.currency,
@@ -1066,12 +1079,14 @@ const saveEvent: Handler = async (c) => {
     // Les ventes et les vues sont tenues par le serveur, pas par le formulaire
     views: existing?.data.views ?? 0,
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
+    // Délai de remboursement (jours avant l'événement, 0 = aucun remboursement) : entier de 0 à 30, sinon le délai par défaut
+    refundDays: typeof e.refundDays === 'number' && Number.isInteger(e.refundDays) && e.refundDays >= 0 && e.refundDays <= MAX_REFUND_DAYS ? e.refundDays : undefined,
     featured: existing?.data.featured ?? false,
     // Le boost (payant) n'est jamais modifiable par le formulaire
     boostedUntil: existing?.data.boostedUntil,
     online,
     // Statut : mêmes règles de modération que « changer le statut » (organisateur non vérifié → modération, événement refusé → renvoi en modération)
-    status: await allowedStatus(c, e.status ?? 'draft', existing?.data.status, existing?.organizer_id ?? orgId),
+    status: await allowedStatus(c, e.status ?? 'draft', existing?.data.status, existing?.organizer_id ?? orgId, existing?.data.id),
   };
   await saveEventRow(next);
   await act(c, orgId, existing ? 'Événement modifié' : 'Événement créé', next.title);
@@ -1084,8 +1099,11 @@ const saveEvent: Handler = async (c) => {
  * (jamais seulement dans le formulaire) : un organisateur non vérifié passe par la modération, un événement refusé par
  * l'administration ne se republie pas seul (il peut être corrigé puis renvoyé en modération), l'administration décide librement.
  */
-async function allowedStatus(c: Ctx, wanted: EventItem['status'], current: EventItem['status'] | undefined, organizerId: string): Promise<EventItem['status']> {
+async function allowedStatus(c: Ctx, wanted: EventItem['status'], current: EventItem['status'] | undefined, organizerId: string, eventId?: string): Promise<EventItem['status']> {
   if (c.user!.role === 'admin') return wanted;
+  // Après un versement (demandé, en cours ou fait), l'argent a quitté la plateforme : l'annulation passe par l'administration
+  if (wanted === 'cancelled' && current !== 'cancelled' && eventId && (await one(`select 1 from payouts where data->>'eventId' = $1 and status in ('requested','processing','paid') limit 1`, [eventId])))
+    fail(409, 'Un versement a déjà été demandé ou fait pour cet événement : contactez l’administration pour l’annuler.', 'cancel_after_payout');
   if (!['draft', 'published', 'pending', 'cancelled', 'ended'].includes(wanted)) fail(422, 'Statut invalide');
   if (wanted !== 'published') return current === 'rejected' && !['draft', 'pending'].includes(wanted) ? 'rejected' : wanted;
   if (current === 'published') return 'published';
@@ -1101,7 +1119,7 @@ const setEventStatus: Handler = async (c) => {
   if (!['draft', 'published', 'cancelled', 'ended', 'pending'].includes(wanted)) fail(422, 'Statut invalide');
   const e = await eventById(c.params.id);
   if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
-  const status = await allowedStatus(c, wanted, e!.status, e!.organizerId);
+  const status = await allowedStatus(c, wanted, e!.status, e!.organizerId, e!.id);
   await saveEventRow({ ...e!, status });
   await act(c, orgId, 'Statut d’événement modifié', `${e!.title} → ${status}`);
   await notifyEventChange(e!, { ...e!, status });
@@ -1631,8 +1649,46 @@ async function balanceOf(orgId: string) {
   return { HTG: by('HTG'), USD: by('USD'), buyerShare: fees.buyerShare };
 }
 
+/** Messages affichés quand un versement n'est pas (encore) possible. */
+const payoutWhy: Record<Exclude<PayoutReason, 'ok'>, string> = {
+  status: 'Seuls les événements publiés ou terminés peuvent être versés.',
+  window: 'L’argent sera versable quand le délai de remboursement sera terminé.',
+  threshold: `Il faut ${PAYOUT_MIN_SOLD} % de billets payants vendus, ou attendre ${PAYOUT_LAST_DAYS} jours avant l’événement.`,
+};
+
+/**
+ * Versements par événement : pour chaque événement de l'organisation, l'argent versable maintenant (ventes − part de commission
+ * de l'organisateur − remboursements − versements déjà demandés ou faits), seulement si le délai de remboursement est terminé
+ * et si 40 % des billets payants sont vendus (ou si l'événement a lieu dans 5 jours ou moins).
+ */
+async function payableEvents(orgId: string, q: Q = db()) {
+  const evs = (await docs<EventItem>(`select data from events where organizer_id = $1 order by data->>'start'`, [orgId], q)).filter((e) => e.status !== 'draft');
+  const fees = await feeSettings();
+  const days = await defaultRefundDays();
+  const now = Date.now();
+  const refunds = await all<{ event_id: string; amount: string }>(
+    `select o.event_id, (r.data->>'amount')::numeric as amount from refunds r join orders o on o.id = r.order_id where r.organizer_id = $1 and r.status = 'approved'`, [orgId], q);
+  const paid = await all<{ event_id: string; amount: string }>(
+    `select data->>'eventId' as event_id, (data->>'amount')::numeric as amount from payouts where organizer_id = $1 and data->>'eventId' is not null and status not in ('scheduled','rejected')`, [orgId], q);
+  return evs.map((e) => {
+    const gross = e.tickets.reduce((a, t) => a + t.sold * t.price, 0);
+    const fee = Math.round(gross * (fees.percent / 100) * ((100 - fees.buyerShare) / 100) * 100) / 100;
+    const refunded = refunds.filter((r) => r.event_id === e.id).reduce((a, r) => a + Number(r.amount), 0);
+    const already = paid.filter((p) => p.event_id === e.id).reduce((a, p) => a + Number(p.amount), 0);
+    const net = Math.max(0, Math.round((gross - fee - refunded - already) * 100) / 100);
+    const st = payoutState(e, now, days);
+    return {
+      eventId: e.id, title: e.title, currency: e.currency, start: e.start, status: e.status, refundDays: refundDaysOf(e, days),
+      gross, fee, refunded, paid: already, net, percentSold: st.percentSold, eligible: st.eligible, reason: st.reason,
+      availableAt: st.availableAt && Number.isFinite(st.availableAt) ? new Date(st.availableAt).toISOString() : null,
+      payable: st.eligible ? net : 0,
+    };
+  });
+}
+
 const listPayouts: Handler = async (c) => docs<Payout>(`select data from payouts where organizer_id = $1 order by created_at desc`, [org(c, 'payouts')]);
 const balance: Handler = async (c) => balanceOf(org(c, 'payouts'));
+const payoutEvents: Handler = async (c) => payableEvents(org(c, 'payouts'));
 /** Destination d'un versement : MonCash et NatCash = numéro + nom complet ; PayPal = email PayPal. */
 function checkDestination(method: Payout['method'], raw: unknown): Payout['destination'] {
   const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -1692,22 +1748,36 @@ async function checkPayoutSecurity(c: Ctx) {
 const requestPayout: Handler = async (c) => {
   const orgId = org(c, 'payouts');
   requireVerified(c.user!);
-  await checkPayoutSecurity(c);
+  const eventId = str(c.body.eventId, 60);
+  if (!eventId) fail(422, 'Choisissez l’événement à verser.', 'event_required');
   const amount = num(c.body.amount);
-  const currency = c.body.currency as Currency;
   const method = c.body.method as Payout['method'];
-  if (!['moncash', 'natcash', 'paypal'].includes(method) || (currency !== 'HTG' && currency !== 'USD')) fail(422, 'Demande invalide');
+  if (!['moncash', 'natcash', 'paypal'].includes(method)) fail(422, 'Demande invalide');
   const destination = checkDestination(method, c.body.destination);
-  const bal = (await balanceOf(orgId))[currency];
-  if (!(amount > 0) || amount > bal.balance) fail(422, 'Le montant dépasse le solde disponible');
+  // Contrôles de l'événement avant les vérifications de sécurité (le défi de l'empreinte ne se consomme que si la demande est valable)
+  const check = async (q?: Q) => {
+    const row = (await payableEvents(orgId, q)).find((x) => x.eventId === eventId);
+    if (!row) fail(404, 'Événement introuvable', 'event_unknown');
+    if (!row!.eligible) fail(409, payoutWhy[row!.reason as Exclude<PayoutReason, 'ok'>], 'payout_not_available');
+    if (!(amount > 0) || amount > row!.payable) fail(422, 'Le montant dépasse l’argent versable de cet événement', 'amount_too_high');
+    return row!;
+  };
+  await check();
+  await checkPayoutSecurity(c);
   // « Prioritaire » : traitée en premier par l'administration (avantage « finance »), mais toujours validée par elle
   const priority = c.body.priority === true;
   if (priority && !(await benefitsFor(orgId)).includes('finance')) fail(403, 'Les retraits prioritaires sont réservés aux organisateurs vérifiés');
-  const p: Payout = { id: newId('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}`, ...(priority ? { priority: true } : {}) };
-  await upsert('payouts', { id: p.id, organizer_id: orgId, status: p.status, created_at: new Date().toISOString(), data: p });
-  await logSecurity(c.user!.id, 'payout_requested', { payout: p.id, amount, currency, method }, c.ip);
-  await tellAdmins({ title: 'Demande de versement', body: `${amount} ${currency} · ${method}`, url: '/admin/versements', channel: 'sales' });
-  await notifySecurity(c.user!.id, 'Demande de versement', [`Une demande de versement de ${amount} ${currency} vers ${method} vient d’être faite depuis votre compte.`, 'Si ce n’est pas vous, changez immédiatement vos accès et contactez Event509.']).catch(() => {});
+  // Verrou par événement : deux demandes simultanées ne peuvent pas dépasser l'argent versable
+  const p = await tx(async (q) => {
+    await q.query(`select pg_advisory_xact_lock(hashtext($1))`, [`payout:${eventId}`]);
+    const row = await check(q);
+    const next: Payout = { id: newId('py'), organizerId: orgId, eventId, eventTitle: row.title, amount, currency: row.currency as Currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}`, ...(priority ? { priority: true } : {}) };
+    await upsert('payouts', { id: next.id, organizer_id: orgId, status: next.status, created_at: new Date().toISOString(), data: next }, q);
+    return next;
+  });
+  await logSecurity(c.user!.id, 'payout_requested', { payout: p.id, event: eventId, amount, currency: p.currency, method }, c.ip);
+  await tellAdmins({ title: 'Demande de versement', body: `${p.eventTitle} · ${amount} ${p.currency} · ${method}`, url: '/admin/versements', channel: 'sales' });
+  await notifySecurity(c.user!.id, 'Demande de versement', [`Une demande de versement de ${amount} ${p.currency} (${p.eventTitle}) vers ${method} vient d’être faite depuis votre compte.`, 'Si ce n’est pas vous, changez immédiatement vos accès et contactez-nous.']);
   return p;
 };
 
@@ -2483,6 +2553,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['GET', '/org/refunds', listRefunds],
   ['POST', '/org/refunds/:id', decideRefund],
   ['GET', '/org/payouts', listPayouts],
+  ['GET', '/org/payouts/events', payoutEvents],
   ['POST', '/org/payouts', requestPayout],
   ['GET', '/org/balance', balance],
   ['POST', '/org/payouts/security', payoutChallenge],

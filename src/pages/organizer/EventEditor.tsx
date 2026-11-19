@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Eye, ImagePlus, Info, MapPin, MonitorPlay, Plus, Radio, Trash2, X } from 'lucide-react';
 import { categories, organizers } from '@/data/mock';
-import { getEvent, rowLetter, saveEvent, seatMapOf, uploadFile } from '@/services/api';
+import { eventRefundDays, getEvent, rowLetter, saveEvent, seatMapOf, uploadFile } from '@/services/api';
 import { shrinkImage } from '@/lib/image';
 import { COUNTRIES, KNOWN_CITIES, countryName, countryOfEvent, DEFAULT_COUNTRY } from '@/data/countries';
 import { useApp } from '@/store/app';
@@ -426,6 +426,9 @@ export default function EventEditor() {
                 </Field>
                 <Field label={t('Limite par personne')} hint={t('Limite la revente abusive')}><NumberInput min={1} max={50} value={ev.maxPerPerson} onValue={(n) => up({ maxPerPerson: n })} /></Field>
                 <div className="flex items-end pb-2"><Toggle checked={ev.seated} onChange={(v) => up({ seated: v })} label={t('Plan de salle')} description={t('Places numérotées')} /></div>
+                <Field className="sm:col-span-3" label={t('Remboursement possible jusqu’à (jours avant l’événement)')} hint={t('0 = aucun remboursement (sauf annulation). L’argent de l’événement ne vous est versé qu’une fois ce délai terminé.')}>
+                  <NumberInput min={0} max={30} value={eventRefundDays(ev)} onValue={(n) => up({ refundDays: n })} />
+                </Field>
               </Card>
               {errors.tickets && <p role="alert" className="text-sm font-medium text-red-600">{errors.tickets}</p>}
               {ev.tickets.map((x, i) => (

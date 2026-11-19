@@ -1169,8 +1169,9 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
       tickets: [{ id: 't1', name: 'Standard', kind: 'paid', price: 500, quota: 20, sold: 0, salesStart: '2026-01-01T00:00:00', salesEnd: '2030-06-01T20:00:00', maxPerOrder: 5 }],
     });
     expect(ev.status, JSON.stringify(ev.body)).toBe(200);
-    await pool.query(`update events set data = jsonb_set(data, '{tickets,0,sold}', '2') where id = $1`, [ev.body.id]);
-    const body = { amount: 100, currency: 'HTG', method: 'moncash', destination: { name: 'Marie Claire', phone: '+50937000000' } };
+    // Événement versable : publié, aucun remboursement possible (délai 0) et 50 % des billets payants vendus
+    await pool.query(`update events set data = data || '{"status":"published","refundDays":0}'::jsonb || jsonb_build_object('tickets', jsonb_build_array(jsonb_set(data->'tickets'->0, '{sold}', '10'))) where id = $1`, [ev.body.id]);
+    const body = { eventId: ev.body.id, amount: 100, currency: 'HTG', method: 'moncash', destination: { name: 'Marie Claire', phone: '+50937000000' } };
     const answers = qs3.map((q) => q.answer);
     // Sans passkey enregistrée : refus, il faut en ajouter une
     expect((await b.call('POST', '/org/payouts', { ...body, answers })).body.code).toBe('passkey_setup_required');

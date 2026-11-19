@@ -10,6 +10,7 @@ import type {
   Ambassador, AppUser, DisplayCurrency, Lang, Attendee, AuditEntry, Campaign, CategoryId, Currency, Dispute, EventItem, IssuedTicket, Order, Organizer,
   PaymentMethod, Payout, PlatformTarget, PromoCode, RefundRequest, Report, Review, SeatMapConfig, TeamMember, VerificationRequest,
 } from '@/types';
+import { payoutState, refundDaysOf, refundOpen, type PayoutReason } from '@/lib/payouts';
 import { convert, RATES, setRates, setUsdToHtg, ticketCode, uid, USD_TO_HTG } from '@/lib/format';
 import { defaultSiteInfo, type SiteInfo } from '@/lib/legalDoc';
 import { browserCountry, countryOfEvent, DEFAULT_PLACE, EMPTY_PROFILE, nearestKnownCity, norm, proximityTier, tasteScore, tasteWeights, type Place, type TasteProfile } from '@/data/countries';
@@ -577,6 +578,11 @@ export async function requestRefund(order: Order, reason: string) {
   if (!DEMO) return http<NonNullable<Order['refundRequest']>>(`/orders/${order.id}/refund`, { method: 'POST', body: JSON.stringify({ reason }) });
   await wait(400);
   const ev = db.events.find((e) => e.id === order.eventId);
+  // Délai de remboursement de l'événement (sauf événement annulé)
+  if (ev && ev.status !== 'cancelled' && !refundOpen(ev, Date.now(), defaultRefundDays())) {
+    const days = eventRefundDays(ev);
+    throw new ApiError(409, days === 0 ? 'Cet événement n’accepte pas de remboursement (sauf annulation ou erreur de facturation).' : `La période de remboursement de cet événement est terminée (jusqu’à ${days} jour(s) avant l’événement).`, undefined, 'refund_closed');
+  }
   db.refunds.unshift({
     id: uid('r'), orderId: order.id, buyer: order.buyerName, eventTitle: ev?.title ?? '', amount: order.total,
     currency: order.currency, reason, createdAt: new Date().toISOString(), status: 'pending',
@@ -757,16 +763,69 @@ export async function getBalance(orgId: string) {
   return { HTG: by('HTG'), USD: by('USD'), buyerShare: feeSettings.buyerShare };
 }
 
+/** Délai de remboursement par défaut des événements (réglage de l'administrateur, 7 jours sinon). */
+export function defaultRefundDays() {
+  const n = Number(siteInfo.organizerRefundDays);
+  return Number.isInteger(n) && n >= 0 && n <= 30 ? n : 7;
+}
+/** Délai de remboursement d'un événement (jours avant le début ; 0 = aucun remboursement). */
+export const eventRefundDays = (e: { refundDays?: number }) => refundDaysOf(e, defaultRefundDays());
+
+/** Argent versable d'un événement : seulement quand le délai de remboursement est terminé et que 40 % des billets payants sont vendus (ou à 5 jours ou moins). */
+export interface PayoutEvent {
+  eventId: string;
+  title: string;
+  currency: Currency;
+  start: string;
+  status: string;
+  refundDays: number;
+  gross: number;
+  fee: number;
+  refunded: number;
+  paid: number;
+  net: number;
+  percentSold: number;
+  eligible: boolean;
+  reason: PayoutReason;
+  availableAt: string | null;
+  payable: number;
+}
+
+export async function payoutEvents(orgId: string): Promise<PayoutEvent[]> {
+  if (!DEMO) return http<PayoutEvent[]>(`/org/payouts/events${orgQ(orgId)}`);
+  await wait();
+  const rate = feeRateFor(orgId);
+  const days = defaultRefundDays();
+  return db.events.filter((e) => e.organizerId === orgId && e.status !== 'draft').map((e) => {
+    const gross = e.tickets.reduce((a, t) => a + t.sold * t.price, 0);
+    const fee = Math.round(gross * (rate / 100) * ((100 - feeSettings.buyerShare) / 100) * 100) / 100;
+    const refunded = db.refunds.filter((r) => r.status === 'approved' && r.eventTitle === e.title).reduce((a, r) => a + r.amount, 0);
+    const paid = db.payouts.filter((p) => p.eventId === e.id && !['scheduled', 'rejected'].includes(p.status)).reduce((a, p) => a + p.amount, 0);
+    const net = Math.max(0, Math.round((gross - fee - refunded - paid) * 100) / 100);
+    const st = payoutState(e, Date.now(), days);
+    return {
+      eventId: e.id, title: e.title, currency: e.currency, start: e.start, status: e.status, refundDays: refundDaysOf(e, days), gross, fee, refunded, paid, net,
+      percentSold: st.percentSold, eligible: st.eligible, reason: st.reason,
+      availableAt: st.availableAt && Number.isFinite(st.availableAt) ? new Date(st.availableAt).toISOString() : null,
+      payable: st.eligible ? net : 0,
+    };
+  });
+}
+
 /** Versement : 3 niveaux (identité récente, passkey/empreinte, questions de sécurité). */
 export interface PayoutSecurity { recent: boolean; hasPasskey: boolean; questions: { position: number; question: string }[]; passkey: { options: unknown; challengeId: string } | null }
 export const payoutSecurity = (orgId: string) => http<PayoutSecurity>(`/org/payouts/security${orgQ(orgId)}`, { method: 'POST', body: '{}' });
 export interface PayoutProof { passkey: { challengeId: string; response: unknown }; answers: string[] }
 
-export async function requestPayout(orgId: string, amount: number, currency: Currency, method: Payout['method'], destination: Payout['destination'], priority = false, proof?: PayoutProof) {
-  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ amount, currency, method, destination, priority, ...proof }) });
+export async function requestPayout(orgId: string, eventId: string, amount: number, method: Payout['method'], destination: Payout['destination'], priority = false, proof?: PayoutProof) {
+  if (!DEMO) return http<Payout>(`/org/payouts${orgQ(orgId)}`, { method: 'POST', body: JSON.stringify({ eventId, amount, method, destination, priority, ...proof }) });
   await wait(500);
+  const row = (await payoutEvents(orgId)).find((x) => x.eventId === eventId);
+  if (!row) throw new ApiError(404, 'Événement introuvable');
+  if (!row.eligible) throw new ApiError(409, 'Versement pas encore possible pour cet événement', undefined, 'payout_not_available');
+  if (!(amount > 0) || amount > row.payable) throw new ApiError(422, 'Le montant dépasse l’argent versable de cet événement', undefined, 'amount_too_high');
   // La demande attend la validation de l'administration
-  const p: Payout = { id: uid('py'), organizerId: orgId, amount, currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
+  const p: Payout = { id: uid('py'), organizerId: orgId, eventId, eventTitle: row.title, amount, currency: row.currency, method, destination, status: 'requested', date: new Date().toISOString().slice(0, 10), reference: `VRS-${Date.now().toString(36).toUpperCase()}` };
   db.payouts.unshift(p);
   return clone(p);
 }
