@@ -24,6 +24,7 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
+import { cityCoords, cleanPosition, distanceKm, plainPlace } from './geo.js';
 import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyAudience, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured, type PushMessage } from './push.js';
 import { readableBrand } from './color.js';
 import { checkFile, DOC_TYPES, safeName, validCover, type FileKind } from './files.js';
@@ -416,6 +417,7 @@ const updateMe: Handler = async (c) => {
   if (u.data.phoneVerified === true) delete patch.phone;
   if (patch.name) patch.avatar = initials(patch.name);
   await db().query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify({ ...patch, ...flags })]);
+  if (flags.notifyNearby === false) await db().query(`update device_tokens set lat = null, lng = null, located_at = null where user_id = $1`, [u.id]);
   return toAppUser((await one<UserRow>(`select * from users where id = $1`, [u.id]))!);
 };
 
@@ -771,14 +773,15 @@ async function tellAdmins(m: PushMessage) {
 }
 
 /** Modification importante ou annulation : tous les détenteurs de billets valables sont prévenus. */
-/** Nom de lieu comparable : sans accents ni ponctuation, en minuscules (« Port-au-Prince » = « port au prince »). */
-const plainPlace = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 /**
  * Nouvel événement publié : les personnes de la même ville (ville et pays de leur profil, au moins un téléphone enregistré)
- * sont prévenues. Une seule fois par événement, au plus une alerte de proximité par personne et par jour, jamais l'équipe
+ * et celles dont le téléphone se trouve à moins de 40 km (position GPS partagée, moins de 30 jours) sont prévenues. Une seule fois par événement, au plus une alerte de proximité par personne et par jour, jamais l'équipe
  * de l'organisation, et seulement pour un lieu physique pas encore terminé. Désactivable (réglage « notifyNearby »).
  */
+/** Rayon des alertes de proximité autour de la ville de l'événement (position du téléphone). */
+const NEARBY_KM = 40;
+
 async function notifyNearby(ev: EventItem) {
   if (!pushConfigured() || !ev.venue?.city || localMs(ev.end) < Date.now()) return;
   await safely(async () => {
@@ -791,11 +794,20 @@ async function notifyNearby(ev: EventItem) {
        where u.status = 'active' and upper(coalesce(u.data->>'country', 'HT')) = $1
          and coalesce(u.data->>'notifyNearby', 'true') <> 'false' and u.data->>'city' is not null limit 5000`, [country]);
     const day = new Date().toISOString().slice(0, 10);
-    const ids: string[] = [];
-    for (const r of rows) {
-      if (team.has(r.id) || plainPlace(r.city) !== city) continue;
-      if (await claimOnce(`nearby-user:${r.id}:${day}`)) ids.push(r.id);
+    const wanted = new Set<string>();
+    for (const r of rows) if (!team.has(r.id) && plainPlace(r.city) === city) wanted.add(r.id);
+    // Position du téléphone (GPS) : à moins de NEARBY_KM de la ville de l'événement, positions de moins de 30 jours
+    const here = cityCoords(ev.venue!.city, ev.venue!.country);
+    if (here) {
+      const gps = await all<{ id: string; lat: number; lng: number }>(
+        `select distinct u.id, d.lat, d.lng from users u join device_tokens d on d.user_id = u.id
+         where u.status = 'active' and coalesce(u.data->>'notifyNearby', 'true') <> 'false' and d.lat is not null and d.lng is not null
+           and d.located_at > now() - interval '30 days' and d.lat between $1 and $2 and d.lng between $3 and $4 limit 5000`,
+        [here.lat - 0.5, here.lat + 0.5, here.lng - 0.7, here.lng + 0.7]);
+      for (const g of gps) if (!team.has(g.id) && distanceKm({ lat: g.lat, lng: g.lng }, here) <= NEARBY_KM) wanted.add(g.id);
     }
+    const ids: string[] = [];
+    for (const id of wanted) if (await claimOnce(`nearby-user:${id}:${day}`)) ids.push(id);
     for (let i = 0; i < ids.length; i += 100)
       await notifyUsers(ids.slice(i, i + 100), { title: 'Nouvel événement près de chez vous', body: `${ev.title} · ${ev.venue!.city}`, url: eventPath(ev), channel: 'updates' });
   });
@@ -2170,6 +2182,24 @@ const registerDevice: Handler = async (c) => {
   return null;
 };
 
+/**
+ * Position du téléphone pour les alertes « près de chez moi » : seulement si le compte les a gardées activées, arrondie à
+ * environ 1 km, et seulement pour un appareil du compte. `clear: true` (ou alertes désactivées) efface la position.
+ */
+const deviceLocation: Handler = async (c) => {
+  const u = auth(c);
+  await rateLimit(`devloc:${u.id}`, 30, 60);
+  const token = str(c.body.token, 4096);
+  if (token.length < 20) fail(422, 'Jeton invalide');
+  const off = c.body.clear === true || u.data.notifyNearby === false;
+  const pos = off ? null : cleanPosition(c.body.lat, c.body.lng);
+  if (!off && !pos) fail(422, 'Position invalide');
+  await db().query(
+    `update device_tokens set lat = $3, lng = $4, located_at = ${pos ? 'now()' : 'null'} where token = $1 and owner = $2`,
+    [token, `u:${u.id}`, pos?.lat ?? null, pos?.lng ?? null]);
+  return { stored: !!pos };
+};
+
 /** Déconnexion : l'appareil ne reçoit plus les notifications du compte (celles des commandes restent). */
 /**
  * Test des notifications : envoie un message à tous les appareils du compte connecté et dit pourquoi rien n'arrive
@@ -2362,6 +2392,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/orders/:id/verify', verifyOrder],
   ['POST', '/pay/webhook', payWebhook],
   ['POST', '/devices', registerDevice],
+  ['POST', '/devices/location', deviceLocation],
   ['POST', '/me/push-test', pushTest],
   ['DELETE', '/devices', unregisterDevice],
   ['GET', '/cron/reminders', runReminders],

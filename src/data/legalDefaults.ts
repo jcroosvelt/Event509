@@ -171,7 +171,7 @@ JC Multimedia, éditeur d’Event509, {{address}}. Contact : {{email}}.
 - Commandes : événements achetés, billets, montants, moyen de paiement utilisé (sans les numéros complets de carte).
 - Organisateurs : informations de l’organisation, coordonnées de paiement pour les versements, pièce d’identité si nécessaire pour vérifier le compte.
 - Données techniques : type d’appareil, système, adresse IP, journaux de connexion, pages consultées.
-- Localisation : seulement si tu l’autorises, pour proposer des événements près de toi.
+- Localisation : seulement si tu l’autorises. Dans l’application, la position approximative de ton téléphone (arrondie à environ 1 km) est détectée automatiquement pour proposer des événements et t’avertir des nouveaux événements près de toi. Tu peux la désactiver à tout moment dans les paramètres : elle est alors effacée.
 
 ## 3. Pourquoi nous les utilisons
 - Créer et gérer ton compte.
@@ -226,7 +226,7 @@ JC Multimedia, publisher of Event509, {{address}}. Contact: {{email}}.
 - Orders: events purchased, tickets, amounts, payment method used (without full card numbers).
 - Organizers: organization information, payment details for payouts, identity document if needed to verify the account.
 - Technical data: device type, system, IP address, connection logs, pages viewed.
-- Location: only if you allow it, to suggest events near you.
+- Location: only if you allow it. In the app, your phone’s approximate position (rounded to about 1 km) is detected automatically to suggest events and notify you of new events near you. You can turn it off at any time in the settings: it is then erased.
 
 ## 3. Why we use it
 - To create and manage your account.

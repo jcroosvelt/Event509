@@ -197,6 +197,10 @@ create table if not exists device_tokens (
   updated_at timestamptz not null default now(),
   primary key (token, owner)
 );
+-- Position approximative (arrondie à environ 1 km) pour les alertes « près de chez moi » ; effacée si l'alerte est désactivée.
+alter table device_tokens add column if not exists lat double precision;
+alter table device_tokens add column if not exists lng double precision;
+alter table device_tokens add column if not exists located_at timestamptz;
 create index if not exists device_tokens_user on device_tokens(user_id);
 create index if not exists device_tokens_email on device_tokens(buyer_email);
 

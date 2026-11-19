@@ -454,6 +454,75 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     }
   });
 
+  it('S3f. alertes de proximité par position du téléphone : rayon 40 km, positions récentes, réglage respecté, position arrondie', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({ project_id: 'p-test', client_email: 'x@p-test.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() });
+    const sent: { token: string; title: string }[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      if (u.startsWith('https://fcm.googleapis.com/')) {
+        const m = JSON.parse(String(init?.body)).message as { token: string; notification: { title: string } };
+        sent.push({ token: m.token, title: m.notification.title });
+        return new Response('{}', { status: 200 });
+      }
+      return real(url as string, init);
+    });
+    try {
+      const tag = `${Date.now()}`;
+      const { signToken: sign } = await import('./_lib/auth.js');
+      const mk = async (key: string, data: Record<string, unknown>, pos?: { lat: number; lng: number; days?: number }) => {
+        const id = `u_gps_${key}_${tag}`;
+        await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant',$3,true)`, [id, `${id}@sec.test`, JSON.stringify({ name: key, ...data })]);
+        const token = `tok-${key}-${tag}-xxxxxxxxxxxxxxxx`;
+        await pool.query(`insert into device_tokens (token, owner, user_id, lat, lng, located_at) values ($1,$2,$3,$4,$5,$6)`,
+          [token, `u:${id}`, id, pos?.lat ?? null, pos?.lng ?? null, pos ? new Date(Date.now() - (pos.days ?? 0) * 86_400_000) : null]);
+        return { id, token };
+      };
+      const got = (key: string) => sent.filter((x) => x.token === `tok-${key}-${tag}-xxxxxxxxxxxxxxxx`).map((x) => x.title);
+      // Hinche : 19,1456 / -72,0189
+      await mk('here', { city: 'Miami', country: 'US' }, { lat: 19.15, lng: -72.02 }); // sur place, profil ailleurs
+      await mk('mid', { city: 'Miami', country: 'US' }, { lat: 19.4, lng: -72.1 }); // environ 29 km
+      await mk('far', { city: 'Miami', country: 'US' }, { lat: 19.11, lng: -72.69 }); // Saint-Marc, environ 70 km
+      await mk('stale', { city: 'Miami', country: 'US' }, { lat: 19.15, lng: -72.02, days: 60 }); // position trop ancienne
+      await mk('optout', { city: 'Miami', country: 'US', notifyNearby: false }, { lat: 19.15, lng: -72.02 });
+      await mk('nopos', { city: 'Miami', country: 'US' });
+      await mk('both', { city: 'Hinche', country: 'HT' }, { lat: 19.15, lng: -72.02 }); // profil ET position : un seul message
+      const a = await organizer();
+      const ev = await call('PUT', '/org/events', evBody({ title: 'Festival de Hinche', venue: { name: 'Stade', address: 'Centre', city: 'Hinche' } }), a.token);
+      expect(ev.status, JSON.stringify(ev.body)).toBe(200);
+      for (const k of ['here', 'mid', 'both']) expect(got(k), k).toEqual(['Nouvel événement près de chez vous']);
+      for (const k of ['far', 'stale', 'optout', 'nopos']) expect(got(k), k).toEqual([]);
+
+      // Route de position : arrondie, réservée au compte propriétaire de l'appareil, effacée sur demande ou si l'alerte est coupée
+      const me = await mk('me', { city: 'Jacmel' });
+      const tok = me.token;
+      expect((await call('POST', '/devices/location', { token: tok, lat: 18.2345, lng: -72.5347 })).status).toBe(401);
+      const ok = await call('POST', '/devices/location', { token: tok, lat: 18.23456, lng: -72.53471 }, sign(me.id));
+      expect(ok.body).toEqual({ stored: true });
+      expect((await pool.query(`select lat, lng from device_tokens where token = $1`, [tok])).rows[0]).toEqual({ lat: 18.23, lng: -72.53 });
+      expect((await call('POST', '/devices/location', { token: tok, lat: 123, lng: 0 }, sign(me.id))).status).toBe(422);
+      expect((await call('POST', '/devices/location', { token: tok, lat: 'x', lng: 0 }, sign(me.id))).status).toBe(422);
+      // L'appareil d'un autre compte n'est pas modifiable
+      const other = await mk('other', { city: 'Jacmel' });
+      await call('POST', '/devices/location', { token: tok, lat: 10, lng: 10 }, sign(other.id));
+      expect((await pool.query(`select lat from device_tokens where token = $1`, [tok])).rows[0].lat).toBe(18.23);
+      // Effacement sur demande
+      expect((await call('POST', '/devices/location', { token: tok, clear: true }, sign(me.id))).body).toEqual({ stored: false });
+      expect((await pool.query(`select lat, located_at from device_tokens where token = $1`, [tok])).rows[0]).toEqual({ lat: null, located_at: null });
+      // Alerte coupée : la position est effacée et plus jamais enregistrée
+      await call('POST', '/devices/location', { token: tok, lat: 18.23, lng: -72.53 }, sign(me.id));
+      expect((await call('PATCH', '/auth/me', { notifyNearby: false }, sign(me.id))).body.notifyNearby).toBe(false);
+      expect((await pool.query(`select lat from device_tokens where token = $1`, [tok])).rows[0].lat).toBeNull();
+      expect((await call('POST', '/devices/location', { token: tok, lat: 18.23, lng: -72.53 }, sign(me.id))).body).toEqual({ stored: false });
+      expect((await pool.query(`select lat from device_tokens where token = $1`, [tok])).rows[0].lat).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.FIREBASE_SERVICE_ACCOUNT;
+    }
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {
