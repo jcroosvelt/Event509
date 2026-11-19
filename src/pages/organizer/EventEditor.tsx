@@ -150,7 +150,7 @@ export default function EventEditor() {
     setSaving(true);
     const out: EventItem = {
       ...ev,
-      slug: ev.slug || slugify(ev.title) || ev.id,
+      slug: ev.private ? ev.slug : ev.slug?.startsWith('p-') ? slugify(ev.title) || ev.id : ev.slug || slugify(ev.title) || ev.id,
       start: `${local(ev.start)}:00`,
       end: `${local(ev.end)}:00`,
       venue: mode === 'online' ? null : ev.venue,
@@ -526,15 +526,47 @@ export default function EventEditor() {
             <>
               <Card className="space-y-4">
                 <h2 className="font-bold">{t('Lien de partage')}</h2>
-                <Field label={t('Adresse de la page')} hint={t('Lettres, chiffres et tirets')}>
-                  <div className="flex items-center rounded-2xl border border-line bg-canvas pl-4 text-sm text-ink-muted">
-                    <span aria-hidden>event509.com/e/</span>
-                    <input aria-label={t('Adresse de la page')} className="h-12 min-w-0 flex-1 rounded-r-2xl bg-surface px-2 text-ink outline-none" value={ev.slug || slugify(ev.title)} onChange={(e) => up({ slug: slugify(e.target.value) })} />
+                <Toggle
+                  checked={ev.private === true}
+                  onChange={(v) => up({ private: v || undefined, rotateLink: undefined })}
+                  label={t('Événement privé')}
+                  description={t('Il n’apparaît nulle part sur le site : seules les personnes qui ont votre lien peuvent le voir et acheter un billet.')}
+                />
+                {ev.private ? (
+                  <div className="space-y-3 rounded-2xl bg-brand-50 p-4 text-sm">
+                    <p className="font-semibold">{t('Votre lien secret')}</p>
+                    {ev.slug && ev.slug.startsWith('p-') && !ev.rotateLink ? (
+                      <p className="break-all rounded-xl bg-surface px-3 py-2 font-mono text-xs" data-testid="private-link">{`${window.location.origin}/e/${ev.slug}`}</p>
+                    ) : (
+                      <p className="text-ink-muted">{t('Le lien sera créé quand vous enregistrerez l’événement.')}</p>
+                    )}
+                    <p className="text-ink-muted">{t('Partagez-le seulement avec les personnes invitées. Les billets d’un événement privé ne peuvent pas être revendus et l’événement n’est ni boosté ni mis en vedette.')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ev.slug && ev.slug.startsWith('p-') && !ev.rotateLink && (
+                        <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/e/${ev.slug}`).then(() => toast(t('Lien copié')))}>
+                          <Copy className="h-4 w-4" aria-hidden /> {t('Copier le lien')}
+                        </Button>
+                      )}
+                      {ev.slug?.startsWith('p-') && (
+                        <Button variant="outline" size="sm" onClick={() => up({ rotateLink: !ev.rotateLink })}>
+                          {ev.rotateLink ? t('Garder le lien actuel') : t('Créer un nouveau lien (l’ancien cessera de fonctionner)')}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </Field>
-                <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/e/${ev.slug || slugify(ev.title)}`).then(() => toast(t('Lien copié')))}>
-                  <Copy className="h-4 w-4" aria-hidden /> {t('Copier le lien')}
-                </Button>
+                ) : (
+                  <>
+                    <Field label={t('Adresse de la page')} hint={t('Lettres, chiffres et tirets')}>
+                      <div className="flex items-center rounded-2xl border border-line bg-canvas pl-4 text-sm text-ink-muted">
+                        <span aria-hidden>event509.com/e/</span>
+                        <input aria-label={t('Adresse de la page')} className="h-12 min-w-0 flex-1 rounded-r-2xl bg-surface px-2 text-ink outline-none" value={ev.slug || slugify(ev.title)} onChange={(e) => up({ slug: slugify(e.target.value) })} />
+                      </div>
+                    </Field>
+                    <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/e/${ev.slug || slugify(ev.title)}`).then(() => toast(t('Lien copié')))}>
+                      <Copy className="h-4 w-4" aria-hidden /> {t('Copier le lien')}
+                    </Button>
+                  </>
+                )}
                 <Field label={t('Étiquettes')} hint={t('Séparées par des virgules (ex. Plein air, 18+)')}>
                   <Input value={(ev.tags ?? []).join(', ')} onChange={(e) => up({ tags: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
                 </Field>

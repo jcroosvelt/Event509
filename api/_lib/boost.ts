@@ -117,6 +117,7 @@ export function boostRoutes(h: PremiumDeps): [string, string, Handler][] {
     const ev = await one<{ id: string; data: EventItem }>(`select id, data from events where id = $1 and organizer_id = $2`, [str(c.body.eventId, 60), orgId]);
     if (!ev) fail(404, 'Événement introuvable');
     if (ev!.data.status !== 'published') fail(409, 'Seul un événement publié peut être boosté');
+    if (ev!.data.private === true) fail(409, 'Un événement privé ne peut pas être boosté (il n’apparaît pas dans les listes).');
     if (ev!.data.end < new Date().toISOString().slice(0, 16)) fail(409, 'Cet événement est terminé');
     if (await one(`select 1 from event_boosts where event_id = $1 and ((status = 'active' and ends_at > now()) or (status = 'pending' and created_at > now() - interval '2 hours'))`, [ev!.id]))
       fail(409, 'Cet événement a déjà un boost en cours ou en attente de paiement');

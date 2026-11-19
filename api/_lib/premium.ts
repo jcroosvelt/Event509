@@ -399,10 +399,11 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const orgId = org(c, 'events');
     if (!(await benefitsFor(orgId)).includes('visibility')) fail(403, 'La mise en vedette est réservée aux organisateurs vérifiés');
     const on = c.body.on === true;
-    const ev = await one<{ id: string; data: { status: string; end: string; featured?: boolean } }>(`select id, data from events where id = $1 and organizer_id = $2`, [c.params.id, orgId]);
+    const ev = await one<{ id: string; data: { status: string; end: string; featured?: boolean; private?: boolean } }>(`select id, data from events where id = $1 and organizer_id = $2`, [c.params.id, orgId]);
     if (!ev) fail(404, 'Événement introuvable');
     if (on) {
       if (ev!.data.status !== 'published') fail(409, 'Seul un événement publié peut être mis en vedette');
+      if (ev!.data.private === true) fail(409, 'Un événement privé ne peut pas être mis en vedette (il n’apparaît pas dans les listes).');
       const cfg = await getConfig();
       const n = Number((await one<{ n: string }>(`select count(*) as n from events where organizer_id = $1 and id <> $2 and (data->>'featured')::boolean and data->>'status' = 'published'`, [orgId, ev!.id]))?.n ?? 0);
       if (n >= cfg.featuredPerOrganizer) fail(409, `Vous pouvez mettre ${cfg.featuredPerOrganizer} événement(s) en vedette à la fois`);

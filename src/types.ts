@@ -85,6 +85,10 @@ export interface EventItem {
   featured?: boolean;
   /** Fin du boost payant (fixée par le serveur) : tant qu'elle n'est pas passée, l'événement est « Sponsorisé ». */
   boostedUntil?: string;
+  /** Événement privé : absent de toutes les listes publiques, accessible et achetable seulement avec son lien (adresse secrète). */
+  private?: boolean;
+  /** Envoyé par le formulaire seulement : demande un nouveau lien secret (l'ancien cesse de fonctionner) ; jamais enregistré. */
+  rotateLink?: boolean;
   /** Remboursement possible jusqu'à N jours avant le début (0 = aucun remboursement, sauf annulation) ; absent = délai par défaut (7). */
   refundDays?: number;
   tags?: string[];

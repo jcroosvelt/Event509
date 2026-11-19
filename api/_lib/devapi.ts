@@ -240,13 +240,14 @@ export function devApiRoutes(h: PremiumDeps): [string, string, Handler][] {
   const publicEvent = (e: EventItem) => ({
     id: e.id, slug: e.slug, title: e.title, description: e.description, start: e.start, end: e.end, status: e.status, currency: e.currency,
     venue: e.venue ? { name: e.venue.name, address: e.venue.address, city: e.venue.city } : null, online: !!e.online,
+    private: e.private === true,
     url: `${siteUrl()}/e/${e.slug}`, checkoutUrl: `${siteUrl()}/e/${e.slug}/achat`,
     tickets: e.tickets.map((t) => ({ id: t.id, name: t.name, price: t.price, quota: t.quota, sold: t.sold, remaining: Math.max(0, t.quota - t.sold), salesStart: t.salesStart, salesEnd: t.salesEnd })),
   });
 
   const v1Events: Handler = async (c) => {
     const { orgId, log } = await authKey(c, 'events:read');
-    const rows = await all<{ data: EventItem }>(`select data from events where organizer_id = $1 and status = 'published' order by start_at limit 200`, [orgId]);
+    const rows = await all<{ data: EventItem }>(`select data from events where organizer_id = $1 and status = 'published' and coalesce(data->>'private', 'false') <> 'true' order by start_at limit 200`, [orgId]);
     await log(200);
     return { data: rows.map((r) => publicEvent(r.data)) };
   };

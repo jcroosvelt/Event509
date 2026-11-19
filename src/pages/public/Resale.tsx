@@ -47,7 +47,7 @@ export default function Resale() {
     }
   };
 
-  const withEvents = events.filter((e) => e.status === 'published');
+  const withEvents = events.filter((e) => e.status === 'published' && !e.private);
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6 lg:pt-10">

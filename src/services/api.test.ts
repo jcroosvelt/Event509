@@ -219,3 +219,26 @@ describe('administration', () => {
     expect(api.feeRateFor('org3')).toBe(api.currentFeeSettings().percent);
   });
 });
+
+describe('événements privés', () => {
+  it('absents des listes publiques et de la page organisateur, adresse secrète stable puis renouvelée', async () => {
+    const base = events.find((e) => e.status === 'published')!;
+    const saved = await api.saveEvent({ ...base, id: 'e_priv_test', slug: 'x', title: 'Fête privée', private: true });
+    try {
+      expect(saved.slug).toMatch(/^p-[0-9a-f]{20}$/);
+      expect((await api.listEvents()).some((e) => e.id === saved.id)).toBe(false);
+      expect((await api.getOrganizerPage(base.organizerId))!.events.some((e) => e.id === saved.id)).toBe(false);
+      expect((await api.getEvent(saved.slug))?.id).toBe(saved.id);
+      const same = await api.saveEvent({ ...saved, title: 'Fête privée 2' });
+      expect(same.slug).toBe(saved.slug);
+      const renewed = await api.saveEvent({ ...same, rotateLink: true });
+      expect(renewed.slug).not.toBe(saved.slug);
+      expect(renewed.rotateLink).toBeUndefined();
+      const pub = await api.saveEvent({ ...renewed, private: false });
+      expect(pub.slug.startsWith('p-')).toBe(false);
+      expect((await api.listEvents()).some((e) => e.id === saved.id)).toBe(true);
+    } finally {
+      await api.deleteEvent(saved.id);
+    }
+  });
+});

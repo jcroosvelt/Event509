@@ -24,6 +24,7 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
+import { randomBytes } from 'node:crypto';
 import { cityCoords, cleanPosition, distanceKm, plainPlace } from './geo.js';
 import { DEFAULT_REFUND_DAYS, MAX_REFUND_DAYS, PAYOUT_LAST_DAYS, PAYOUT_MIN_SOLD, payoutState, refundDaysOf, refundOpen, type PayoutReason } from '../../src/lib/payouts.js';
 import { claimOnce, holderEmails, holderUserIds, notifyAllDevices, notifyAudience, notifyEmails, notifyHolders, notifyUsers, organizerUserIds, pushConfigured, type PushMessage } from './push.js';
@@ -472,8 +473,12 @@ const deleteMe: Handler = async (c) => {
 const bootstrap: Handler = async (c) => {
   const u = c.user;
   const events = await docs<EventItem>(
-    `select data from events where status = 'published' or organizer_id = $1 or $2 order by start_at`,
-    [u?.organizer_id ?? '', u?.role === 'admin'],
+    // Les événements privés ne sont jamais dans le catalogue public : seulement pour leur organisation, l'administration et les personnes
+    // qui y ont un billet (commande ou billet transféré), pour que leurs billets et commandes restent lisibles
+    `select data from events where (status = 'published' and coalesce(data->>'private', 'false') <> 'true') or organizer_id = $1 or $2
+       or id in (select event_id from orders where user_id = $3) or id in (select event_id from tickets where lower(owner_email) = $4)
+     order by start_at`,
+    [u?.organizer_id ?? '', u?.role === 'admin', u?.id ?? '', (u?.email ?? '').toLowerCase()],
   );
   const organizers = await docs<Organizer>(`select data from organizers order by data->>'name'`);
   return {
@@ -784,7 +789,7 @@ async function tellAdmins(m: PushMessage) {
 const NEARBY_KM = 40;
 
 async function notifyNearby(ev: EventItem) {
-  if (!pushConfigured() || !ev.venue?.city || localMs(ev.end) < Date.now()) return;
+  if (ev.private === true || !pushConfigured() || !ev.venue?.city || localMs(ev.end) < Date.now()) return;
   await safely(async () => {
     const city = plainPlace(ev.venue!.city);
     if (!city || !(await claimOnce(`nearby:${ev.id}`))) return;
@@ -976,6 +981,8 @@ const createResale: Handler = async (c) => {
   return tx(async (q) => {
     const t = await ownTicket(c, c.params.id, q);
     if (t.status !== 'valid') fail(409, 'Ce billet ne peut pas être revendu');
+    // Un événement privé n'a pas de revente : une annonce le ferait apparaître sur la page publique de revente
+    if ((await eventById(t.eventId, q))?.private === true) fail(409, 'Les billets d’un événement privé ne peuvent pas être revendus.', 'private_no_resale');
     const listing: IssuedTicket = { ...t, id: newId('rs'), status: 'resale', resalePrice: price };
     await q.query(`update tickets set status = 'resale', data = data || '{"status":"resale"}'::jsonb where id = $1`, [t.id]);
     await upsert('resale_listings', { id: listing.id, ticket_id: t.id, event_id: t.eventId, price, data: listing }, q);
@@ -1064,13 +1071,19 @@ const saveEvent: Handler = async (c) => {
   }
   const existing = await one<{ organizer_id: string; data: EventItem }>(`select organizer_id, data from events where id = $1`, [e.id]);
   if (existing && existing.organizer_id !== orgId && c.user!.role !== 'admin') fail(403, 'Cet événement appartient à un autre organisateur');
+  const wantsPrivate = e.private === true;
   const clash = await one(`select 1 from events where slug = $1 and id <> $2`, [e.slug, e.id ?? '']);
   // Jusqu'à 5 visuels (fichiers du site ou adresses https) ; le premier sert de visuel principal
   const images = (Array.isArray(e.images) ? e.images : []).filter((v): v is string => validCover(v) && !/gradient\(/.test(v)).slice(0, 5);
   const next: EventItem = {
     ...e,
     id: existing ? e.id : newId('e'),
-    slug: clash || !e.slug ? `${slugify(e.title)}-${Math.random().toString(36).slice(2, 6)}` : slugify(e.slug),
+    // Événement privé : l'adresse est un secret impossible à deviner (jamais déduite du titre) ; elle ne change que si l'organisateur le demande
+    slug: wantsPrivate
+      ? (existing?.data.private === true && existing.data.slug && e.rotateLink !== true ? existing.data.slug : `p-${randomBytes(10).toString('hex')}`)
+      : existing?.data.private === true || clash || !e.slug ? `${slugify(e.title)}-${Math.random().toString(36).slice(2, 6)}` : slugify(e.slug),
+    private: wantsPrivate ? true : undefined,
+    rotateLink: undefined,
     organizerId: existing?.organizer_id ?? orgId,
     cover: images.length ? images[0]! : validCover(e.cover) ? e.cover : existing?.data.cover ?? 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)',
     images,
@@ -2310,6 +2323,7 @@ const sharePage: Handler = async (c) => {
   let description = '';
   let image: string | null = null;
   let path = '';
+  let isPrivate = false;
   if (kind === 'e') {
     const e = slug ? (await one<{ data: EventItem }>(`select data from events where slug = $1 and data->>'status' = 'published'`, [slug]))?.data : undefined;
     if (!e) return new Respond(404, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Événement introuvable');
@@ -2321,6 +2335,7 @@ const sharePage: Handler = async (c) => {
     description = clipText([date, where, price].filter(Boolean).join(' · ') + (e.description ? `. ${e.description.replace(/\s+/g, ' ')}` : ''), 200);
     image = fileOrHttps(e.images?.[0]) ?? fileOrHttps(e.cover);
     path = `/e/${e.slug}`;
+    isPrivate = e.private === true;
   } else {
     const o = slug ? (await one<{ data: Organizer }>(`select data from organizers where slug = $1`, [slug]))?.data : undefined;
     if (!o) return new Respond(404, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Organisateur introuvable');
@@ -2334,7 +2349,7 @@ const sharePage: Handler = async (c) => {
   const t = `${title} · Event509`;
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8" /><title>${escHtml(t)}</title>
 <meta name="description" content="${escHtml(description)}" />
-<link rel="canonical" href="${escHtml(url)}" />
+<link rel="canonical" href="${escHtml(url)}" />${isPrivate ? '\n<meta name="robots" content="noindex, nofollow" />' : ''}
 <meta property="og:site_name" content="Event509" /><meta property="og:type" content="website" />
 <meta property="og:title" content="${escHtml(title)}" /><meta property="og:description" content="${escHtml(description)}" />
 <meta property="og:url" content="${escHtml(url)}" /><meta property="og:image" content="${escHtml(img)}" />
@@ -2343,7 +2358,9 @@ const sharePage: Handler = async (c) => {
 <meta http-equiv="refresh" content="0;url=${escHtml(url)}" /></head>
 <body><p><a href="${escHtml(url)}">${escHtml(title)}</a></p></body></html>`;
   // Jamais mis en cache par le réseau : la même adresse sert le site aux visiteurs et cette page aux robots
-  return Respond.html(html);
+  const out = Respond.html(html);
+  if (isPrivate) out.headers['X-Robots-Tag'] = 'noindex, nofollow';
+  return out;
 };
 
 // ---------- Avis et notes ----------

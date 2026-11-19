@@ -318,7 +318,8 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
   // En mode API, le catalogue public est chargé au démarrage (hydrate) puis filtré ici
   if (DEMO) await wait();
   const now = new Date();
-  let list = db.events.filter((e) => e.status === 'published');
+  // Les événements privés (visibles seulement par leur organisation, l'administration et les acheteurs) ne figurent dans aucune liste publique
+  let list = db.events.filter((e) => e.status === 'published' && !e.private);
   if (f.q) {
     const q = f.q.toLowerCase();
     list = list.filter((e) =>
@@ -355,7 +356,12 @@ export async function listEvents(f: EventFilters = {}): Promise<EventItem[]> {
 }
 
 export async function getEvent(idOrSlug: string) {
-  if (!DEMO) return http<EventItem>(`/events/${encodeURIComponent(idOrSlug)}`).catch((e) => (e instanceof ApiError && e.status === 404 ? null : Promise.reject(e)));
+  if (!DEMO) {
+    const ev = await http<EventItem>(`/events/${encodeURIComponent(idOrSlug)}`).catch((e) => (e instanceof ApiError && e.status === 404 ? null : Promise.reject(e)));
+    // Un événement privé ouvert par son lien n'est pas dans le catalogue : on le garde en mémoire pour la commande
+    if (ev?.private) cacheEvent(ev);
+    return ev;
+  }
   await wait(150);
   const e = db.events.find((x) => x.id === idOrSlug || x.slug === idOrSlug);
   return e ? clone(e) : null;
@@ -370,7 +376,7 @@ export async function getOrganizerPage(slug: string) {
   await wait(150);
   const org = getOrganizer(slug);
   if (!org) return null;
-  const evs = db.events.filter((e) => e.organizerId === org.id && e.status === 'published');
+  const evs = db.events.filter((e) => e.organizerId === org.id && e.status === 'published' && !e.private);
   return clone({ org, events: evs });
 }
 
@@ -409,9 +415,15 @@ export async function saveEvent(e: EventItem) {
   if (!DEMO) return cacheEvent(await http<EventItem>('/org/events', { method: 'PUT', body: JSON.stringify(e) }));
   await wait(500);
   const i = db.events.findIndex((x) => x.id === e.id);
-  if (i >= 0) db.events[i] = clone(e);
-  else db.events.unshift(clone(e));
-  return clone(e);
+  const was = i >= 0 ? db.events[i] : undefined;
+  // Mode démo : même règle que le serveur (adresse secrète stable, renouvelée sur demande ; adresse lisible hors privé)
+  const rand = () => `p-${Array.from({ length: 20 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+  const out: EventItem = { ...e, rotateLink: undefined, private: e.private ? true : undefined };
+  if (e.private) out.slug = was?.private && was.slug && !e.rotateLink ? was.slug : rand();
+  else if (was?.private && e.slug.startsWith('p-')) out.slug = `${e.title.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'evenement'}-${Math.random().toString(36).slice(2, 6)}`;
+  if (i >= 0) db.events[i] = clone(out);
+  else db.events.unshift(clone(out));
+  return clone(out);
 }
 
 export async function featureEvent(id: string, on: boolean) {

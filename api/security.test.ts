@@ -670,6 +670,105 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect((await pool.query(`select data->'refundDays' as d from events where id = $1`, [bad.id])).rows[0].d).toBeNull();
   });
 
+  it('S3j. événements privés : adresse secrète, absents des listes publiques, achat avec le lien, ni revente ni alertes', async () => {
+    const a = await organizer();
+    const other = await organizer();
+    const buyerTokenValue = await buyerToken();
+    const slugOf = async (id: string) => (await pool.query(`select slug from events where id = $1`, [id])).rows[0].slug as string;
+    const catalog = async (token?: string) => ((await call('GET', '/bootstrap', undefined, token)).body.events as { id: string; slug: string }[]);
+    const pub = await eventOf(a, { title: 'Soirée publique' });
+    const priv = await eventOf(a, { title: 'Anniversaire de Marie', private: true });
+
+    // Adresse secrète : jamais déduite du titre, longue et aléatoire
+    expect(priv.slug).toMatch(/^p-[0-9a-f]{20}$/);
+    expect(priv.slug).not.toContain('anniversaire');
+    expect((await pool.query(`select data->>'private' as p from events where id = $1`, [priv.id])).rows[0].p).toBe('true');
+
+    // Absent du catalogue public (visiteur ou autre organisation), présent pour son organisation et l'administration
+    expect((await catalog()).some((e) => e.id === priv.id)).toBe(false);
+    expect((await catalog(other.token)).some((e) => e.id === priv.id)).toBe(false);
+    expect((await catalog(a.token)).some((e) => e.id === priv.id)).toBe(true);
+    expect((await catalog()).some((e) => e.id === pub.id)).toBe(true);
+    const adm = await adminUser();
+    expect((await catalog(adm.token)).some((e) => e.id === priv.id)).toBe(true);
+
+    // Avec le lien (adresse secrète) : la page de l'événement s'ouvre ; un brouillon privé, jamais
+    const viaLink = await call('GET', `/events/${priv.slug}`);
+    expect(viaLink.status).toBe(200);
+    expect(viaLink.body).toMatchObject({ id: priv.id, private: true });
+    const draft = await eventOf(a, { title: 'Brouillon privé', private: true, status: 'draft' });
+    expect((await call('GET', `/events/${draft.slug}`)).status).toBe(404);
+
+    // Achat avec le lien : la commande est possible, puis l'événement apparaît pour l'acheteur (ses billets restent lisibles)
+    const o = await order(priv.id, { method: 'transfer' });
+    expect(o.status, JSON.stringify(o.body)).toBe(200);
+    expect((await catalog(buyerTokenValue)).some((e) => e.id === priv.id)).toBe(true);
+    expect((await catalog()).some((e) => e.id === priv.id)).toBe(false);
+
+    // Pas de revente d'un billet d'événement privé
+    const tid = (await pool.query(`select id from tickets where order_id = $1`, [o.body.order.id])).rows[0].id as string;
+    await pool.query(`update tickets set status = 'valid', data = jsonb_set(data, '{status}', '"valid"') where id = $1`, [tid]);
+    const resale = await call('POST', `/tickets/${tid}/resale`, { price: 100 }, buyerTokenValue);
+    expect(resale.status, JSON.stringify(resale.body)).toBe(409);
+    expect(resale.body.code, JSON.stringify(resale.body)).toBe('private_no_resale');
+
+    // Aperçu de partage : l'événement privé se lit avec son lien mais n'est pas indexé par les moteurs de recherche
+    const share = await callQ('GET', '/share', { kind: 'e', slug: priv.slug });
+    expect(share.status).toBe(200);
+    expect(String(share.body)).toContain('<meta name="robots" content="noindex, nofollow" />');
+    expect(share.headers?.['X-Robots-Tag']).toBe('noindex, nofollow');
+    const sharePub = await callQ('GET', '/share', { kind: 'e', slug: pub.slug });
+    expect(String(sharePub.body)).not.toContain('noindex');
+
+    // Le lien ne change que sur demande ; public → privé change l'adresse (l'ancienne, devinable, cesse de marcher) ; privé → public redonne une adresse lisible
+    const same = await call('PUT', '/org/events', evBody({ id: priv.id, slug: priv.slug, title: 'Anniversaire de Marie', private: true }), a.token);
+    expect(await slugOf(priv.id)).toBe(priv.slug);
+    expect(same.body.slug).toBe(priv.slug);
+    const rotated = await call('PUT', '/org/events', evBody({ id: priv.id, slug: priv.slug, title: 'Anniversaire de Marie', private: true, rotateLink: true }), a.token);
+    expect(rotated.body.slug).toMatch(/^p-[0-9a-f]{20}$/);
+    expect(rotated.body.slug).not.toBe(priv.slug);
+    expect(rotated.body.rotateLink).toBeUndefined();
+    expect((await call('GET', `/events/${priv.slug}`)).status).toBe(404);
+    expect((await call('GET', `/events/${rotated.body.slug}`)).status).toBe(200);
+    const oldPublicSlug = pub.slug;
+    const nowPrivate = await call('PUT', '/org/events', evBody({ id: pub.id, slug: pub.slug, title: 'Soirée publique', private: true }), a.token);
+    expect(nowPrivate.body.slug).toMatch(/^p-/);
+    expect((await call('GET', `/events/${oldPublicSlug}`)).status).toBe(404);
+    expect((await catalog()).some((e) => e.id === pub.id)).toBe(false);
+    const backPublic = await call('PUT', '/org/events', evBody({ id: pub.id, slug: nowPrivate.body.slug, title: 'Soirée publique', private: false }), a.token);
+    expect(backPublic.body.slug).not.toMatch(/^p-[0-9a-f]{20}$/);
+    expect(backPublic.body.private).toBeUndefined();
+    expect((await catalog()).some((e) => e.id === pub.id)).toBe(true);
+  });
+
+  it('S3k. événement privé : aucune alerte « près de chez vous »', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({ project_id: 'p-test', client_email: 'x@p-test.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() });
+    const sent: string[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      if (u.startsWith('https://fcm.googleapis.com/')) { sent.push(JSON.parse(String(init?.body)).message.token); return new Response('{}', { status: 200 }); }
+      return real(url as string, init);
+    });
+    try {
+      const tag = `${Date.now()}`;
+      const id = `u_priv_${tag}`;
+      await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant',$3,true)`, [id, `${id}@sec.test`, JSON.stringify({ name: 'Voisin', city: 'Port-Salut', country: 'HT' })]);
+      await pool.query(`insert into device_tokens (token, owner, user_id) values ($1,$2,$3)`, [`tok-priv-${tag}-xxxxxxxxxxxxxxxx`, `u:${id}`, id]);
+      const a = await organizer();
+      await eventOf(a, { title: 'Fête privée', private: true, venue: { name: 'Villa', address: 'Rue 2', city: 'Port-Salut' } });
+      expect(sent).toEqual([]);
+      // Le même événement en public prévient bien la personne de la ville (preuve que le test voit les alertes)
+      await eventOf(a, { title: 'Fête publique', venue: { name: 'Place', address: 'Centre', city: 'Port-Salut' } });
+      expect(sent).toContain(`tok-priv-${tag}-xxxxxxxxxxxxxxxx`);
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.FIREBASE_SERVICE_ACCOUNT;
+    }
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

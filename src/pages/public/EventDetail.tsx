@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
+  Lock,
 } from 'lucide-react';
 import { eventRefundDays, getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
 import { useForm } from '@/lib/form';
@@ -53,8 +54,15 @@ export default function EventDetail() {
   const sessionLabel = useSessionLabel();
   useTitle(ev?.title);
 
+  // Événement privé : jamais indexé par les moteurs de recherche
   useEffect(() => {
-  }, [ev]);
+    if (!ev?.private) return;
+    const m = document.createElement('meta');
+    m.name = 'robots';
+    m.content = 'noindex, nofollow';
+    document.head.appendChild(m);
+    return () => m.remove();
+  }, [ev?.private]);
 
   // Les événements consultés comptent dans les goûts de l'utilisateur (« Pour vous »)
   useEffect(() => {
@@ -106,6 +114,11 @@ export default function EventDetail() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:pt-8">
+      {ev.private && (
+        <p role="note" className="mb-3 flex items-center gap-2 rounded-2xl bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-ink">
+          <Lock className="h-4 w-4 shrink-0" aria-hidden /> {t('Événement privé : réservé aux personnes qui ont ce lien. Ne le partagez qu’avec vos invités.')}
+        </p>
+      )}
       <EventCover event={gallery.length > 1 ? { ...ev, cover: gallery[Math.min(pic, gallery.length - 1)]! } : ev} className="relative -mx-4 h-72 sm:mx-0 sm:h-[420px] sm:rounded-4xl">
         <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-transparent to-transparent" />
         <div className="absolute inset-x-4 top-4 flex justify-between">

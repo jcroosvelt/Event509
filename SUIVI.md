@@ -21,6 +21,8 @@
 
 ## En cours (cette session)
 
+- [x] **Événements privés** (site et application) : case « Événement privé » dans l’éditeur (étape Partage). L’événement a une adresse secrète (`/e/p-…`, 20 caractères aléatoires, jamais déduite du titre), n’apparaît dans aucune liste publique (accueil, explorer, page organisateur, revente, alertes « près de chez vous », aperçu des moteurs : `noindex`) et ne peut pas être boosté ni mis en vedette ni revendu ; seul le lien permet de le voir et d’acheter. Il reste visible pour son organisation, l’administration et les acheteurs (billets). Le lien ne change que sur demande (« Créer un nouveau lien », l’ancien cesse de marcher) ; repasser en public redonne une adresse lisible. Phrase ajoutée aux conditions d’utilisation (FR/EN, site + copie de l’application). Tests : API (S3j, S3k), démo (api.test.ts), application (native_format_test). **Non testé sur un vrai téléphone.**
+
 - [x] **Icône de l'application sans fond blanc** (2026-11-19, version 1.72.0) : logo seul sur fond **transparent** (icône adaptative : fond entièrement transparent + logo dans la zone sûre d'Android ; icône classique transparente). Fichiers `assets/images/logo_icon.png`, `logo_icon_fg.png`, `icon_bg_transparent.png`, réglage dans le workflow de l'application. Vérifié dans l'APK publié. À noter : sur un fond d'écran très sombre, la partie bleu nuit du logo ressort moins. Le fond blanc de l'écran de démarrage (`splash.png`) et les icônes du site (favicon, installation) n'ont pas été modifiés.
 - [x] **Versements par événement, délai de remboursement et annulation (règles de Joseph, 2026-11-19)** :
   - **Délai de remboursement par événement** : l'acheteur peut demander un remboursement jusqu'à N jours avant l'événement (**7 par défaut**, réglable de 0 à 30 par l'organisateur dans l'éditeur ; **0 = aucun remboursement**). Affiché sur la page de l'événement avant l'achat. Passé ce délai, plus aucune demande (code `refund_closed`), sauf si l'événement est annulé (et erreur de facturation, traitée par Event509). Le réglage « Délai de remboursement par défaut » de l'administration (Contenu et réglages) donne le N par défaut.
@@ -201,4 +203,4 @@
 - 2026-11-19 : historique du dépôt réécrit pour retirer les anciens APK (clone de 127 Mo à 2,5 Mo) ; version 1.71.0 publiée.
 - 2026-11-19 : versements par événement (40 % vendus ou 5 jours avant, après le délai de remboursement), délai de remboursement par événement, annulation après versement réservée à l'administration.
 - 2026-11-19 : version 1.72.0 publiée (versements par événement, icône sans fond blanc) ; conservation des données 5 ans et délai de remboursement par défaut 7 jours enregistrés dans l'administration.
-
+- 2026-11-19 : événements privés (adresse secrète, absents des listes, achat par lien, ni revente ni boost ni alertes).

@@ -37,6 +37,7 @@ Event509 est un intermédiaire technique. Nous ne sommes pas l’organisateur de
 - Chaque billet est valable une seule fois. Un billet copié, falsifié ou déjà utilisé sera refusé à l’entrée.
 - Tu dois respecter le règlement de l’événement et les consignes de sécurité du lieu. L’organisateur peut refuser l’entrée en cas de comportement dangereux ou de non-respect des règles.
 - La revente d’un billet est autorisée, à condition que le prix demandé ne dépasse pas le prix d’origine de plus de {{resalePercent}} %. Au-delà de cette limite, Event509 peut annuler les billets concernés sans remboursement.
+- Un événement privé n’apparaît pas dans les listes du site : seules les personnes qui ont son lien peuvent le voir et acheter un billet. Les billets d’un événement privé ne peuvent pas être revendus.
 
 ## 5. Pour les organisateurs
 - Tu dois fournir des informations vraies sur ton événement : date, lieu, programme, prix, conditions d’accès.
@@ -110,6 +111,7 @@ Event509 is a technical intermediary. We are not the organizer of the events pub
 - Each ticket is valid only once. A copied, forged or already used ticket will be refused at the entrance.
 - You must follow the event's rules and the venue's safety instructions. The organizer may refuse entry in case of dangerous behavior or failure to follow the rules.
 - Resale of a ticket is allowed, provided that the asking price does not exceed the original price by more than {{resalePercent}} %. Beyond this limit, Event509 may cancel the tickets concerned without refund.
+- A private event does not appear in the site's listings: only people who have its link can see it and buy a ticket. Tickets of a private event cannot be resold.
 
 ## 5. For organizers
 - You must provide truthful information about your event: date, venue, program, prices, access conditions.

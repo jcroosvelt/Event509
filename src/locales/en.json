@@ -2235,5 +2235,14 @@
   "Délai de remboursement terminé": "Refund period over",
   "La demande n’a pas pu être envoyée. Réessayez.": "The request could not be sent. Try again.",
   "Délai de remboursement par défaut des événements (jours avant l’événement)": "Default refund period of events (days before the event)",
-  "Chaque organisateur peut le changer ; 0 = aucun remboursement": "Each organizer can change it; 0 = no refunds"
+  "Chaque organisateur peut le changer ; 0 = aucun remboursement": "Each organizer can change it; 0 = no refunds",
+  "Événement privé": "Private event",
+  "Il n’apparaît nulle part sur le site : seules les personnes qui ont votre lien peuvent le voir et acheter un billet.": "It appears nowhere on the site: only people with your link can see it and buy a ticket.",
+  "Votre lien secret": "Your secret link",
+  "Le lien sera créé quand vous enregistrerez l’événement.": "The link will be created when you save the event.",
+  "Partagez-le seulement avec les personnes invitées. Les billets d’un événement privé ne peuvent pas être revendus et l’événement n’est ni boosté ni mis en vedette.": "Share it only with invited people. Tickets of a private event cannot be resold and the event is neither boosted nor featured.",
+  "Garder le lien actuel": "Keep the current link",
+  "Créer un nouveau lien (l’ancien cessera de fonctionner)": "Create a new link (the old one will stop working)",
+  "Privé": "Private",
+  "Événement privé : réservé aux personnes qui ont ce lien. Ne le partagez qu’avec vos invités.": "Private event: only for people who have this link. Share it only with your guests."
 }
