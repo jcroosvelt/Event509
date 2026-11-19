@@ -13,7 +13,7 @@
 | Fichiers (affiches, logos, documents de vérification) | En ligne |
 | Contrôle d'entrée par événement | Refait et testé |
 | Versements aux organisateurs (MonCash, NatCash, PayPal) | Refait et testé |
-| Paiements en ligne MonCash, NatCash, KashPaw et carte (une seule API) | Code prêt, **à activer** : définir `PAY_CLIENT_ID` dans Vercel et régler chez la plateforme de paiement le lien de retour `https://event509.vercel.app/retour-paiement` et le webhook `https://event509.vercel.app/api/pay/webhook`. Sans `PAY_CLIENT_ID`, les commandes restent validées sans paiement réel |
+| Paiements en ligne MonCash, NatCash, KashPaw et carte (une seule API) | **Actifs** (confirmé par Joseph le 2026-11-19 : `PAY_CLIENT_ID`, lien de retour et webhook réglés ; ne plus le redemander) |
 | Paiement PayPal | Pas encore branché |
 | Envoi des billets par email | Code prêt ; **il faut ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel** pour que les emails partent |
 | SMS et WhatsApp | Pas encore branchés |
@@ -105,7 +105,7 @@
 
 0. **À faire par vous** : créer un compte Resend, vérifier un domaine d'envoi, puis ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel (Production) pour que les billets partent par email.
 
-1. Paiements réels (MonCash, NatCash, carte, PayPal) et leurs notifications
+1. Paiement PayPal (MonCash, NatCash, KashPaw et carte sont actifs)
 2. Envois SMS et WhatsApp
 3. Aperçus de partage des événements (WhatsApp, Facebook) générés depuis la base
 4. Mot de passe oublié par email
@@ -186,4 +186,5 @@
 - 2026-11-18 : notification des événements près de chez soi (réglable) ; version affichée en 1.N.0.
 - 2026-11-18 : constaté que `FIREBASE_SERVICE_ACCOUNT` et `CRON_SECRET` existent déjà dans Vercel ; SUIVI corrigé (ne plus les demander).
 - 2026-11-19 : alertes de proximité par position GPS automatique (rayon 40 km), position arrondie et effaçable.
+- 2026-11-19 : paiement réel confirmé actif par Joseph ; SUIVI corrigé.
 
