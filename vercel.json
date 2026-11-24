@@ -3,22 +3,35 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "redirects": [
-    {
-      "source": "/app/event509.apk",
-      "destination": "https://github.com/jcroosvelt/Event509/releases/latest/download/event509.apk",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
+      "source": "/app/event509.apk",
+      "destination": "/api?path=app/download"
+    },
+    {
+      "source": "/app/version.json",
+      "destination": "/api?path=app/version"
+    },
+    {
       "source": "/e/:slug",
-      "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*"
+        }
+      ],
       "destination": "/api?path=share&kind=e&slug=:slug"
     },
     {
       "source": "/o/:slug",
-      "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*"
+        }
+      ],
       "destination": "/api?path=share&kind=o&slug=:slug"
     },
     {

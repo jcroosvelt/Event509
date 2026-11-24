@@ -769,6 +769,75 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     }
   });
 
+  it('S3l. application Android hébergée : réservée à l’administration, version lue dans l’APK, remplacement, téléchargement avec reprise', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { streamApk, APP_PACKAGE } = await import('./_lib/apprelease.js');
+    const apk = readFileSync(new URL('./fixtures/mini.apk', import.meta.url));
+    const adm = await adminUser();
+    const org = await organizer();
+    // Réservé à l'administration
+    for (const [m, p, b] of [['GET', '/admin/app'], ['POST', '/admin/app/upload/start', {}], ['DELETE', '/admin/app']] as const) {
+      expect((await call(m, p, b, org.token)).status, p).toBe(403);
+      expect((await call(m, p, b)).status, p).toBe(401);
+    }
+    await pool.query(`delete from app_chunk`); await pool.query(`delete from app_release`); await pool.query(`delete from app_upload`);
+    // Sans fichier hébergé : fiche de repli publique
+    const fb = await call('GET', '/app/version');
+    expect(fb.status).toBe(200);
+    expect(fb.body.versionCode).toBe(72);
+    // Fichier qui n'est pas un APK, ou envoi incomplet
+    const send = async (data: Buffer, parts = [data]) => {
+      const st = (await call('POST', '/admin/app/upload/start', {}, adm.token)).body.uploadId as string;
+      for (const [i, part] of parts.entries()) expect((await call('POST', '/admin/app/upload/chunk', { uploadId: st, index: i, data: part.toString('base64') }, adm.token)).status).toBe(200);
+      return call('POST', '/admin/app/upload/finish', { uploadId: st, chunks: parts.length }, adm.token);
+    };
+    expect((await send(Buffer.from('x'.repeat(300_000)))).status).toBe(422);
+    expect((await send(apk, [apk.subarray(0, 1000), apk.subarray(1000)])).status).toBe(422); // morceau intermédiaire de taille inattendue
+    expect((await call('POST', '/admin/app/upload/chunk', { uploadId: 'up_00000000000000000000', index: 0, data: 'AAAA' }, adm.token)).status).toBe(404);
+    expect((await call('POST', '/admin/app/upload/chunk', { uploadId: 'bad', index: 0, data: 'AAAA' }, adm.token)).status).toBe(422);
+    // Envoi valide : numéro et nom lus dans l'APK
+    const ok = await send(apk);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.release).toMatchObject({ versionCode: 76, versionName: '1.76.0', size: apk.length, file: '/app/event509.apk' });
+    const sha = (await call('GET', '/app/version')).body;
+    expect(sha).toMatchObject({ versionCode: 76, size: apk.length });
+    expect(sha.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(APP_PACKAGE).toBe('com.event509.event509_app');
+    // Une version qui n'est pas plus récente est refusée (code not_newer) ; l'ancien fichier reste
+    const again = await send(apk);
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('not_newer');
+    expect((await pool.query(`select count(*)::int as n from app_release`)).rows[0].n).toBe(1);
+    // Un seul envoi gardé en base : rien d'orphelin
+    expect((await pool.query(`select count(*)::int as n from app_chunk`)).rows[0].n).toBe(1);
+    expect((await pool.query(`select count(*)::int as n from app_upload`)).rows[0].n).toBe(0);
+    // Téléchargement : fichier complet, entête HEAD, reprise (Range)
+    const web = http.createServer((q, r) => void streamApk(q, r));
+    await new Promise<void>((ok2) => web.listen(0, ok2));
+    const base = `http://127.0.0.1:${(web.address() as AddressInfo).port}`;
+    try {
+      const full = await fetch(base);
+      expect(full.status).toBe(200);
+      expect(full.headers.get('content-type')).toBe('application/vnd.android.package-archive');
+      expect(full.headers.get('x-content-sha256')).toBe(sha.sha256);
+      const got = Buffer.from(await full.arrayBuffer());
+      expect(got.equals(apk)).toBe(true);
+      const head = await fetch(base, { method: 'HEAD' });
+      expect(head.headers.get('content-length')).toBe(String(apk.length));
+      const part = await fetch(base, { headers: { range: 'bytes=1000-1999' } });
+      expect(part.status).toBe(206);
+      expect(part.headers.get('content-range')).toBe(`bytes 1000-1999/${apk.length}`);
+      expect(Buffer.from(await part.arrayBuffer()).equals(apk.subarray(1000, 2000))).toBe(true);
+      expect((await fetch(base, { headers: { range: `bytes=${apk.length + 5}-` } })).status).toBe(416);
+      // Retrait : retour à la fiche de repli
+      expect((await call('DELETE', '/admin/app', undefined, adm.token)).status).toBe(200);
+      expect((await call('GET', '/app/version')).body.versionCode).toBe(72);
+      expect((await fetch(base, { redirect: 'manual' })).status).toBe(302);
+    } finally {
+      web.close();
+    }
+  });
+
   // ---- Téléversement de fichiers
 
   it('S4. téléversements : signature réelle, taille, type autorisé, nom nettoyé, documents privés', async () => {

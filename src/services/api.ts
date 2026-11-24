@@ -1438,3 +1438,51 @@ export async function setPayoutStatus(id: string, status: Payout['status']) {
   const org = db.organizers.find((o) => o.id === p.organizerId)?.name ?? p.organizerId;
   audit(status === 'paid' ? 'Versement payé' : status === 'processing' ? 'Versement approuvé' : 'Versement refusé', `${org} — ${p.amount} ${p.currency}`);
 }
+
+// ---------- Application Android hébergée par la plateforme ----------
+
+export interface AppReleaseInfo { versionCode: number; versionName: string; size: number; sha256: string; date: string; minAndroid: string; file: string }
+export interface HostedApp { release: AppReleaseInfo | null; hosted: boolean; fallback: AppReleaseInfo | null; chunkBytes: number; maxBytes: number }
+
+export async function getHostedApp(): Promise<HostedApp> {
+  if (DEMO) return { release: null, hosted: false, fallback: null, chunkBytes: 2_500_000, maxBytes: 80_000_000 };
+  return http<HostedApp>('/admin/app');
+}
+
+export async function removeHostedApp() {
+  if (DEMO) throw new ApiError(400, 'Indisponible en mode démo');
+  await http('/admin/app', { method: 'DELETE' });
+}
+
+/** Lit un morceau du fichier en base64 (sans le préfixe « data: »). */
+const chunkBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(new ApiError(0, 'Lecture du fichier impossible'));
+    r.readAsDataURL(blob);
+  });
+
+/**
+ * Téléverse l'APK par morceaux (une requête ordinaire est limitée à 4,5 Mo) puis le publie : le serveur lit la version dans le fichier,
+ * remplace l'ancienne et, si demandé, prévient les utilisateurs. Chaque morceau est retenté 3 fois (réseau mobile instable).
+ */
+export async function uploadApk(file: File, announce: boolean, onProgress: (done: number) => void): Promise<{ release: AppReleaseInfo; notified: number }> {
+  if (DEMO) throw new ApiError(400, 'Indisponible en mode démo');
+  const { uploadId, chunkBytes } = await http<{ uploadId: string; chunkBytes: number }>('/admin/app/upload/start', { method: 'POST', body: '{}' });
+  const count = Math.max(1, Math.ceil(file.size / chunkBytes));
+  for (let i = 0; i < count; i++) {
+    const data = await chunkBase64(file.slice(i * chunkBytes, (i + 1) * chunkBytes));
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await http('/admin/app/upload/chunk', { method: 'POST', body: JSON.stringify({ uploadId, index: i, data }) });
+        break;
+      } catch (e) {
+        if (attempt >= 3 || (e instanceof ApiError && e.status >= 400 && e.status < 500)) throw e;
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+      }
+    }
+    onProgress((i + 1) / count);
+  }
+  return http('/admin/app/upload/finish', { method: 'POST', body: JSON.stringify({ uploadId, chunks: count, announce }) });
+}

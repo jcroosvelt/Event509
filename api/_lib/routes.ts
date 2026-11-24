@@ -23,6 +23,7 @@ import { marketingRoutes } from './marketing.js';
 import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
+import { appReleaseRoutes } from './apprelease.js';
 import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { randomBytes } from 'node:crypto';
 import { cityCoords, cleanPosition, distanceKm, plainPlace } from './geo.js';
@@ -2488,6 +2489,7 @@ const runReminders: Handler = async (c) => {
 
 export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...premiumRoutes({ fail, str, auth, admin, org, audit }),
+  ...appReleaseRoutes({ fail, str, admin, audit }),
   ...otpRoutes({ fail, auth, checkPassword, hashPassword, rateLimit }),
   ...authFlowRoutes({ fail, admin, rateLimit, toAppUser }),
   ...analyticsRoutes({ fail, str, auth, admin, org, audit }),

@@ -86,6 +86,7 @@ const Verification = lazy(() => import('@/pages/admin/Verification'));
 const UserDetail = lazy(() => import('@/pages/admin/UserDetail'));
 const Transactions = lazy(() => import('@/pages/admin/Transactions'));
 const AdminPayouts = lazy(() => import('@/pages/admin/AdminPayouts'));
+const AppRelease = lazy(() => import('@/pages/admin/AppRelease'));
 const AuditLog = lazy(() => import('@/pages/admin/AuditLog'));
 const RecoveryRequests = lazy(() => import('@/pages/admin/RecoveryRequests'));
 const AuthEntry = lazy(() => import('@/pages/auth/GoogleAuth'));
@@ -334,6 +335,7 @@ export default function App() {
             <Route path="transactions" element={<Transactions />} />
             <Route path="versements" element={<AdminPayouts />} />
             <Route path="journal" element={<AuditLog />} />
+            <Route path="application" element={<AppRelease />} />
           </Route>
         </Routes>
       </Suspense>

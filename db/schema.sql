@@ -648,3 +648,27 @@ create table if not exists app_handoffs (
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
+-- Application Android hébergée par la plateforme : un seul APK (le dernier), stocké en morceaux et remplacé à chaque envoi
+create table if not exists app_release (
+  id int primary key check (id = 1),
+  version_code int not null,
+  version_name text not null,
+  size bigint not null,
+  sha256 text not null,
+  chunks int not null,
+  upload_id text not null,
+  uploaded_by text,
+  created_at timestamptz not null default now()
+);
+create table if not exists app_upload (
+  upload_id text primary key,
+  created_by text,
+  created_at timestamptz not null default now()
+);
+create table if not exists app_chunk (
+  upload_id text not null,
+  idx int not null,
+  data bytea not null,
+  primary key (upload_id, idx)
+);

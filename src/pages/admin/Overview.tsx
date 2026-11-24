@@ -297,6 +297,7 @@ export default function Overview() {
                   { to: '/admin/commissions', l: t('Commissions et frais'), d: t('Taux par défaut, frais fixes, taux négociés') },
                   { to: '/admin/verification', l: t('Vérification des organisateurs'), d: t('Pièces justificatives et badge vérifié') },
                   { to: '/admin/utilisateurs', l: t('Utilisateurs'), d: t('Rôles, suspension, fiches détaillées') },
+                  { to: '/admin/application', l: t('Application Android'), d: t('Téléverser l’APK : téléchargement et mises à jour') },
                   { to: '/admin/transactions', l: t('Transactions'), d: t('Toutes les commandes et exports CSV') },
                 ].map((x) => (
                   <Link key={x.to} to={x.to} className="rounded-2xl bg-canvas p-4 hover:bg-brand-50">

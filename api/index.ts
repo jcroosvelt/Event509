@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handle } from './_lib/handler.js';
 import { Binary } from './_lib/routes.js';
+import { streamApk } from './_lib/apprelease.js';
 
 /**
  * Fonction Vercel unique : toutes les routes /api/* y sont redirigées (voir vercel.json),
@@ -10,6 +11,8 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
   const { path, ...rest } = req.query;
   const query = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, Array.isArray(v) ? v[0] ?? '' : v ?? '']));
   const p = Array.isArray(path) ? path.join('/') : path ?? '';
+  // Fichier de l'application Android : envoyé en flux (il dépasse la limite de 4,5 Mo d'une réponse ordinaire)
+  if (p === 'app/download' && (req.method === 'GET' || req.method === 'HEAD')) return streamApk(req, res);
   const out = await handle({
     method: req.method ?? 'GET',
     path: `/${p}`.replace(/\/+/g, '/'),
