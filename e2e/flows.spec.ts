@@ -571,8 +571,18 @@ test.describe('barre flottante (mobile)', () => {
     await bar.getByRole('link', { name: 'Accueil' }).click();
     await expect(bar.getByRole('button', { name: 'Afficher les onglets' })).toBeVisible();
     await expect(bar.getByRole('link', { name: 'Explorer' })).toBeHidden();
-    // L'avatar ouvre le menu de pastilles
-    await bar.getByRole('button', { name: 'Menu du compte' }).click();
+    // Toucher l'avatar ouvre le menu de l'espace (plus de bouton « trois barres » en haut)
+    const avatar = bar.getByRole('button', { name: 'Menu du compte' });
+    await avatar.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // L'appui long sur l'avatar ouvre la liste rapide de pastilles
+    const box = (await avatar.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(600);
+    await page.mouse.up();
     const menu = bar.getByRole('menu');
     await expect(menu.getByRole('menuitem', { name: 'Mes billets' })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Devenir organisateur' })).toBeVisible();
