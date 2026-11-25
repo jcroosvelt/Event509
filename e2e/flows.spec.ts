@@ -475,7 +475,9 @@ test.describe('installation de l’application Android (APK)', () => {
     await page.goto('/organisateur');
     const header = page.locator('header').first();
     await expect(header.getByRole('button', { name: /Déconnexion|Sign out|Log out/ })).toHaveCount(0);
-    await header.getByRole('button', { name: /Ouvrir le menu|Open menu/ }).click();
+    // Plus de bouton « trois barres » en haut : le menu s'ouvre avec le bouton rond de profil de la barre du bas
+    await expect(header.getByRole('button', { name: /Ouvrir le menu|Open menu/ })).toHaveCount(0);
+    await page.getByRole('navigation').last().getByRole('button', { name: /Menu du compte|Account menu/ }).click();
     const menu = page.getByRole('dialog');
     await expect(menu.getByRole('link', { name: /Télécharger l’application|Download the app/ })).toBeVisible();
     await expect(menu.getByRole('button', { name: /Déconnexion|Sign out|Log out/ })).toBeVisible();

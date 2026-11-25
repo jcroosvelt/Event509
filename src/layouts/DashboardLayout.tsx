@@ -185,12 +185,6 @@ export default function DashboardLayout({
         <Logo to={base} />
         <div className="flex items-center gap-2">
           {user && <NotificationsMenu />}
-          {/* La photo de profil ouvre le menu (plus de bouton « trois barres ») */}
-          {user && (
-            <button type="button" aria-label={t('Ouvrir le menu')} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(true)} className="rounded-full ring-2 ring-line transition active:scale-95">
-              <Avatar name={user.name} size={40} />
-            </button>
-          )}
         </div>
       </header>
 
@@ -230,7 +224,7 @@ export default function DashboardLayout({
         </ErrorBoundary>
       </main>
 
-      <BottomNav label={title} title={title} items={bottomItems} center={can(user, center.perm) ? center : undefined} />
+      <BottomNav label={title} title={title} items={bottomItems} center={can(user, center.perm) ? center : undefined} onProfile={() => setOpen(true)} />
     </div>
   );
 }

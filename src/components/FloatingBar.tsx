@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Heart, LayoutDashboard, LogOut, Rocket, Settings, ShieldCheck, Ticket, User, type LucideIcon } from 'lucide-react';
+import { Heart, LogOut, Rocket, Settings, Ticket, User, type LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
-import { can, hasOrganizerAccess } from '@/lib/permissions';
+import { hasOrganizerAccess, homePath } from '@/lib/permissions';
 
 export interface BarItem { to: string; icon: LucideIcon; label: string; end?: boolean }
 
@@ -21,7 +21,7 @@ const FADE = 'transition-[opacity,transform,filter] duration-300 ease-out motion
  * toucher le bouton rond la redéploie. L'avatar (toucher ou appui long) fait surgir un menu de pastilles de couleur.
  * Les formes se transforment les unes dans les autres (largeurs en ressort) avec fondu et flou.
  */
-export function FloatingBar({ items, label, title, subtitle }: { items: BarItem[]; label: string; title: string; subtitle?: string }) {
+export function FloatingBar({ items, label, title, subtitle, onProfile }: { items: BarItem[]; label: string; title: string; subtitle?: string; onProfile?: () => void }) {
   const { user, logout, t } = useApp();
   const { pathname } = useLocation();
   const nav = useNavigate();
@@ -47,14 +47,12 @@ export function FloatingBar({ items, label, title, subtitle }: { items: BarItem[
     return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };
   }, [menu]);
 
+  // « Mon espace » ouvre le tableau de bord du compte (administration, organisateur ou personnel) : pas de liens séparés
   const entries: { to: string; icon: LucideIcon; label: string; tone: string }[] = user ? [
-    { to: '/compte', icon: User, label: t('Mon espace'), tone: 'bg-brand-grad' },
+    { to: homePath(user), icon: User, label: t('Mon espace'), tone: 'bg-brand-grad' },
     { to: '/billets', icon: Ticket, label: t('Mes billets'), tone: 'bg-emerald-500' },
     { to: '/favoris', icon: Heart, label: t('Favoris'), tone: 'bg-rose-500' },
-    hasOrganizerAccess(user)
-      ? { to: '/organisateur', icon: LayoutDashboard, label: t('Espace organisateur'), tone: 'bg-violet-600' }
-      : { to: '/compte/devenir-organisateur', icon: Rocket, label: t('Devenir organisateur'), tone: 'bg-violet-600' },
-    ...(can(user, 'admin') ? [{ to: '/admin', icon: ShieldCheck, label: t('Administration'), tone: 'bg-amber-500' }] : []),
+    ...(hasOrganizerAccess(user) ? [] : [{ to: '/compte/devenir-organisateur', icon: Rocket, label: t('Devenir organisateur'), tone: 'bg-violet-600' }]),
     { to: '/compte/parametres', icon: Settings, label: t('Paramètres'), tone: 'bg-slate-500' },
   ] : [];
 
@@ -166,7 +164,7 @@ export function FloatingBar({ items, label, title, subtitle }: { items: BarItem[
               aria-label={t('Menu du compte')}
               aria-haspopup="menu"
               aria-expanded={menu}
-              onClick={() => { if (longPressed.current) { longPressed.current = false; return; } setMenu((m) => !m); }}
+              onClick={() => { if (longPressed.current) { longPressed.current = false; return; } if (onProfile) { setMenu(false); onProfile(); return; } setMenu((m) => !m); }}
               onPointerDown={() => { longPressed.current = false; press.current = window.setTimeout(() => { longPressed.current = true; setMenu(true); }, 380); }}
               onPointerUp={() => window.clearTimeout(press.current)}
               onPointerLeave={() => window.clearTimeout(press.current)}

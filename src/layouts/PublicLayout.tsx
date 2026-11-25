@@ -163,17 +163,19 @@ function UserMenu() {
 
 /** Barre de navigation basse mobile : barre flottante (voir FloatingBar). */
 export function BottomNav({
-  items, center, label, title, subtitle,
+  items, center, label, title, subtitle, onProfile,
 }: {
   items: BarItem[];
   center?: BarItem;
   label: string;
   title: string;
   subtitle?: string;
+  /** Toucher la photo de profil ouvre ce menu (celui de l'espace) au lieu de la liste rapide. */
+  onProfile?: () => void;
 }) {
   const half = Math.ceil(items.length / 2);
   const all = center ? [...items.slice(0, half), center, ...items.slice(half)] : items;
-  return <FloatingBar items={all} label={label} title={title} subtitle={subtitle} />;
+  return <FloatingBar items={all} label={label} title={title} subtitle={subtitle} onProfile={onProfile} />;
 }
 
 export function OfflineBanner() {

@@ -53,3 +53,10 @@ export function orgOf(user: AppUser | null) {
   if (import.meta.env.VITE_API_URL) return '';
   return user?.role === 'organizer' || user?.role === 'admin' ? 'org1' : '';
 }
+
+/** Tableau de bord correspondant au compte : administration, espace organisateur, sinon espace personnel. */
+export function homePath(user: AppUser | null): string {
+  if (!user) return '/connexion';
+  if (can(user, 'admin')) return '/admin';
+  return hasOrganizerAccess(user) ? '/organisateur' : '/compte';
+}
