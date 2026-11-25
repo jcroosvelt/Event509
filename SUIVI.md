@@ -215,3 +215,4 @@
 - 2026-11-25 : billet très haute définition téléchargeable (application 1.77.0) ; correctif du retour de connexion Google (session par cookie lue au démarrage).
 - 2026-11-25 : mise à jour de l'application téléchargée et installée dans l'application ; icône classique transparente (plus d'icône adaptative) ; barre sans onglet « Organisateur » pour les visiteurs ; règle « priorité aux demandes de Joseph » ajoutée aux consignes.
 - 2026-11-25 : audit de sécurité (branche security-hardening) : 13 failles corrigées, 3 actions restantes ; application 1.81.0 (administrateur et organisateur arrivent sur leur tableau de bord à la connexion).
+- 2026-11-25 : base de données : rôle limité `event509_app` créé automatiquement au déploiement et utilisé par le site (vérifié en production : `dbLimited:true`, connexion et écritures OK) ; repli automatique et interrupteur `DB_RESTRICTED=0`.

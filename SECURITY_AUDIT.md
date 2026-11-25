@@ -67,7 +67,7 @@ Périmètre : site (`api/`, `src/`, configuration Vercel), base Neon, applicatio
 | A3 | MOYENNE | Déni de service / coût | `/app/event509.apk` | Téléchargement public de 28 Mo lu dans la base, sans aucune limite | corrigée |
 | A4 | MOYENNE | Déni de service / aspiration | `/bootstrap`, `/events/:id`, `/share`, `/resale`, `/geo`, `/legal`, avis | Lectures publiques sans limite de débit | corrigée (limite par instance) ; limite globale : pare-feu Vercel |
 | A5 | MOYENNE | Composants vulnérables | `react-router-dom` 6.30.6 | 2 avis (redirection ouverte via « \\ », désérialisation SSR) | corrigée (7.18.7) |
-| A6 | MOYENNE | Configuration base | rôle `neondb_owner` | Le site se connecte avec le rôle propriétaire (DDL, création de rôles, contournement RLS) | à faire (accès Vercel requis) |
+| A6 | MOYENNE | Configuration base | rôle `neondb_owner` | Le site se connecte avec le rôle propriétaire (DDL, création de rôles, contournement RLS) | corrigée : rôle limité `event509_app` créé au déploiement, utilisé par le site (repli automatique, interrupteur `DB_RESTRICTED=0`) |
 | A7 | MOYENNE | Sauvegardes | Neon | Aucun instantané, rétention de 6 h ; les sauvegardes programmées ne sont pas disponibles sur l'offre actuelle | partiellement corrigée (instantané manuel créé) |
 | A8 | FAIBLE | Hachage | `api/_lib/auth.ts` | scrypt au coût par défaut (N = 16384) | corrigée (N = 65536, r = 8, p = 2, migration à la connexion) |
 | A9 | FAIBLE | Intégrité mise à jour | `lib/native/native_platform.dart` | L'adresse du fichier de mise à jour pouvait viser un autre site (« //hôte ») ; l'empreinte SHA-256 était facultative | corrigée |
@@ -92,7 +92,7 @@ Périmètre : site (`api/`, `src/`, configuration Vercel), base Neon, applicatio
 
 ## Actions restantes de votre côté
 
-1. **Rôle de base limité (A6)** : le connecteur Vercel de la session de travail ne voit pas le projet `event509` (il est rattaché à un autre compte). Reconnectez le connecteur Vercel avec le compte qui héberge le site : la création du rôle `event509_app` (lecture/écriture des données seulement) et le changement de `DATABASE_URL` pourront alors être faits automatiquement. Les migrations utiliseront `DATABASE_URL_OWNER`.
+1. ~~Rôle de base limité (A6)~~ : fait sans action manuelle. Le script de déploiement (`scripts/db-setup.mjs`) crée ou resynchronise le rôle `event509_app` (mot de passe dérivé par HMAC de celui du propriétaire, aucun secret ajouté) ; `/api/health` renvoie `dbLimited:true` en production.
 2. **Sauvegardes (A7)** : les instantanés programmés exigent une offre Neon supérieure. En attendant, un instantané « avant-audit-securite-2026-11-25 » est gardé jusqu'au 25 décembre 2026.
 3. **Clé Firebase (A14)** : Google Cloud Console > APIs et services > Identifiants > la clé Android : restreindre aux applications Android (`com.event509.event509_app` + empreinte SHA-1 de la clé de signature) et aux API Firebase utilisées.
 4. **Clé de signature (A15)** : la garder dans le dépôt privé est un risque (toute personne ayant accès au dépôt peut signer une application EVENT509). La changer oblige chaque utilisateur à désinstaller puis réinstaller l'application : décision à prendre par vous.
@@ -109,7 +109,7 @@ Contrôle automatique des secrets et des dépendances à chaque envoi (`security
 ## Liste de contrôle (24 points)
 
 - [x] Clés API : aucune clé serveur dans le code ni le bundle client
-- [~] Base de données : TLS vérifié, requêtes paramétrées ; rôle limité en attente (A6)
+- [~] Base de données : TLS vérifié, requêtes paramétrées ; rôle limité actif (A6)
 - [x] HTTPS : redirection 308, HSTS 2 ans + preload, cookies Secure
 - [x] Hachage des mots de passe : scrypt renforcé, migration transparente
 - [x] Validation côté serveur
