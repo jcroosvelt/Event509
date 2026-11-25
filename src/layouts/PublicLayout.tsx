@@ -346,7 +346,8 @@ export default function PublicLayout() {
           { to: '/', icon: Home, label: t('Accueil'), end: true },
           { to: '/explorer', icon: Compass, label: t('Explorer') },
           { to: '/favoris', icon: Heart, label: t('Favoris') },
-          { to: user ? '/compte' : '/connexion', icon: User, label: user ? t('Profil') : t('Organisateur') },
+          // Visiteur : pas d'onglet de plus (le bouton rond à droite de la barre ouvre la connexion)
+          ...(user ? [{ to: '/compte', icon: User, label: t('Profil') }] : []),
         ]}
         center={user ? { to: '/billets', icon: Ticket, label: t('Mes billets') } : undefined}
       />
