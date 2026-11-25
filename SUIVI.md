@@ -211,3 +211,4 @@
 - 2026-11-19 : événements privés (adresse secrète, absents des listes, achat par lien, ni revente ni boost ni alertes).
 - 2026-11-24 : APK hébergé par la plateforme (téléversement dans l'administration, remplacement de l'ancien, version lue dans le fichier) ; workflow de l'application sans publication GitHub ; artefacts GitHub effacés.
 - 2026-11-25 : billet très haute définition téléchargeable (application 1.77.0) ; correctif du retour de connexion Google (session par cookie lue au démarrage).
+- 2026-11-25 : mise à jour de l'application téléchargée et installée dans l'application ; icône classique transparente (plus d'icône adaptative) ; barre sans onglet « Organisateur » pour les visiteurs ; règle « priorité aux demandes de Joseph » ajoutée aux consignes.
