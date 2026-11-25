@@ -345,9 +345,8 @@ export default function PublicLayout() {
         items={[
           { to: '/', icon: Home, label: t('Accueil'), end: true },
           { to: '/explorer', icon: Compass, label: t('Explorer') },
-          { to: '/favoris', icon: Heart, label: t('Favoris') },
-          // Visiteur : pas d'onglet de plus (le bouton rond à droite de la barre ouvre la connexion)
-          ...(user ? [{ to: '/compte', icon: User, label: t('Profil') }] : []),
+          // Visiteur : seulement Accueil et Explorer ; favoris, billets et profil sont réservés aux comptes connectés (le bouton rond à droite de la barre ouvre la connexion)
+          ...(user ? [{ to: '/favoris', icon: Heart, label: t('Favoris') }, { to: '/compte', icon: User, label: t('Profil') }] : []),
         ]}
         center={user ? { to: '/billets', icon: Ticket, label: t('Mes billets') } : undefined}
       />

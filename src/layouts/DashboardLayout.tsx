@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarPlus, Download, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Download, LogOut, X, type LucideIcon } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar, Badge, Button, ButtonLink, EmptyState, IconButton } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -185,9 +185,12 @@ export default function DashboardLayout({
         <Logo to={base} />
         <div className="flex items-center gap-2">
           {user && <NotificationsMenu />}
-          <IconButton label={t('Ouvrir le menu')} onClick={() => setOpen(true)} aria-expanded={open}>
-            <Menu className="h-5 w-5" aria-hidden />
-          </IconButton>
+          {/* La photo de profil ouvre le menu (plus de bouton « trois barres ») */}
+          {user && (
+            <button type="button" aria-label={t('Ouvrir le menu')} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(true)} className="rounded-full ring-2 ring-line transition active:scale-95">
+              <Avatar name={user.name} size={40} />
+            </button>
+          )}
         </div>
       </header>
 
