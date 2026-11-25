@@ -1,23 +1,43 @@
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
-const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
+type ScryptOpts = { N: number; r: number; p: number; maxmem: number };
+const scryptRaw = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, o: ScryptOpts) => Promise<Buffer>;
+/** Ancien coût (valeurs par défaut de Node : N = 16384, r = 8, p = 1), gardé pour relire les anciens hachages. */
+const LEGACY: ScryptOpts = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+/** Coût actuel (recommandation OWASP : N = 2^16, r = 8, p = 2, soit 64 Mo et environ 0,2 s par mot de passe). */
+const COST = { N: 65536, r: 8, p: 2 };
+const optsOf = (c: { N: number; r: number; p: number }): ScryptOpts => ({ ...c, maxmem: 256 * c.N * c.r });
 
-/** Mot de passe haché avec scrypt et un sel aléatoire : « scrypt$sel$hash ». */
+/** Mot de passe haché avec scrypt et un sel aléatoire : « scrypt2$N$r$p$sel$hash » (coût écrit dans le hachage, donc évolutif). */
 export async function hashPassword(pw: string) {
   const salt = randomBytes(16);
-  const hash = await scrypt(pw, salt, 64);
-  return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`;
+  const hash = await scryptRaw(pw, salt, 64, optsOf(COST));
+  return `scrypt2$${COST.N}$${COST.r}$${COST.p}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
 export async function verifyPassword(pw: string, stored: string | null | undefined) {
   if (!stored) return false;
-  const [algo, salt, hash] = stored.split('$');
-  if (algo !== 'scrypt' || !salt || !hash) return false;
+  const parts = stored.split('$');
+  let opts = LEGACY;
+  let salt: string | undefined;
+  let hash: string | undefined;
+  if (parts[0] === 'scrypt' && parts.length === 3) [, salt, hash] = parts;
+  else if (parts[0] === 'scrypt2' && parts.length === 6) {
+    const [N, r, p] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+    // Paramètres lus dans la base : bornés (un hachage altéré ne doit pas pouvoir épuiser la mémoire du serveur)
+    if (![N, r, p].every(Number.isInteger) || N < 16384 || N > 2 ** 17 || (N & (N - 1)) !== 0 || r < 1 || r > 16 || p < 1 || p > 4) return false;
+    opts = optsOf({ N, r, p });
+    [, , , , salt, hash] = parts;
+  }
+  if (!salt || !hash) return false;
   const expected = Buffer.from(hash, 'base64');
-  const got = await scrypt(pw, Buffer.from(salt, 'base64'), expected.length);
+  const got = await scryptRaw(pw, Buffer.from(salt, 'base64'), expected.length, opts);
   return timingSafeEqual(got, expected);
 }
+
+/** Le hachage enregistré date d'un ancien coût : il sera refait à la prochaine connexion réussie. */
+export const passwordNeedsRehash = (stored: string | null | undefined) => !!stored && !stored.startsWith(`scrypt2$${COST.N}$${COST.r}$${COST.p}$`);
 
 const b64 = (v: string | Buffer) => Buffer.from(v).toString('base64url');
 

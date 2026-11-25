@@ -1,3 +1,4 @@
+import { isProduction } from './safety.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { all, db, one, type Q } from './db.js';
 import { newId } from './auth.js';
@@ -33,7 +34,8 @@ export interface SessionRow {
 }
 
 /** Cookies : « __Host- » (liés au domaine exact, HTTPS obligatoire) sauf en développement local sans HTTPS. */
-const secureCookies = () => process.env.COOKIE_INSECURE !== '1';
+/** Cookies « Secure » : toujours en production, même si COOKIE_INSECURE est défini par erreur (réservé au développement local en http). */
+const secureCookies = () => isProduction() || process.env.COOKIE_INSECURE !== '1';
 export const cookieName = (n: string) => (secureCookies() ? `__Host-${n}` : n);
 export const SESSION_COOKIE = 'e509_session';
 

@@ -1,0 +1,37 @@
+name: Sécurité
+
+# Contrôles automatiques : secrets dans l'historique, dépendances vulnérables. Aucun secret n'est nécessaire.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Récupération du dépôt (historique complet)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Recherche de secrets
+        run: bash scripts/scan-secrets.sh
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci --ignore-scripts
+
+      - name: Audit des dépendances de production (échec dès « élevée »)
+        run: npm audit --omit=dev --audit-level=high

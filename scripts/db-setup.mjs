@@ -23,6 +23,8 @@ import { transformSync } from 'esbuild';
 import pg from 'pg';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+// Migrations : connexion propriétaire si elle est fournie (le site en marche peut alors utiliser un rôle limité dans DATABASE_URL)
+if (process.env.DATABASE_URL_OWNER) process.env.DATABASE_URL = process.env.DATABASE_URL_OWNER;
 if (!process.env.DATABASE_URL) {
   // Pendant le build, l'absence de base n'est pas une erreur : le site reste en mode démo
   if (process.argv.includes('--if-configured')) process.exit(0);

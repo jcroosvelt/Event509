@@ -696,6 +696,11 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     const viaLink = await call('GET', `/events/${priv.slug}`);
     expect(viaLink.status).toBe(200);
     expect(viaLink.body).toMatchObject({ id: priv.id, private: true });
+    // L'identifiant interne ne remplace pas le lien secret : anonyme ou autre organisation = introuvable ; son organisation, oui
+    expect((await call('GET', `/events/${priv.id}`)).status).toBe(404);
+    expect((await call('GET', `/events/${priv.id}`, undefined, other.token)).status).toBe(404);
+    expect((await call('GET', `/events/${priv.id}`, undefined, a.token)).status).toBe(200);
+    expect((await call('GET', `/events/${pub.id}`)).status).toBe(200); // un événement public reste ouvert par son identifiant
     const draft = await eventOf(a, { title: 'Brouillon privé', private: true, status: 'draft' });
     expect((await call('GET', `/events/${draft.slug}`)).status).toBe(404);
 
@@ -704,6 +709,7 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect(o.status, JSON.stringify(o.body)).toBe(200);
     expect((await catalog(buyerTokenValue)).some((e) => e.id === priv.id)).toBe(true);
     expect((await catalog()).some((e) => e.id === priv.id)).toBe(false);
+    expect((await call('GET', `/events/${priv.id}`, undefined, buyerTokenValue)).status).toBe(200); // l'acheteur garde l'accès par l'identifiant
 
     // Pas de revente d'un billet d'événement privé
     const tid = (await pool.query(`select id from tickets where order_id = $1`, [o.body.order.id])).rows[0].id as string;
@@ -792,15 +798,20 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
       return call('POST', '/admin/app/upload/finish', { uploadId: st, chunks: parts.length }, adm.token);
     };
     expect((await send(Buffer.from('x'.repeat(300_000)))).status).toBe(422);
+    // Un APK de la bonne application mais signé par une autre clé, ou non signé : refusé
+    const badSigner = await send(readFileSync(new URL('./fixtures/mini-bad-signer.apk', import.meta.url)));
+    expect(badSigner.status).toBe(422);
+    expect(badSigner.body.code).toBe('bad_signer');
+    expect((await send(readFileSync(new URL('./fixtures/mini-unsigned.apk', import.meta.url)))).status).toBe(422);
     expect((await send(apk, [apk.subarray(0, 1000), apk.subarray(1000)])).status).toBe(422); // morceau intermédiaire de taille inattendue
     expect((await call('POST', '/admin/app/upload/chunk', { uploadId: 'up_00000000000000000000', index: 0, data: 'AAAA' }, adm.token)).status).toBe(404);
     expect((await call('POST', '/admin/app/upload/chunk', { uploadId: 'bad', index: 0, data: 'AAAA' }, adm.token)).status).toBe(422);
     // Envoi valide : numéro et nom lus dans l'APK
     const ok = await send(apk);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
-    expect(ok.body.release).toMatchObject({ versionCode: 76, versionName: '1.76.0', size: apk.length, file: '/app/event509.apk' });
+    expect(ok.body.release).toMatchObject({ versionCode: 80, versionName: '1.80.0', size: apk.length, file: '/app/event509.apk' });
     const sha = (await call('GET', '/app/version')).body;
-    expect(sha).toMatchObject({ versionCode: 76, size: apk.length });
+    expect(sha).toMatchObject({ versionCode: 80, size: apk.length });
     expect(sha.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(APP_PACKAGE).toBe('com.event509.event509_app');
     // Une version qui n'est pas plus récente est refusée (code not_newer) ; l'ancien fichier reste
@@ -836,6 +847,29 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     } finally {
       web.close();
     }
+  });
+
+  it('S3m. connexion par mot de passe (anciens comptes) : un ancien hachage est refait au coût actuel après une connexion réussie', async () => {
+    const { randomBytes: rb, scryptSync } = await import('node:crypto');
+    const tag = `${Date.now()}`;
+    const salt = rb(16);
+    const legacy = `scrypt$${salt.toString('base64')}$${scryptSync('ancien-secret1', salt, 64).toString('base64')}`;
+    const email = `legacy_${tag}@sec.test`;
+    await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,$3,'participant',$4,true)`, [`u_leg_${tag}`, email, legacy, JSON.stringify({ name: 'Ancien' })]);
+    const hashOf = async () => (await pool.query(`select password_hash from users where email = $1`, [email])).rows[0].password_hash as string;
+    // Mauvais mot de passe : refusé, hachage inchangé
+    expect((await call('POST', '/auth/login', { email, password: 'mauvais-secret1' })).status).toBe(401);
+    expect(await hashOf()).toBe(legacy);
+    // Bon mot de passe : connexion, puis hachage refait (nouveau format, même mot de passe)
+    const ok = await call('POST', '/auth/login', { email, password: 'ancien-secret1' });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const next = await hashOf();
+    expect(next).toMatch(/^scrypt2\$65536\$8\$2\$/);
+    expect((await call('POST', '/auth/login', { email, password: 'ancien-secret1' })).status).toBe(200);
+    expect(await hashOf()).toBe(next); // déjà migré : plus de nouveau calcul
+    // Compte inconnu : même réponse qu'un mauvais mot de passe
+    const unknown = await call('POST', '/auth/login', { email: `inconnu_${tag}@sec.test`, password: 'nimportequoi1' });
+    expect(unknown.status).toBe(401);
   });
 
   // ---- Téléversement de fichiers

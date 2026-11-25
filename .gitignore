@@ -6,3 +6,18 @@ dev-dist
 test-results
 playwright-report
 tsconfig.tsbuildinfo
+
+# Secrets : jamais dans Git (seul .env.example, sans valeurs réelles, est suivi)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*service-account*.json
+*credentials*.json
+*.sql.gz
+*.bak

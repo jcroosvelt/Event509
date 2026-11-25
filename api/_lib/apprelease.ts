@@ -15,6 +15,13 @@ import type { Ctx, UserRow } from './routes.js';
  */
 
 export const APP_PACKAGE = 'com.event509.event509_app';
+/**
+ * Empreinte SHA-256 du certificat de signature de l'application (information publique, pas un secret). Un APK signé par une autre
+ * clé est refusé : même avec un compte administrateur volé, personne ne peut faire distribuer une autre application sous ce nom.
+ * Changement de clé : renseigner APP_SIGNER_SHA256 dans Vercel (sans toucher au code).
+ */
+const DEFAULT_SIGNER_SHA256 = '7970e03c5b99e76f3a5b1fd1cf3339c9eea7db558cd2132c4d7924ad80bf2fd2';
+export const expectedSigner = () => (process.env.APP_SIGNER_SHA256 ?? DEFAULT_SIGNER_SHA256).replace(/[^0-9a-f]/gi, '').toLowerCase();
 /** Taille d'un morceau envoyé (octets bruts) : une fois en base64, il reste sous la limite de 4,5 Mo d'une requête Vercel. */
 export const CHUNK_BYTES = 2_500_000;
 export const MIN_APK_BYTES = 200_000;
@@ -129,6 +136,42 @@ export function readApk(apk: Buffer): ApkInfo | null {
   }
 }
 
+/**
+ * Empreinte SHA-256 du certificat qui a signé l'APK, lue dans le bloc de signature v2 (juste avant le répertoire central du ZIP).
+ * Le contrôle cryptographique de la signature reste fait par Android à l'installation : ici on refuse seulement un APK qui ne porte
+ * pas le certificat de l'application.
+ */
+export function readApkSigner(apk: Buffer): string | null {
+  try {
+    let eocd = -1;
+    for (let i = apk.length - 22; i >= Math.max(0, apk.length - 65_557); i--) if (apk.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) return null;
+    const cd = apk.readUInt32LE(eocd + 16);
+    if (cd < 32 || apk.toString('latin1', cd - 16, cd) !== 'APK Sig Block 42') return null;
+    const size = Number(apk.readBigUInt64LE(cd - 24));
+    const start = cd - size - 8;
+    if (start < 0 || Number(apk.readBigUInt64LE(start)) !== size) return null;
+    for (let p = start + 8; p + 12 <= cd - 24; ) {
+      const len = Number(apk.readBigUInt64LE(p));
+      if (len < 4 || p + 8 + len > cd - 24) return null;
+      if (apk.readUInt32LE(p + 8) === 0x7109871a) {
+        // signatures v2 : signataires[ signataire[ données signées[ empreintes, certificats[ … ] ], … ] ]
+        let q = p + 12 + 4 + 4 + 4; // longueurs : signataires, premier signataire, données signées
+        q += 4 + apk.readUInt32LE(q); // empreintes
+        q += 4; // longueur de la liste des certificats
+        const certLen = apk.readUInt32LE(q);
+        q += 4;
+        if (certLen < 100 || q + certLen > p + 8 + len) return null;
+        return createHash('sha256').update(apk.subarray(q, q + certLen)).digest('hex');
+      }
+      p += 8 + len;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- Stockage ----------
 
 interface ReleaseRow {
@@ -174,6 +217,16 @@ export async function streamApk(req: IncomingMessage, res: ServerResponse): Prom
       return;
     }
     status = 206;
+  }
+  // Chaque téléchargement complet lit 28 Mo dans la base : limité par adresse IP (20 par heure ; la reprise d'un téléchargement ne compte pas)
+  const ip = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim();
+  if (ip && from === 0 && req.method !== 'HEAD') {
+    const used = await one<{ n: string }>(`select count(*)::text as n from rate_events where key = $1 and at > now() - interval '1 hour'`, [`apk:${ip}`]);
+    if (Number(used?.n ?? 0) >= 20) {
+      res.writeHead(429, { 'Retry-After': '3600', 'Cache-Control': 'no-store' }).end();
+      return;
+    }
+    await db().query(`insert into rate_events (key) values ($1)`, [`apk:${ip}`]);
   }
   res.writeHead(status, {
     'Content-Type': 'application/vnd.android.package-archive',
@@ -262,6 +315,7 @@ export function appReleaseRoutes({ fail, str, admin, audit }: AppReleaseDeps): [
       if (apk.length < MIN_APK_BYTES || apk.length > MAX_APK_BYTES) fail(422, 'Taille de fichier invalide');
       info = readApk(apk) ?? fail(422, 'Ce fichier n’est pas un APK Android valide');
       if (info.packageName !== APP_PACKAGE) fail(422, `Ce n’est pas l’application EVENT509 (${info.packageName})`);
+      if (readApkSigner(apk) !== expectedSigner()) fail(422, 'Ce fichier n’est pas signé avec la clé de l’application EVENT509 : il est refusé.', 'bad_signer');
       const cur = await currentRelease().catch(() => null);
       if (cur && info.versionCode <= cur.version_code) fail(409, `La version en ligne est déjà la ${cur.version_name} (${cur.version_code}). Envoyez une version plus récente.`, 'not_newer');
       if (!cur && info.versionCode <= FALLBACK_RELEASE.versionCode) fail(409, `Une version ${FALLBACK_RELEASE.versionName} est déjà publiée : envoyez une version plus récente.`, 'not_newer');

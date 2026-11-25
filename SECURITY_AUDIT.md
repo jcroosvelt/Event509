@@ -48,3 +48,87 @@ SQL toujours paramétré (les 6 interpolations restantes ne portent que sur des 
 **22 constats** : 1 critique, 5 hautes, 7 moyennes, 7 basses, 3 informatifs.
 
 Les limites de cet audit : revue manuelle de ~200 routes (les handlers à fort enjeu ont été lus intégralement, les autres par échantillonnage et par un test automatique d'accès anonyme à ajouter) ; aucun test d'intrusion actif en production ; `gitleaks`, `semgrep`, `osv-scanner` et CodeQL ne sont pas installés dans cet environnement (recherche de secrets faite par expressions régulières sur l'arbre et l'historique).
+
+
+---
+
+# Audit de sécurité du 25 novembre 2026 (branche `security-hardening`)
+
+Périmètre : site (`api/`, `src/`, configuration Vercel), base Neon, application Android (`event509-apk`) et chaîne de publication de l'APK. Les fonctions ajoutées depuis l'audit du 16 novembre ont été revues en priorité : événements privés, APK hébergé par la plateforme, mise à jour dans l'application, billet téléchargeable.
+
+**Score de risque : 4/10 avant, 2/10 après.** Les contrôles de fond (SQL paramétré, CSRF, cookies `__Host-` HttpOnly Secure SameSite, CSP, contrôle d'accès testé route par route) étaient déjà solides. Les failles trouvées touchaient surtout les nouveautés, et la plupart sont corrigées et testées. Il reste un rôle de base de données trop puissant (bloqué par l'accès Vercel) et une clé de signature Android stockée dans le dépôt (choix à faire par le propriétaire).
+
+## Failles
+
+| ID | Gravité | Catégorie | Fichier / endpoint | Description | Statut |
+|---|---|---|---|---|---|
+| A1 | ÉLEVÉE | Intégrité / chaîne de distribution | `api/_lib/apprelease.ts` (`/admin/app/upload/finish`) | L'APK téléversé n'était vérifié que sur son identifiant : un compte administrateur volé pouvait faire distribuer une autre application sous le nom EVENT509 | corrigée |
+| A2 | MOYENNE | Contrôle d'accès | `GET /events/:id` | Un événement privé pouvait être lu par son identifiant interne, sans le lien secret | corrigée |
+| A3 | MOYENNE | Déni de service / coût | `/app/event509.apk` | Téléchargement public de 28 Mo lu dans la base, sans aucune limite | corrigée |
+| A4 | MOYENNE | Déni de service / aspiration | `/bootstrap`, `/events/:id`, `/share`, `/resale`, `/geo`, `/legal`, avis | Lectures publiques sans limite de débit | corrigée (limite par instance) ; limite globale : pare-feu Vercel |
+| A5 | MOYENNE | Composants vulnérables | `react-router-dom` 6.30.6 | 2 avis (redirection ouverte via « \\ », désérialisation SSR) | corrigée (7.18.7) |
+| A6 | MOYENNE | Configuration base | rôle `neondb_owner` | Le site se connecte avec le rôle propriétaire (DDL, création de rôles, contournement RLS) | à faire (accès Vercel requis) |
+| A7 | MOYENNE | Sauvegardes | Neon | Aucun instantané, rétention de 6 h ; les sauvegardes programmées ne sont pas disponibles sur l'offre actuelle | partiellement corrigée (instantané manuel créé) |
+| A8 | FAIBLE | Hachage | `api/_lib/auth.ts` | scrypt au coût par défaut (N = 16384) | corrigée (N = 65536, r = 8, p = 2, migration à la connexion) |
+| A9 | FAIBLE | Intégrité mise à jour | `lib/native/native_platform.dart` | L'adresse du fichier de mise à jour pouvait viser un autre site (« //hôte ») ; l'empreinte SHA-256 était facultative | corrigée |
+| A10 | FAIBLE | Configuration | `api/_lib/session.ts` | `COOKIE_INSECURE=1` aurait retiré « Secure » même en production | corrigée |
+| A11 | FAIBLE | Secrets | `.gitignore` | `.env`, clés et certificats n'étaient pas ignorés | corrigée |
+| A12 | FAIBLE | Chaîne CI | `build-apk.yml` | Actions GitHub référencées par étiquette mobile ; droit `contents: write` inutile | corrigée (empreintes figées, lecture seule) |
+| A13 | FAIBLE | Variables d'environnement | `.env.example` | 9 variables utilisées mais non documentées | corrigée |
+| A14 | FAIBLE | Clé client exposée | `android/app/google-services.json` | Clé d'API Firebase « client » dans le dépôt privé (prévue pour être embarquée) ; à restreindre | à faire (Google Cloud) |
+| A15 | INFO | Signature Android | `signing/debug.keystore` | Clé de signature de l'APK dans le dépôt, mot de passe par défaut « android » | décision du propriétaire |
+| A16 | INFO | Dépendances de développement | vite / esbuild / vercel (outils) | Avis sur les outils de développement, absents du site en ligne | accepté |
+
+## Corrections (problème → correction → preuve)
+
+- **A1** : le serveur lit le certificat dans le bloc de signature v2 de l'APK et le compare à l'empreinte de la clé de l'application (`APP_SIGNER_SHA256` pour changer de clé). Preuve : `api/apprelease.test.ts` (signé, autre clé, non signé) et `S3l` (téléversement refusé, code `bad_signer`).
+- **A2** : un événement privé ne s'ouvre que par son adresse secrète, sauf pour son organisation, l'administration et les détenteurs d'un billet. Preuve : `S3j`.
+- **A3** : 20 téléchargements complets par heure et par adresse IP ; la reprise d'un téléchargement ne compte pas.
+- **A4** : compteur en mémoire par IP et par route (sans coût pour la base), réponse 429 au-delà.
+- **A5** : `react-router-dom` 7.18.7 ; `npm audit --omit=dev` : 0 vulnérabilité ; e2e : 88 réussis.
+- **A8** : format `scrypt2$N$r$p$sel$hash`, paramètres bornés à la lecture, ancien format re-haché à la première connexion réussie, durée égalisée pour ne pas révéler l'existence d'un compte. Preuve : `api/password.test.ts`, `S3m`.
+- **A9** : chemin limité au site lui-même, empreinte obligatoire. Preuve : `test/native_platform_test.dart`.
+- **A10 à A13** : voir les fichiers cités ; contrôle automatique ajouté : `.github/workflows/security.yml` (recherche de secrets dans tout l'historique, `npm audit` en production) et `scripts/scan-secrets.sh`.
+
+## Actions restantes de votre côté
+
+1. **Rôle de base limité (A6)** : le connecteur Vercel de la session de travail ne voit pas le projet `event509` (il est rattaché à un autre compte). Reconnectez le connecteur Vercel avec le compte qui héberge le site : la création du rôle `event509_app` (lecture/écriture des données seulement) et le changement de `DATABASE_URL` pourront alors être faits automatiquement. Les migrations utiliseront `DATABASE_URL_OWNER`.
+2. **Sauvegardes (A7)** : les instantanés programmés exigent une offre Neon supérieure. En attendant, un instantané « avant-audit-securite-2026-11-25 » est gardé jusqu'au 25 décembre 2026.
+3. **Clé Firebase (A14)** : Google Cloud Console > APIs et services > Identifiants > la clé Android : restreindre aux applications Android (`com.event509.event509_app` + empreinte SHA-1 de la clé de signature) et aux API Firebase utilisées.
+4. **Clé de signature (A15)** : la garder dans le dépôt privé est un risque (toute personne ayant accès au dépôt peut signer une application EVENT509). La changer oblige chaque utilisateur à désinstaller puis réinstaller l'application : décision à prendre par vous.
+5. **Pare-feu Vercel** : ajouter une règle de limite de débit globale sur `/api/*` (tableau de bord Vercel > Firewall).
+
+## Secrets
+
+Aucun secret serveur trouvé dans l'arbre ni dans l'historique des deux dépôts (190 et 70 commits). Seule la clé client Firebase (A14, masquée : `AIza****`) est présente, par conception.
+
+## Recommandations durables
+
+Contrôle automatique des secrets et des dépendances à chaque envoi (`security.yml`), Dependabot (npm, pub, actions GitHub) une fois par semaine, instantané Neon avant chaque changement de schéma, revue de sécurité à chaque nouvelle fonction exposée au public.
+
+## Liste de contrôle (24 points)
+
+- [x] Clés API : aucune clé serveur dans le code ni le bundle client
+- [~] Base de données : TLS vérifié, requêtes paramétrées ; rôle limité en attente (A6)
+- [x] HTTPS : redirection 308, HSTS 2 ans + preload, cookies Secure
+- [x] Hachage des mots de passe : scrypt renforcé, migration transparente
+- [x] Validation côté serveur
+- [x] XSS : CSP stricte, schémas d'URL filtrés
+- [x] Journalisation : refus d'accès, limites, échecs de connexion (sans données sensibles)
+- [x] Routes admin : rôle vérifié côté serveur, testées route par route
+- [x] Requêtes paramétrées
+- [x] Variables d'environnement : documentées, validées à l'usage
+- [x] Rate limiting
+- [x] CORS : l'API ne renvoie aucun en-tête CORS (même origine seulement)
+- [x] En-têtes de sécurité
+- [x] Cookies : `__Host-`, HttpOnly, Secure, SameSite=Lax
+- [x] CSRF : en-tête obligatoire + contrôle d'origine
+- [x] Liens de réinitialisation : jetons aléatoires hachés, expiration courte, usage unique
+- [x] Uploads : liste blanche, taille, nom régénéré ; APK : identifiant + signature
+- [x] Prix / paiements : recalculés côté serveur, paiement relu auprès de la passerelle
+- [x] Mode debug : erreurs génériques avec référence côté client
+- [x] Dépendances vulnérables (production)
+- [x] Paquets inutilisés : aucun trouvé
+- [x] Fichiers exposés : aucun
+- [x] Historique git : aucun secret serveur
+- [~] Révocation des clés : aucune clé compromise à révoquer ; restriction de la clé Firebase à faire (A14)

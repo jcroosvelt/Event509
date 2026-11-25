@@ -1,0 +1,12 @@
+# Mises à jour automatiques des dépendances et des actions GitHub (une proposition par semaine, à relire avant de fusionner)
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -37,6 +37,21 @@ const compiled = routes.map(([method, pattern, handler]) => {
   return { method, re, keys, handler, pattern };
 });
 
+/**
+ * Limite « douce » des lectures publiques les plus coûteuses (copie complète du catalogue, fiches, aperçus, revente) : compteur en
+ * mémoire par adresse IP et par instance, sans aucun coût pour la base. Elle freine un robot qui aspire le site ; une limite
+ * répartie entre toutes les instances se règle dans le pare-feu de Vercel (voir SECURITY_AUDIT).
+ */
+const SOFT_LIMITS: Record<string, number> = { '/bootstrap': 120, '/events/:id': 240, '/events/:id/reviews': 120, '/share': 240, '/resale': 120, '/geo': 120, '/legal': 120 };
+const softHits = new Map<string, { n: number; until: number }>();
+function softAllow(key: string, max: number) {
+  const now = Date.now();
+  if (softHits.size > 5000) for (const [k, v] of softHits) if (v.until < now) softHits.delete(k);
+  const h = softHits.get(key);
+  if (!h || h.until < now) { softHits.set(key, { n: 1, until: now + 60_000 }); return true; }
+  return ++h.n <= max;
+}
+
 /** Renseigné pendant le traitement pour le journal de sécurité (route sous forme de modèle, jamais l'adresse réelle avec ses identifiants). */
 interface Meta { route?: string; userId?: string }
 
@@ -63,6 +78,7 @@ async function handleInner(req: ApiRequest, meta: Meta): Promise<ApiResponse> {
       pathMatched = true;
       if (r.method !== req.method) continue;
       meta.route = r.pattern;
+      if (req.ip && SOFT_LIMITS[r.pattern] && !softAllow(`${r.pattern}|${req.ip}`, SOFT_LIMITS[r.pattern]!)) return { status: 429, body: { message: 'Trop de requêtes. Réessayez dans un instant.' } };
       let params: Record<string, string>;
       try {
         params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1]!)]));

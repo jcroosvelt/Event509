@@ -3,7 +3,7 @@ import type {
   PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, TicketType, VerificationRequest,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
-import { hashPassword, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
+import { hashPassword, passwordNeedsRehash, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
 import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, siteUrl } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { analyticsRoutes } from './analytics.js';
@@ -378,7 +378,7 @@ const resendVerification: Handler = async (c) => {
 };
 
 /** Empreinte factice : sert à dépenser le même temps de calcul pour un compte inconnu. */
-const DUMMY_HASH = ['scrypt', Buffer.alloc(16, 7).toString('base64'), Buffer.alloc(64, 9).toString('base64')].join('$');
+const DUMMY_HASH = ['scrypt2', '65536', '8', '2', Buffer.alloc(16, 7).toString('base64'), Buffer.alloc(64, 9).toString('base64')].join('$');
 
 const login: Handler = async (c) => {
   const email = str(c.body.email, 160).toLowerCase();
@@ -393,12 +393,17 @@ const login: Handler = async (c) => {
   const hasGoogle = u ? !!(await one(`select 1 from auth_identities where user_id = $1 and provider = 'google' and status = 'active'`, [u.id])) : false;
   // Même durée de calcul que le compte existe ou non (pas d'énumération par chronométrage)
   const okPassword = await verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
+  // Ancien coût de hachage : on calcule aussi le nouveau hachage (servi à la migration si le mot de passe est bon, perdu sinon)
+  // pour que la durée reste la même que pour un compte inconnu ou déjà migré
+  const rehashed = u && passwordNeedsRehash(u.password_hash) ? await hashPassword(password) : null;
   if (!u || hasGoogle || !okPassword) {
     await db().query(`insert into rate_events (key) values ($1)`, [failedKey]);
     securityLog('login_failed', { ip: c.ip, known: !!u });
     fail(401, 'Email ou mot de passe incorrect');
   }
   if (u!.status === 'suspended') fail(403, 'Ce compte est suspendu. Contactez le support.');
+  // Ancien coût de hachage : le mot de passe vient d'être prouvé, on le re-hache avec le coût actuel (migration transparente)
+  if (rehashed) await db().query(`update users set password_hash = $2 where id = $1`, [u!.id, rehashed]).catch(() => {});
   // Session serveur (cookie HttpOnly) : aucun jeton n'est renvoyé au navigateur
   const s = await createSession(u!.id, { method: 'password', userAgent: c.userAgent, ip: c.ip });
   return Respond.json({ user: toAppUser(u!) }, [s.cookie]);
@@ -494,9 +499,22 @@ const bootstrap: Handler = async (c) => {
 const getEvent: Handler = async (c) => {
   const e = await eventById(c.params.id);
   const u = c.user;
-  if (!e || (e.status !== 'published' && e.status !== 'ended' && u?.role !== 'admin' && u?.organizer_id !== e.organizerId)) fail(404, 'Événement introuvable');
+  const mine = u?.role === 'admin' || (!!u?.organizer_id && u.organizer_id === e?.organizerId);
+  if (!e || (e.status !== 'published' && e.status !== 'ended' && !mine)) fail(404, 'Événement introuvable');
+  // Événement privé : l'adresse secrète est la seule clé. L'identifiant interne ne suffit pas (sauf pour son organisation,
+  // l'administration et les personnes qui ont déjà un billet), pour qu'on ne puisse pas le deviner ou l'énumérer.
+  if (e!.private === true && !mine && c.params.id !== e!.slug && !(await holdsTicketFor(u, e!.id))) fail(404, 'Événement introuvable');
   return { ...publicEvent(e!, u), taken: await takenSeats(e!.id) };
 };
+
+/** La personne connectée a-t-elle une commande ou un billet pour cet événement ? */
+async function holdsTicketFor(u: UserRow | null, eventId: string) {
+  if (!u) return false;
+  return !!(await one(
+    `select 1 from orders where event_id = $1 and user_id = $2 union all select 1 from tickets where event_id = $1 and lower(owner_email) = $3 limit 1`,
+    [eventId, u.id, (u.email ?? '').toLowerCase()],
+  ));
+}
 
 /** Lien d'un parrainage (?ref=CODE) : seul le prénom de l'ambassadeur est montré, jamais la liste ni les commissions. */
 const referral: Handler = async (c) => {
