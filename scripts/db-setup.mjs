@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { transformSync } from 'esbuild';
 import pg from 'pg';
+import { ensureAppRole } from './app-role.mjs';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 // Migrations : connexion propriétaire si elle est fournie (le site en marche peut alors utiliser un rôle limité dans DATABASE_URL)
@@ -59,6 +60,15 @@ const c = await pool.connect();
 try {
   await c.query(readFileSync(join(root, 'db/schema.sql'), 'utf8'));
   console.log('Schéma à jour.');
+
+  // Rôle de base limité utilisé par le site en fonctionnement (créé ou resynchronisé à chaque déploiement). Un échec ne bloque pas
+  // le déploiement : le site retombe alors sur la connexion d'origine.
+  try {
+    const r = await ensureAppRole(pool, process.env.DATABASE_URL);
+    console.log(r.applied ? `Rôle limité du site ${r.created ? 'créé' : 'à jour'}.` : `Rôle limité non appliqué (${r.reason}).`);
+  } catch (e) {
+    console.warn('Rôle limité du site non appliqué :', e instanceof Error ? e.message : e);
+  }
 
   const empty = Number((await c.query('select count(*) as n from events')).rows[0].n) === 0;
   if (process.argv.includes('--seed') || (process.argv.includes('--seed-if-empty') && empty)) {

@@ -2,7 +2,7 @@ import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, Dispute, EventItem, IssuedTicket, Order, Organizer, Payout,
   PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, TicketType, VerificationRequest,
 } from '../../src/types.js';
-import { all, db, docs, one, tx, upsert, type Q } from './db.js';
+import { all, db, dbRestricted, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, passwordNeedsRehash, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
 import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, siteUrl } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
@@ -2521,7 +2521,9 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
     const env = { DATABASE_URL: !!process.env.DATABASE_URL, JWT_SECRET: (process.env.JWT_SECRET?.length ?? 0) >= 32 };
     try {
-      return { ok: true, db: !!(await one(`select 1 as ok`)), env };
+      const ok = !!(await one(`select 1 as ok`));
+      // dbLimited : vrai si le site se connecte avec le rôle de base limité (jamais le nom ni le mot de passe)
+      return { ok: true, db: ok, dbLimited: dbRestricted(), env };
     } catch {
       return { ok: false, db: false, env };
     }
