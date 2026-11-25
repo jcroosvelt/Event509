@@ -3,12 +3,14 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { UNAUTHORIZED_EVENT } from '@/services/api';
-import { ButtonLink, EmptyState } from './ui';
+import { ButtonLink, EmptyState, Loading } from './ui';
 
 /** Exige une session ; sinon renvoie vers la connexion puis revient ici. */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { user } = useApp();
+  const { user, booting } = useApp();
   const loc = useLocation();
+  // Retour de Google : le profil de la session par cookie se charge, on n'envoie pas tout de suite vers la connexion
+  if (!user && booting) return <Loading />;
   if (!user) return <Navigate to={`/connexion?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   // Compte Google dont le profil (questions de sécurité, conditions) reste à compléter : la session est limitée par le serveur
   if (user.authComplete === false && user.hasGoogle && loc.pathname !== '/compte/completer') return <Navigate to="/compte/completer" replace />;

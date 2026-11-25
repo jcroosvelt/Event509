@@ -175,6 +175,22 @@ export function fetchMe() {
   return http<AppUser>('/auth/me');
 }
 
+/**
+ * Cherche une session par cookie sans rien déclencher si elle n'existe pas (pas de « session expirée » pour un simple visiteur) :
+ * au retour de Google, le serveur a déposé le cookie mais le site n'a encore aucun profil en mémoire.
+ */
+export async function probeSession(): Promise<AppUser | null> {
+  if (DEMO) return null;
+  try {
+    const res = await fetch(`${API_URL}/auth/me`, { headers: { 'X-E509-CSRF': '1' } });
+    if (!res.ok) return null;
+    const me = (await res.json()) as AppUser;
+    return me && typeof me.id === 'string' ? me : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- Connexion Google, passkeys, sécurité du compte (le serveur décide de tout) ----------
 
 export interface AuthConfig { google: boolean; passkeys: boolean; termsVersion?: string }

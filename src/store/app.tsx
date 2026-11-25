@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as db from '@/data/mock';
-import { claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, refreshCatalog, serverLogout, updateProfile, type Session_ } from '@/services/api';
+import { claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, locateByGps, probeSession, refreshCatalog, serverLogout, updateProfile, type Session_ } from '@/services/api';
 import { DEFAULT_PLACE, type Place, type TasteProfile } from '@/data/countries';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
@@ -89,6 +89,8 @@ interface AppState {
   setTheme: (t: Theme) => void;
 
   user: AppUser | null;
+  /** Vrai le temps de chercher une session par cookie au démarrage (retour de Google) : les pages protégées attendent. */
+  booting: boolean;
   /** Connexion de démo : par identifiant d'utilisateur ou par rôle. */
   login: (who?: string) => AppUser;
   /** Mode API : ouvre la session renvoyée par le serveur et charge billets et commandes. */
@@ -241,8 +243,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [setUser, sync],
   );
 
+  const [booting, setBooting] = useState(!DEMO && !user);
   useEffect(() => {
-    if (!DEMO && user) void sync();
+    if (DEMO) return;
+    if (user) {
+      void sync();
+      return;
+    }
+    // Sans profil en mémoire : une session par cookie existe peut-être (retour de la connexion Google, faite par redirection)
+    let alive = true;
+    void probeSession()
+      .then(async (me) => {
+        if (!me || !alive) return;
+        try {
+          localStorage.setItem('e509.token', 'cookie');
+        } catch {
+          /* ignore */
+        }
+        persist('e509.user', me);
+        setUser(me);
+        await Promise.all([sync(), refreshCatalog()]);
+      })
+      .finally(() => alive && setBooting(false));
+    return () => {
+      alive = false;
+    };
     // Une seule fois au démarrage
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -350,9 +375,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setOfflineScans: (fn) => setOfflineScansRaw((s) => fn(s)),
       referral, setReferral,
       toasts, toast, dismissToast,
+      booting,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lang, t, currency, theme, place, setPlace, locate, tastes, profile, user, login, startSession, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
+    [lang, t, currency, theme, place, setPlace, locate, tastes, profile, user, booting, login, startSession, logout, favorites, reminders, follows, tickets, orders, notifications, offlineScans, referral, toasts, toast, dismissToast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
