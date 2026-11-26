@@ -10,8 +10,8 @@ const png = (n = 0) => Buffer.concat([PNG, Buffer.from([n])]).toString('base64')
 
 describe.skipIf(!DB)('Photo de profil', () => {
   let pool: pg.Pool;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let signToken: typeof import('./_lib/auth.js').signToken;
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let signToken: typeof import('../../api/_lib/auth.js').signToken;
   const tag = `av${Date.now()}`;
   let ipN = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,8 +31,8 @@ describe.skipIf(!DB)('Photo de profil', () => {
     process.env.JWT_SECRET = 'q'.repeat(40);
     delete process.env.VERCEL_ENV;
     pool = new pg.Pool({ connectionString: DB });
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ signToken } = await import('./_lib/auth.js'));
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ signToken } = await import('../../api/_lib/auth.js'));
   });
   afterAll(async () => {
     await pool?.query(`delete from files where user_id like 'u_${tag}%'`);

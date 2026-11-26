@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.api.json",
+  "compilerOptions": { "types": ["node"], "allowJs": true },
+  "include": ["tests/api", "api/_lib", "scripts/app-role.d.mts"]
+}

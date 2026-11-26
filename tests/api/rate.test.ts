@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RATE_MAX, RATE_MIN, rateAccepted } from './_lib/routes.js';
+import { RATE_MAX, RATE_MIN, rateAccepted } from '../../api/_lib/routes.js';
 
 describe('taux de change automatique : valeurs refusées', () => {
   it('accepte une variation raisonnable', () => {
@@ -16,8 +16,8 @@ describe.skipIf(!DB)('taux de change automatique (intégration)', () => {
   const fake = (body: unknown, ok = true) => (async () => ({ ok, status: ok ? 200 : 503, json: async () => body })) as unknown as typeof fetch;
   it('met à jour avec une valeur crédible, garde l’ancienne sinon, et enregistre la date', async () => {
     process.env.DATABASE_URL = DB;
-    const { updateMarketRate } = await import('./_lib/routes.js');
-    const { RATES } = await import('./_lib/fees.js');
+    const { updateMarketRate } = await import('../../api/_lib/routes.js');
+    const { RATES } = await import('../../api/_lib/fees.js');
     const { default: pg } = await import('pg');
     const pool = new pg.Pool({ connectionString: DB });
     await pool.query(`delete from settings where key = 'rate'`);
@@ -39,7 +39,7 @@ describe.skipIf(!DB)('taux de change automatique (intégration)', () => {
   });
 });
 
-import { billingCurrencyFor } from './_lib/fees.js';
+import { billingCurrencyFor } from '../../api/_lib/fees.js';
 describe('monnaie de facturation des organisateurs', () => {
   it('dollars hors d’Haïti, gourdes en Haïti ou pays inconnu', () => {
     for (const c of ['US', 'us', 'FR', 'CA', 'DO']) expect(billingCurrencyFor(c), c).toBe('USD');
@@ -51,7 +51,7 @@ describe.skipIf(!DB)('facturation selon le pays (intégration)', () => {
   it('l’abonnement et le boost annoncent la bonne monnaie', async () => {
     process.env.DATABASE_URL = DB;
     process.env.JWT_SECRET = 'q'.repeat(40);
-    const { handle } = await import('./_lib/handler.js');
+    const { handle } = await import('../../api/_lib/handler.js');
     const mk = async (country: string, n: number) => {
       const r = await handle({ method: 'POST', path: '/auth/signup', query: {}, body: { name: `Orga ${country}`, email: `bill${n}-${Date.now()}@sec.test`, password: 'Soleil2026x', acceptTerms: true }, ip: `10.7.0.${n}` });
       expect(r.status, JSON.stringify(r.body)).toBe(200);

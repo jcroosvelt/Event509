@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { APP_PACKAGE, expectedSigner, readApk, readApkSigner } from './_lib/apprelease.js';
+import { APP_PACKAGE, expectedSigner, readApk, readApkSigner } from '../../api/_lib/apprelease.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url));
 const mini = fx('mini.apk');

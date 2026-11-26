@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { APP_ROLE, appRolePassword, restrictedUrl } from './_lib/db.js';
-import { appRolePassword as scriptPassword, ensureAppRole } from '../scripts/app-role.mjs';
+import { APP_ROLE, appRolePassword, restrictedUrl } from '../../api/_lib/db.js';
+import { appRolePassword as scriptPassword, ensureAppRole } from '../../scripts/app-role.mjs';
 
 const URL_OWNER = process.env.TEST_DATABASE_URL;
 
@@ -56,7 +56,7 @@ describe.skipIf(!URL_OWNER)('rôle de base limité : droits réels (base locale 
     vi.resetModules();
     process.env.DATABASE_URL = URL_OWNER;
     process.env.DB_OWNER_ROLE = ownerRole;
-    return import('./_lib/db.js');
+    return import('../../api/_lib/db.js');
   };
 
   it('le site se connecte avec le rôle limité : lit et écrit ses données, ne peut ni créer ni supprimer de table', async (ctx) => {

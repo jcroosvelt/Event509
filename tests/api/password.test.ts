@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { hashPassword, passwordNeedsRehash, verifyPassword } from './_lib/auth.js';
+import { hashPassword, passwordNeedsRehash, verifyPassword } from '../../api/_lib/auth.js';
 
 /** Hachage d'avant l'audit : « scrypt$sel$hash » avec le coût par défaut de Node (N = 16384). */
 function legacyHash(pw: string) {

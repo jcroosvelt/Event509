@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { classifyMetaError, generateCode, hashCode, maskPhone, normalizePhone } from './_lib/otp.js';
+import { classifyMetaError, generateCode, hashCode, maskPhone, normalizePhone } from '../../api/_lib/otp.js';
 
 // ---------- Unitaires (toujours exécutés) ----------
 
@@ -48,8 +48,8 @@ const DB = process.env.TEST_DATABASE_URL;
 describe.skipIf(!DB)('OTP WhatsApp (intégration)', () => {
   let pool: pg.Pool;
   let srv: http.Server;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let signToken: typeof import('./_lib/auth.js').signToken;
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let signToken: typeof import('../../api/_lib/auth.js').signToken;
   let sent: { to: string; code: string; template: string }[] = [];
   let metaFail: { status: number; code: number } | null = null;
   let ipN = 0;
@@ -87,8 +87,8 @@ describe.skipIf(!DB)('OTP WhatsApp (intégration)', () => {
     await pool.query(`delete from otp_verifications`);
     await pool.query(`delete from otp_security_log`);
     await pool.query(`delete from users where email like '%@otp.test'`);
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ signToken } = await import('./_lib/auth.js'));
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ signToken } = await import('../../api/_lib/auth.js'));
   });
   afterAll(async () => {
     await pool?.query(`delete from users where email like '%@otp.test'`);
@@ -379,7 +379,7 @@ describe.skipIf(!DB)('OTP WhatsApp (intégration)', () => {
     const phone = newPhone();
     await call('POST', '/auth/otp/register/send', { phone });
     const wamid = (await rows(phone))[0].wamid;
-    const { recordDeliveryStatus } = await import('./_lib/otp.js');
+    const { recordDeliveryStatus } = await import('../../api/_lib/otp.js');
     await recordDeliveryStatus(wamid, 'delivered');
     expect((await rows(phone))[0].delivery_status).toBe('delivered');
     await recordDeliveryStatus(wamid, 'failed', 131026);

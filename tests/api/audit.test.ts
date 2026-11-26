@@ -9,8 +9,8 @@ const DB = process.env.TEST_DATABASE_URL;
 
 describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des organisations', () => {
   let pool: pg.Pool;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let routes: typeof import('./_lib/routes.js').routes;
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let routes: typeof import('../../api/_lib/routes.js').routes;
   let ipN = 0;
   let seq = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,7 +38,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     if (buyerTok) return buyerTok;
     const id = `u_audbuy${Date.now()}`;
     await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant','{"name":"Acheteur"}', true)`, [id, `${id}@audit.test`]);
-    const { signToken } = await import('./_lib/auth.js');
+    const { signToken } = await import('../../api/_lib/auth.js');
     buyerTok = signToken(id);
     return buyerTok;
   }
@@ -52,8 +52,8 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     pool = new pg.Pool({ connectionString: DB });
     await pool.query(`delete from rate_events`);
     await pool.query(`delete from users where email like '%@audit.test'`);
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ routes } = await import('./_lib/routes.js'));
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ routes } = await import('../../api/_lib/routes.js'));
   });
   afterAll(async () => {
     await pool?.query(`delete from users where email like '%@audit.test'`);
@@ -63,7 +63,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
   async function participant() {
     const id = `u_audp${++seq}${Date.now()}`;
     await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant','{"name":"Part"}', true)`, [id, `${id}@audit.test`]);
-    const { signToken } = await import('./_lib/auth.js');
+    const { signToken } = await import('../../api/_lib/auth.js');
     return { id, token: signToken(id) };
   }
 
@@ -275,7 +275,7 @@ describe.skipIf(!DB)('Audit de sécurité : matrice des rôles et isolement des 
     const adm = await (async () => {
       const id = `u_audadm${Date.now()}`;
       await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','admin','{"name":"Adm"}', true)`, [id, `${id}@audit.test`]);
-      const { signToken } = await import('./_lib/auth.js');
+      const { signToken } = await import('../../api/_lib/auth.js');
       return signToken(id);
     })();
     expect(JSON.stringify((await call('GET', '/admin/orders', undefined, adm)).body)).not.toContain(o.body.order.id);

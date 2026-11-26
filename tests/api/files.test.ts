@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validCover } from './_lib/files.js';
+import { validCover } from '../../api/_lib/files.js';
 
 describe('validCover : images d’événement', () => {
   it('accepte un dégradé normal, un fichier du site et une adresse https', () => {

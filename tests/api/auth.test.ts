@@ -3,9 +3,9 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { normalizeAnswer, checkQuestions, generateRecoveryCode, normalizeCode } from './_lib/secrets.js';
-import { safeNext } from './_lib/google.js';
-import { parseCookies, maskIp, deviceLabel } from './_lib/session.js';
+import { normalizeAnswer, checkQuestions, generateRecoveryCode, normalizeCode } from '../../api/_lib/secrets.js';
+import { safeNext } from '../../api/_lib/google.js';
+import { parseCookies, maskIp, deviceLabel } from '../../api/_lib/session.js';
 
 // ---------- Unitaires (toujours exécutés) ----------
 
@@ -120,8 +120,8 @@ class Authenticator {
 describe.skipIf(!DB)('Authentification Google, passkeys et récupération (intégration)', () => {
   let pool: pg.Pool;
   let srv: http.Server;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let hashPassword: typeof import('./_lib/auth.js').hashPassword;
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let hashPassword: typeof import('../../api/_lib/auth.js').hashPassword;
   const RP = 'event509.test';
   const ORIGIN = 'https://event509.test';
   const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -265,8 +265,8 @@ describe.skipIf(!DB)('Authentification Google, passkeys et récupération (inté
     for (const t of ['rate_events', 'oauth_states', 'pending_signups', 'pending_links', 'recovery_sessions', 'recovery_requests', 'auth_challenges']) await pool.query(`delete from ${t}`);
     await pool.query(`delete from users where email like '%@gmail.test' or email like '%@legacy.test' or email like '%@admin.test'`);
     await pool.query(`delete from organizers where id like 'org_leg%'`);
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ hashPassword } = await import('./_lib/auth.js'));
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ hashPassword } = await import('../../api/_lib/auth.js'));
   });
   afterAll(async () => {
     await pool?.query(`delete from users where email like '%@gmail.test' or email like '%@legacy.test' or email like '%@admin.test'`);

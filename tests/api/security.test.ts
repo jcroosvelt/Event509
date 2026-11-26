@@ -3,8 +3,8 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { boundedNumber, safeWebUrl } from './_lib/safety.js';
-import { privateIp, checkWebhookUrl } from './_lib/devapi.js';
+import { boundedNumber, safeWebUrl } from '../../api/_lib/safety.js';
+import { privateIp, checkWebhookUrl } from '../../api/_lib/devapi.js';
 
 // ---------- Unitaires (toujours exécutés) ----------
 
@@ -47,10 +47,10 @@ const DB = process.env.TEST_DATABASE_URL;
 describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
   let pool: pg.Pool;
   let srv: http.Server;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let routes: typeof import('./_lib/routes.js').routes;
-  let signToken: typeof import('./_lib/auth.js').signToken;
-  let hashPassword: typeof import('./_lib/auth.js').hashPassword;
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let routes: typeof import('../../api/_lib/routes.js').routes;
+  let signToken: typeof import('../../api/_lib/auth.js').signToken;
+  let hashPassword: typeof import('../../api/_lib/auth.js').hashPassword;
   // état des paiements du faux fournisseur : référence → 'ok' | 'failed' (sinon : en attente)
   const payStates = new Map<string, 'ok' | 'failed'>();
   let payCalls = 0;
@@ -127,9 +127,9 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     pool = new pg.Pool({ connectionString: DB });
     for (const t of ['rate_events']) await pool.query(`delete from ${t}`);
     await pool.query(`delete from users where email like '%@sec.test'`);
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ routes } = await import('./_lib/routes.js'));
-    ({ signToken, hashPassword } = await import('./_lib/auth.js'));
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ routes } = await import('../../api/_lib/routes.js'));
+    ({ signToken, hashPassword } = await import('../../api/_lib/auth.js'));
   });
   afterAll(async () => {
     delete process.env.PAY_CLIENT_ID;
@@ -441,7 +441,7 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
       expect(sent).toEqual([]);
       // Le réglage se change par le profil et est rendu au compte
       const b = await mk('toggle', { city: 'Leogane', country: 'HT' });
-      const { signToken: sign } = await import('./_lib/auth.js');
+      const { signToken: sign } = await import('../../api/_lib/auth.js');
       const off = await call('PATCH', '/auth/me', { notifyNearby: false }, sign(b));
       expect(off.body.notifyNearby).toBe(false);
       await eventOf(a, { title: 'Fête à Léogâne', venue: { name: 'Place', address: 'Centre', city: 'Léogâne' } });
@@ -471,7 +471,7 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     });
     try {
       const tag = `${Date.now()}`;
-      const { signToken: sign } = await import('./_lib/auth.js');
+      const { signToken: sign } = await import('../../api/_lib/auth.js');
       const mk = async (key: string, data: Record<string, unknown>, pos?: { lat: number; lng: number; days?: number }) => {
         const id = `u_gps_${key}_${tag}`;
         await pool.query(`insert into users (id, email, password_hash, role, data, auth_complete) values ($1,$2,'x','participant',$3,true)`, [id, `${id}@sec.test`, JSON.stringify({ name: key, ...data })]);
@@ -777,7 +777,7 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
 
   it('S3l. application Android hébergée : réservée à l’administration, version lue dans l’APK, remplacement, téléchargement avec reprise', async () => {
     const { readFileSync } = await import('node:fs');
-    const { streamApk, APP_PACKAGE } = await import('./_lib/apprelease.js');
+    const { streamApk, APP_PACKAGE } = await import('../../api/_lib/apprelease.js');
     const apk = readFileSync(new URL('./fixtures/mini.apk', import.meta.url));
     const adm = await adminUser();
     const org = await organizer();

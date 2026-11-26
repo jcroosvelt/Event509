@@ -6,9 +6,9 @@ const DB = process.env.TEST_DATABASE_URL;
 
 describe.skipIf(!DB)('Badge vérifié et boost', () => {
   let pool: pg.Pool;
-  let handle: typeof import('./_lib/handler.js').handle;
-  let signToken: typeof import('./_lib/auth.js').signToken;
-  let premium: typeof import('./_lib/premium.js');
+  let handle: typeof import('../../api/_lib/handler.js').handle;
+  let signToken: typeof import('../../api/_lib/auth.js').signToken;
+  let premium: typeof import('../../api/_lib/premium.js');
   const tag = `bd${Date.now()}`;
   let ipN = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,9 +47,9 @@ describe.skipIf(!DB)('Badge vérifié et boost', () => {
     process.env.JWT_SECRET = 'q'.repeat(40);
     delete process.env.VERCEL_ENV;
     pool = new pg.Pool({ connectionString: DB });
-    ({ handle } = await import('./_lib/handler.js'));
-    ({ signToken } = await import('./_lib/auth.js'));
-    premium = await import('./_lib/premium.js');
+    ({ handle } = await import('../../api/_lib/handler.js'));
+    ({ signToken } = await import('../../api/_lib/auth.js'));
+    premium = await import('../../api/_lib/premium.js');
   });
   afterAll(async () => {
     await pool?.query(`delete from tickets where owner_email = 'x@badge.test'`);
