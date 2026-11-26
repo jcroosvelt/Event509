@@ -2268,5 +2268,10 @@
   "Version {v} publiée.": "Version {v} published.",
   "{n} appareils prévenus.": "{n} devices notified.",
   "Envoyer et publier": "Upload and publish",
-  "Téléverser l’APK : téléchargement et mises à jour": "Upload the APK: download and updates"
+  "Téléverser l’APK : téléchargement et mises à jour": "Upload the APK: download and updates",
+  "Photo de profil enregistrée": "Profile photo saved",
+  "Photo retirée": "Photo removed",
+  "Retirer la photo": "Remove photo",
+  "Changer la photo": "Change photo",
+  "Ajouter une photo": "Add a photo"
 }

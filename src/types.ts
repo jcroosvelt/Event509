@@ -280,6 +280,8 @@ export interface AppUser {
   email: string;
   phone?: string;
   avatar: string;
+  /** Photo de profil envoyée par la personne (adresse /api/files/…) ; sinon les initiales sont affichées. */
+  avatarUrl?: string;
   role: 'participant' | 'organizer' | 'admin';
   city: string;
   status: 'active' | 'suspended';

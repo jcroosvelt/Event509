@@ -171,7 +171,7 @@ export function FloatingBar({ items, label, title, subtitle, onProfile }: { item
               onContextMenu={(e) => e.preventDefault()}
               className={cx(cell, 'grid place-items-center transition active:scale-90')}
             >
-              <Avatar name={user.name} size={46} />
+              <Avatar name={user.name} src={user.avatarUrl} size={46} />
               <span aria-hidden className="absolute bottom-[7px] right-[7px] h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-surface" />
             </button>
           ) : (

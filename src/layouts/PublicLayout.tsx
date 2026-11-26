@@ -127,7 +127,7 @@ function UserMenu() {
   return (
     <div className="relative hidden lg:block" ref={ref}>
       <button ref={btn} type="button" aria-expanded={open} aria-controls={id} aria-label={t('Menu du compte')} onClick={() => setOpen((o) => !o)} className="rounded-full ring-2 ring-surface transition hover:ring-brand-200">
-        <Avatar name={user.name} size={44} />
+        <Avatar name={user.name} src={user.avatarUrl} size={44} />
       </button>
       {open && (
         <div id={id} className="absolute right-0 z-40 mt-2 w-64 rounded-3xl bg-surface p-2 shadow-2xl ring-1 ring-line">

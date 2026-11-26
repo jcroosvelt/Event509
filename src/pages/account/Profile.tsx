@@ -3,8 +3,9 @@ import { Bell, ChevronRight, Download, Heart, LayoutDashboard, LogOut, Megaphone
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { can, hasOrganizerAccess, teamRoleLabel } from '@/lib/permissions';
-import { Avatar, Badge, Card, IconBadge, StatCard, type Tone } from '@/components/ui';
+import { Badge, Card, IconBadge, StatCard, type Tone } from '@/components/ui';
 import { ApkMenuLink } from '@/components/AppInstall';
+import { AvatarEditor } from '@/components/AvatarEditor';
 
 export default function Profile() {
   const { user, tickets, favorites, orders, logout, t } = useApp();
@@ -26,7 +27,7 @@ export default function Profile() {
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 lg:pt-10">
       <Card className="flex items-center gap-4">
-        <Avatar name={user.name} size={64} />
+        <AvatarEditor size={72} />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-extrabold">{user.name}</h1>
           <p className="truncate text-sm text-ink-muted">{user.email}</p>

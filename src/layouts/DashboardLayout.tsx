@@ -168,7 +168,7 @@ export default function DashboardLayout({
         </ApkMenuLink>
         {user && (
           <Link to="/compte" className="mt-2 flex items-center gap-3 rounded-2xl bg-canvas p-3 hover:bg-line/60">
-            <Avatar name={user.name} size={36} />
+            <Avatar name={user.name} src={user.avatarUrl} size={36} />
             <div className="min-w-0">
               <div className="truncate text-sm font-bold">{user.name}</div>
               <div className="truncate text-xs text-ink-muted">{roleLabel}</div>

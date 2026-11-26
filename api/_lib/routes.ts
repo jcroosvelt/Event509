@@ -424,6 +424,16 @@ const updateMe: Handler = async (c) => {
   // Un numéro confirmé par code ne se change pas ici (sinon la vérification serait contournée)
   if (u.data.phoneVerified === true) delete patch.phone;
   if (patch.name) patch.avatar = initials(patch.name);
+  // Photo de profil : « » la retire (le fichier est supprimé) ; sinon l'adresse doit être une photo de CE compte
+  if (c.body.avatarUrl === '') {
+    await db().query(`delete from files where user_id = $1 and kind = 'avatar'`, [u.id]);
+    await db().query(`update users set data = data - 'avatarUrl' where id = $1`, [u.id]);
+  } else if (typeof c.body.avatarUrl === 'string' && c.body.avatarUrl !== u.data.avatarUrl) {
+    const m = /^\/api\/files\/([\w-]{6,40})$/.exec(c.body.avatarUrl);
+    const own = m && (await one(`select 1 from files where id = $1 and user_id = $2 and kind = 'avatar'`, [m[1], u.id]));
+    if (!own) fail(422, 'Photo de profil invalide');
+    patch.avatarUrl = c.body.avatarUrl;
+  }
   await db().query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify({ ...patch, ...flags })]);
   if (flags.notifyNearby === false) await db().query(`update device_tokens set lat = null, lng = null, located_at = null where user_id = $1`, [u.id]);
   return toAppUser((await one<UserRow>(`select * from users where id = $1`, [u.id]))!);
@@ -470,6 +480,7 @@ const deleteMe: Handler = async (c) => {
   if (u.role === 'admin') fail(409, 'Un administrateur ne peut pas supprimer son compte ici');
   // Opération irréversible : l'identité doit avoir été confirmée il y a moins de 10 minutes (session par cookie)
   if (c.session && !isRecent(c.session)) fail(403, 'Confirmez votre identité pour supprimer votre compte.', 'reauth_required');
+  await db().query(`delete from files where user_id = $1 and kind = 'avatar'`, [u.id]);
   await db().query(`delete from users where id = $1`, [u.id]);
   return null;
 };
@@ -1493,8 +1504,10 @@ async function syncVerification(orgId: string, owner: UserRow, q: Q) {
 
 const uploadFile: Handler = async (c) => {
   const kind = str(c.body.kind, 20) as FileKind;
-  if (!['event_cover', 'org_logo', 'verification'].includes(kind)) fail(422, 'Type de fichier invalide');
-  const orgId = org(c, kind === 'event_cover' ? 'events' : 'settings');
+  if (!['event_cover', 'org_logo', 'verification', 'avatar'].includes(kind)) fail(422, 'Type de fichier invalide');
+  // Photo de profil : réservée à la personne connectée, sans organisation ; les autres types dépendent de l'organisation
+  const orgId = kind === 'avatar' ? '' : org(c, kind === 'event_cover' ? 'events' : 'settings');
+  if (kind === 'avatar') await rateLimit(`avatar:${auth(c).id}`, 12, 60);
   const docType = str(c.body.docType, 20);
   if (kind === 'verification' && !(DOC_TYPES as readonly string[]).includes(docType)) fail(422, 'Type de document invalide');
   const b64 = typeof c.body.data === 'string' ? c.body.data : '';
@@ -1503,16 +1516,21 @@ const uploadFile: Handler = async (c) => {
   const checked = checkFile(kind, data);
   if ('error' in checked) fail(422, checked.error);
   const mime = (checked as { mime: string }).mime;
-  if (kind !== 'verification') {
+  if (kind !== 'verification' && kind !== 'avatar') {
     const n = Number((await one<{ n: string }>(`select count(*) as n from files where organizer_id = $1 and kind <> 'verification'`, [orgId]))?.n ?? 0);
     if (n >= MAX_FILES_PER_ORG) fail(429, 'Limite de fichiers atteinte pour cette organisation');
   }
   const id = newId('f');
   const u = c.user!;
   await tx(async (q) => {
+    // Une seule photo par personne (index unique) : l'ancienne est supprimée avant d'insérer la nouvelle (fichier supprimé, pas masqué)
+    if (kind === 'avatar') await q.query(`delete from files where user_id = $1 and kind = 'avatar'`, [u.id]);
     await q.query(
       `insert into files (id, organizer_id, user_id, kind, doc_type, visibility, mime, name, size, data) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, orgId, u.id, kind, kind === 'verification' ? docType : null, kind === 'verification' ? 'private' : 'public', mime, safeName(c.body.name), data.length, data]);
+      [id, orgId || null, u.id, kind, kind === 'verification' ? docType : null, kind === 'verification' ? 'private' : 'public', mime, safeName(c.body.name), data.length, data]);
+    if (kind === 'avatar') {
+      await q.query(`update users set data = data || $2::jsonb where id = $1`, [u.id, JSON.stringify({ avatarUrl: `/api/files/${id}` })]);
+    }
     if (kind === 'verification') {
       // Un seul document par type : le nouveau remplace l'ancien
       await q.query(`delete from files where organizer_id = $1 and kind = 'verification' and doc_type = $2 and id <> $3`, [orgId, docType, id]);

@@ -62,7 +62,7 @@ export default function Home() {
     <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:pt-10">
       <h1 className="sr-only">{t('Découvrez les événements près de chez vous')}</h1>
       <div className="mb-6 flex items-center gap-3">
-        {user ? <Avatar name={user.name} size={48} /> : <IconBadge size="lg"><Sparkles className="h-5 w-5" /></IconBadge>}
+        {user ? <Avatar name={user.name} src={user.avatarUrl} size={48} /> : <IconBadge size="lg"><Sparkles className="h-5 w-5" /></IconBadge>}
         <div className="min-w-0 flex-1">
           <div className="text-sm text-ink-muted">{greeting} !</div>
           <div className="truncate text-lg font-bold text-ink">{user ? user.name : t('Bienvenue sur Event509')}</div>

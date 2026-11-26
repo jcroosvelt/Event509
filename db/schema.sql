@@ -164,9 +164,9 @@ create table if not exists settings (
 -- Le contenu est gardé dans la base, après réduction des images côté navigateur.
 create table if not exists files (
   id text primary key,
-  organizer_id text not null,
+  organizer_id text,
   user_id text,
-  kind text not null check (kind in ('event_cover', 'org_logo', 'verification')),
+  kind text not null,
   doc_type text,
   visibility text not null check (visibility in ('public', 'private')),
   mime text not null,
@@ -176,6 +176,11 @@ create table if not exists files (
   created_at timestamptz not null default now()
 );
 create index if not exists files_org on files(organizer_id, kind);
+-- Photo de profil (tout compte, organisateur et administrateur compris) : un seul fichier par personne, sans organisation
+alter table files alter column organizer_id drop not null;
+alter table files drop constraint if exists files_kind_check;
+alter table files add constraint files_kind_check check (kind in ('event_cover', 'org_logo', 'verification', 'avatar'));
+create unique index if not exists files_avatar_user on files(user_id) where kind = 'avatar';
 
 -- Achat sans compte : la clé d'accès (dans le lien reçu par email) permet de retrouver une commande et ses billets.
 alter table orders add column if not exists access_key text;

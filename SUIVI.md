@@ -216,3 +216,4 @@
 - 2026-11-25 : mise à jour de l'application téléchargée et installée dans l'application ; icône classique transparente (plus d'icône adaptative) ; barre sans onglet « Organisateur » pour les visiteurs ; règle « priorité aux demandes de Joseph » ajoutée aux consignes.
 - 2026-11-25 : audit de sécurité (branche security-hardening) : 13 failles corrigées, 3 actions restantes ; application 1.81.0 (administrateur et organisateur arrivent sur leur tableau de bord à la connexion).
 - 2026-11-25 : base de données : rôle limité `event509_app` créé automatiquement au déploiement et utilisé par le site (vérifié en production : `dbLimited:true`, connexion et écritures OK) ; repli automatique et interrupteur `DB_RESTRICTED=0`.
+- 2026-11-26 : photo de profil pour tous les comptes (participant, organisateur, administrateur) : ajout, remplacement, retrait ; une seule photo par personne, supprimée avec le compte ; affichée dans le profil, la barre flottante et les menus du site.
