@@ -20,6 +20,10 @@ function absoluteSocialImage(): Plugin {
     name: 'e509-absolute-social-image',
     transformIndexHtml(html) {
       if (!base) return html;
+      // Accueil : « / » est servi par le fichier statique (un fichier l'emporte sur toute réécriture) : adresse canonique et données
+      // structurées du site y sont donc écrites directement. Les autres pages posent la leur (useTitle) ou sont en « noindex ».
+      const ld = JSON.stringify([{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'Event509', url: `${base}/`, inLanguage: ['fr', 'en'] }, { '@context': 'https://schema.org', '@type': 'Organization', name: 'Event509', url: `${base}/`, logo: `${base}/icon-512.png` }]).replace(/</g, '\\u003c');
+      html = html.replace('</head>', `    <link rel="canonical" href="${base}/" />\n    <script type="application/ld+json">${ld}</script>\n  </head>`);
       return html.replace(/(<meta (?:property="og:image"|name="twitter:image") content=")\/(og-default\.png")/g, `$1${base}/$2`);
     },
   };
