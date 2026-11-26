@@ -33,7 +33,7 @@ const STEPS = [
 /** Présentation du programme. Tarifs, conditions et avantages viennent des réglages de l'administration. */
 export default function VerifiedProgram() {
   const { t, lang } = useApp();
-  useTitle(t('Devenez un organisateur vérifié'));
+  useTitle(t('Devenez un organisateur vérifié'), { path: '/organisateur-verifie', description: t('Le badge rouge « Organisateur vérifié » : identité contrôlée, outils professionnels et visibilité renforcée pour vos événements.') });
   const cfg = useAsync(() => (premiumAvailable ? getPremiumConfig() : Promise.resolve(null)), []);
   if (cfg.loading) return <Loading />;
   const c = cfg.data;

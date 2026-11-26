@@ -56,13 +56,66 @@ export function useOnline() {
 }
 
 /** Titre de l'onglet du navigateur. */
-export function useTitle(title?: string) {
+export interface SeoOptions {
+  description?: string;
+  /** Chemin canonique (« /e/mon-evenement ») ; par défaut, la page courante sans paramètres. */
+  path?: string;
+  image?: string;
+  /** Page à ne pas indexer (compte, paiement, connexion, résultats filtrés…). */
+  noindex?: boolean;
+}
+
+/** Pose une balise de l'en-tête et renvoie de quoi la remettre comme avant. */
+function setHead(selector: string, make: () => HTMLElement, attr: string, value: string) {
+  let el = document.head.querySelector<HTMLElement>(selector);
+  const created = !el;
+  if (!el) {
+    el = make();
+    document.head.appendChild(el);
+  }
+  const prev = el.getAttribute(attr);
+  el.setAttribute(attr, value);
+  return () => {
+    if (created) el!.remove();
+    else if (prev === null) el!.removeAttribute(attr);
+    else el!.setAttribute(attr, prev);
+  };
+}
+const meta = (key: 'name' | 'property', name: string, value: string) =>
+  setHead(`meta[${key}="${name}"]`, () => { const m = document.createElement('meta'); m.setAttribute(key, name); return m; }, 'content', value);
+
+/**
+ * Titre de la page et, au besoin, ses balises de référencement (description, adresse canonique, Open Graph, X, « noindex »).
+ * Les robots de partage et les moteurs de recherche reçoivent de toute façon la page préparée par le serveur (api/_lib/seo.ts) ;
+ * ceci couvre les visiteurs et les moteurs qui exécutent le JavaScript.
+ */
+export function useTitle(title?: string, seo?: SeoOptions) {
+  const description = seo?.description;
+  const path = seo?.path;
+  const image = seo?.image;
+  const noindex = seo?.noindex;
   useEffect(() => {
     if (!title) return;
     const prev = document.title;
-    document.title = `${title} · Event509`;
+    const full = `${title} · Event509`;
+    document.title = full;
+    const undo: (() => void)[] = [];
+    if (description || path || image || noindex) {
+      const url = `${window.location.origin}${path ?? window.location.pathname.replace(/(.)\/+$/, '$1')}`;
+      undo.push(setHead('link[rel="canonical"]', () => { const l = document.createElement('link'); l.setAttribute('rel', 'canonical'); return l; }, 'href', url));
+      undo.push(meta('property', 'og:title', title), meta('name', 'twitter:title', title), meta('property', 'og:url', url));
+      if (description) undo.push(meta('name', 'description', description), meta('property', 'og:description', description), meta('name', 'twitter:description', description));
+      if (image) undo.push(meta('property', 'og:image', image), meta('name', 'twitter:image', image));
+      undo.push(meta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow'));
+    }
     return () => {
       document.title = prev;
+      undo.reverse().forEach((u) => u());
     };
-  }, [title]);
+  }, [title, description, path, image, noindex]);
+}
+
+/** Pages privées ou sans valeur pour un moteur de recherche (tableaux de bord, compte) : jamais indexées. */
+export function useNoIndex() {
+  useEffect(() => meta('name', 'robots', 'noindex, nofollow'), []);
 }

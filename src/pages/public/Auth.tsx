@@ -35,7 +35,7 @@ const demoAccounts = [
 export default function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const { login, startSession, updateUser, toast, t } = useApp();
   const signup = mode === 'signup';
-  useTitle(signup ? t('Créer un compte') : t('Connexion'));
+  useTitle(signup ? t('Créer un compte') : t('Connexion'), { noindex: true });
   const nav = useNavigate();
   const [params] = useSearchParams();
   const next = safeInternalPath(params.get('next')) ?? null;

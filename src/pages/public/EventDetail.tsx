@@ -57,7 +57,7 @@ export default function EventDetail() {
   const [reporting, setReporting] = useState(false);
   const report = useForm({ reason: 'misleading', details: '' }, { details: (v) => (String(v).trim().length < 10 ? t('Décrivez le problème en quelques mots (10 caractères au moins)') : undefined) });
   const sessionLabel = useSessionLabel();
-  useTitle(ev?.title);
+  useTitle(ev?.title, ev ? { path: `/e/${ev.slug}`, description: [ev.venue?.city, ev.description].filter(Boolean).join(' · ').replace(/\s+/g, ' ').slice(0, 200) || ev.title, image: ev.images?.[0]?.startsWith('/api/files/') ? `${window.location.origin}${ev.images[0]}` : undefined, noindex: ev.private === true } : undefined);
 
   // Événement privé : jamais indexé par les moteurs de recherche
   useEffect(() => {

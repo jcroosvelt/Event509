@@ -4,7 +4,7 @@ import { useTitle } from '@/lib/hooks';
 
 export default function NotFound() {
   const { t } = useApp();
-  useTitle(t('Page introuvable'));
+  useTitle(t('Page introuvable'), { noindex: true });
   return (
     <div className="mx-auto max-w-md px-4 py-24 text-center">
       <div aria-hidden className="text-7xl font-extrabold tracking-tight text-ink">4<span className="text-brand-ink">0</span>4</div>

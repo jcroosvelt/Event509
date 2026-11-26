@@ -18,7 +18,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*"
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
         }
       ],
       "destination": "/api?path=share&kind=e&slug=:slug"
@@ -29,7 +29,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly).*"
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
         }
       ],
       "destination": "/api?path=share&kind=o&slug=:slug"
@@ -43,11 +43,133 @@
       "destination": "/api?path=:path*"
     },
     {
+      "source": "/robots.txt",
+      "destination": "/api?path=seo/robots"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api?path=seo/sitemap&name=index"
+    },
+    {
+      "source": "/sitemap-:name.xml",
+      "destination": "/api?path=seo/sitemap&name=:name"
+    },
+    {
+      "source": "/og/:kind/:slug.png",
+      "destination": "/api?path=og&kind=:kind&slug=:slug"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=home"
+    },
+    {
+      "source": "/explorer",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=explore"
+    },
+    {
+      "source": "/telecharger",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=download"
+    },
+    {
+      "source": "/organisateur-verifie",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=program"
+    },
+    {
+      "source": "/cgu",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=terms"
+    },
+    {
+      "source": "/confidentialite",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=privacy"
+    },
+    {
+      "source": "/remboursement",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=refund"
+    },
+    {
+      "source": "/ambassadeurs",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|SkypeUriPreview|Signal|Viber|vkShare|redditbot|Embedly|Googlebot|Google-InspectionTool|bingbot|DuckDuckBot|YandexBot|Applebot|Baiduspider|Mastodon|Bluesky).*"
+        }
+      ],
+      "destination": "/api?path=share&kind=ambassador"
+    },
+    {
       "source": "/((?!api/|assets/|.*\\.[a-z0-9]+$).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/(admin|organisateur|compte|connexion|inscription|mot-de-passe-oublie|reinitialiser|verifier-email|retour-paiement|commande|billets|favoris|notifications|fil|desinscription|revente|widget|app)(/.*)?",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/e/:slug/achat",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
     {
       "source": "/((?!widget/).*)",
       "headers": [
@@ -157,7 +279,8 @@
   ],
   "functions": {
     "api/index.ts": {
-      "maxDuration": 15
+      "maxDuration": 15,
+      "includeFiles": "server-assets/**"
     }
   },
   "crons": [

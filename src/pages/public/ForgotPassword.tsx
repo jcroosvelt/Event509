@@ -78,7 +78,7 @@ export default function ForgotPassword() {
   useEffect(() => {
     if (!DEMO) void otpEnabled().then(setWa);
   }, []);
-  useTitle(t('Mot de passe oublié'));
+  useTitle(t('Mot de passe oublié'), { noindex: true });
   const [sent, setSent] = useState('');
   const [loading, setLoading] = useState(false);
   const form = useForm({ email: '' }, { email: (v) => (!isEmail(v) ? t('Saisissez une adresse comme nom@domaine.com') : undefined) });

@@ -19,7 +19,7 @@ export default function PaymentReturn() {
   const [params] = useSearchParams();
   const id = params.get('refference_id') ?? params.get('reference_id') ?? '';
   const [state, setState] = useState<'checking' | 'pending' | 'failed' | 'unknown'>('checking');
-  useTitle(t('Paiement'));
+  useTitle(t('Paiement'), { noindex: true });
 
   useEffect(() => {
     if (!id) {

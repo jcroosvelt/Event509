@@ -36,7 +36,7 @@ export default function Legal({ page }: { page: LegalDoc }) {
   const raw = data?.[page]?.[lang] ?? legalDefaults[page][lang];
   const values = { ...currentSiteInfo(), ...feeTokens(currentFeeSettings(), lang) };
   const doc = parseDoc(fillTokens(raw, values, lang));
-  useTitle(doc.title);
+  useTitle(doc.title, { path: window.location.pathname });
   if (loading) return <Loading />;
   return (
     <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6 lg:pt-12">

@@ -13,7 +13,7 @@ import { Button, Card, Loading } from '@/components/ui';
  */
 export default function DownloadApp() {
   const { t } = useApp();
-  useTitle(t('Application Android'));
+  useTitle(t('Application Android'), { path: '/telecharger', description: t('Téléchargez l’application Android Event509 : vos billets toujours dans votre téléphone, même sans connexion, et les événements près de chez vous.') });
   const release = useRelease();
   const installed = useAppBuild();
   const inside = inApp();

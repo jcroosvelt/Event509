@@ -8,7 +8,7 @@ import { Button, Card, Field, Input } from '@/components/ui';
 
 export default function ResetPassword() {
   const { t, toast } = useApp();
-  useTitle(t('Nouveau mot de passe'));
+  useTitle(t('Nouveau mot de passe'), { noindex: true });
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const nav = useNavigate();

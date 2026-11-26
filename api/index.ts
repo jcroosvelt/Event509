@@ -38,7 +38,7 @@ export default async function api(req: VercelRequest, res: VercelResponse) {
   });
   res.setHeader('Cache-Control', 'no-store');
   for (const [k, v] of Object.entries(out.headers ?? {})) res.setHeader(k, v);
-  if (typeof out.body === 'string' && String(out.headers?.['Content-Type'] ?? '').startsWith('text/html')) {
+  if (typeof out.body === 'string' && /^(text\/|application\/xml)/.test(String(out.headers?.['Content-Type'] ?? ''))) {
     res.status(out.status).send(out.body);
     return;
   }

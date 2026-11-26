@@ -9,7 +9,7 @@ import { Card, Spinner } from '@/components/ui';
 /** Page ouverte depuis le lien de l'email de confirmation. */
 export default function VerifyEmail() {
   const { t, user, updateUser } = useApp();
-  useTitle(t('Confirmation de l’adresse email'));
+  useTitle(t('Confirmation de l’adresse email'), { noindex: true });
   const token = useSearchParams()[0].get('token') ?? '';
   const [state, setState] = useState<'wait' | 'ok' | 'bad'>(token ? 'wait' : 'bad');
 

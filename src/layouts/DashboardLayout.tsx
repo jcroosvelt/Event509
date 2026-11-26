@@ -1,3 +1,4 @@
+import { useNoIndex } from '@/lib/hooks';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CalendarPlus, Download, LogOut, X, type LucideIcon } from 'lucide-react';
@@ -58,6 +59,7 @@ export default function DashboardLayout({
   bottom: NavItem[];
   center: NavItem;
 }) {
+  useNoIndex(); // espace connecté : jamais indexé
   const { user, t, logout } = useApp();
   const nav = useNavigate();
   const signOut = () => {

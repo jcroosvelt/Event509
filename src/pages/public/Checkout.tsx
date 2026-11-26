@@ -32,7 +32,7 @@ export default function Checkout() {
   const nav = useNavigate();
   const app = useApp();
   const { t, lang } = app;
-  useTitle(t('Finaliser la commande'));
+  useTitle(t('Finaliser la commande'), { noindex: true });
   const { data: ev, loading } = useAsync(() => getEvent(slug), [slug]);
   const sessionLabel = useSessionLabel();
   const occ = params.get('s') ?? undefined;

@@ -11,6 +11,21 @@ if (process.env.VERCEL_ENV === 'production' && !process.env.VITE_API_URL) {
 }
 
 /**
+ * Aperçus de liens : les robots exigent une adresse ABSOLUE pour l'image. Remplace les adresses relatives de index.html par celles du
+ * site (SITE_URL, sinon l'adresse de production de Vercel) ; en local, elles restent relatives.
+ */
+function absoluteSocialImage(): Plugin {
+  const base = (process.env.SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '')).replace(/\/$/, '');
+  return {
+    name: 'e509-absolute-social-image',
+    transformIndexHtml(html) {
+      if (!base) return html;
+      return html.replace(/(<meta (?:property="og:image"|name="twitter:image") content=")\/(og-default\.png")/g, `$1${base}/$2`);
+    },
+  };
+}
+
+/**
  * En local (« vite preview », tests e2e), applique EXACTEMENT les en-têtes de sécurité de vercel.json (CSP comprise), pour que les tests
  * de bout en bout détectent tout ce que la politique de sécurité bloquerait en production.
  */
@@ -32,6 +47,7 @@ function previewSecurityHeaders(): Plugin {
 
 export default defineConfig({
   plugins: [
+    absoluteSocialImage(),
     react(),
     previewSecurityHeaders(),
     // Cache hors ligne (sans installation PWA) : l'interface, les polices et

@@ -24,7 +24,7 @@ const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSt
 export default function Home() {
   const { t, user, tickets, favorites, lang, place, profile } = useApp();
   const [personalize, setPersonalize] = useState(false);
-  useTitle(t('Découvrir'));
+  useTitle(t('Découvrir'), { path: '/', description: t('Découvrez des concerts, soirées, conférences et ateliers, achetez vos billets en ligne (MonCash, NatCash, carte) et gardez-les dans votre téléphone.') });
   const nav = useNavigate();
   const { data: events, loading } = useAsync(() => listEvents({ sort: 'date' }), []);
   // « Pour vous » : ma ville, puis mon pays, puis mes goûts, puis la date

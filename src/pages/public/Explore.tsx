@@ -16,7 +16,7 @@ const whenLabels = { '': 'Toutes', today: 'Aujourd’hui', weekend: 'Ce week-end
 
 export default function Explore() {
   const { t, place, profile, lang } = useApp();
-  useTitle(t('Explorer'));
+  useTitle(t('Explorer'), { path: '/explorer', noindex: window.location.search.length > 1, description: t('Trouvez des événements près de chez vous : concerts, soirées, conférences, ateliers. Filtrez par date, lieu et catégorie.') });
   const [personalize, setPersonalize] = useState(false);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState(false);

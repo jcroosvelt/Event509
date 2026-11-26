@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.1.1",
+    "@resvg/resvg-js": "2.6.2",
     "@simplewebauthn/browser": "13.1.0",
     "@simplewebauthn/server": "13.3.3",
     "hash-wasm": "4.12.0",

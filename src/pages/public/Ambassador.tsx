@@ -10,7 +10,7 @@ import { Button, Card, IconBadge, SparkBars, StatCard } from '@/components/ui';
 
 export default function Ambassador() {
   const { user, toast, lang, t } = useApp();
-  useTitle(t('Programme ambassadeurs'));
+  useTitle(t('Programme ambassadeurs'), { path: '/ambassadeurs', description: t('Devenez ambassadeur Event509 : partagez des événements avec votre lien et gagnez une commission sur les billets vendus.') });
   const base = (user?.name.split(' ')[0] ?? 'AMI').toUpperCase().normalize('NFD').replace(/[^A-Z]/g, '');
   const existing = ambassadors.find((a) => user && a.name === user.name);
   const [me, setMe] = useState(existing ?? null);

@@ -530,16 +530,20 @@ describe.skipIf(!DB)('Sécurité de l’API (intégration)', () => {
     expect(r.status).toBe(200);
     const html = String(r.body);
     expect(html).toContain('<meta property="og:title" content="Concert &lt;b&gt;&quot;Test&quot;&lt;/b&gt; &amp; Cie" />');
-    expect(html).not.toMatch(/<script|<b>/i);
-    expect(html).toContain('<meta property="og:image" content="https://exemple.com/affiche.jpg" />');
+    // Seule balise <script> permise : les données structurées (JSON-LD, « < » échappé) ; le texte saisi n'est jamais interprété
+    expect(html).not.toMatch(/<script(?! type="application\/ld\+json")|<b>/i);
+    expect(html).not.toContain('alert(1)</script>');
+    // Image d'aperçu : générée par le site (jamais une adresse externe saisie par l'organisateur)
+    expect(html).toMatch(/<meta property="og:image" content="https:\/\/[^"]+\/og\/e\/[^"?]+\.png\?v=[0-9a-f]{8}" \/>/);
+    expect(html).not.toContain('exemple.com/affiche.jpg');
     expect(html).toMatch(/og:description" content="[^"]*Jacmel[^"]*dès 500 HTG/);
     expect(html).toMatch(/og:url" content="https:\/\/[^"]+\/e\//);
     expect(html).toContain('summary_large_image');
-    // Affiche en dégradé : image par défaut ; fichier du site : adresse absolue
+    // Affiche en dégradé ou fichier du site : image d'aperçu générée dans les deux cas ; le fichier du site sert d'image aux données structurées
     const grad = await eventOf(a, { title: 'Sans affiche', cover: 'linear-gradient(135deg, #1509F3 0%, #0C0640 100%)' });
-    expect(String((await callQ('GET', '/share', { kind: 'e', slug: grad.slug })).body)).toMatch(/og:image" content="https:\/\/[^"]+\/og-default\.png"/);
+    expect(String((await callQ('GET', '/share', { kind: 'e', slug: grad.slug })).body)).toMatch(/og:image" content="https:\/\/[^"]+\/og\/e\/[^"?]+\.png\?v=/);
     const file = await eventOf(a, { title: 'Avec fichier', cover: '/api/files/abcdef123456' });
-    expect(String((await callQ('GET', '/share', { kind: 'e', slug: file.slug })).body)).toMatch(/og:image" content="https:\/\/[^"]+\/api\/files\/abcdef123456"/);
+    expect(String((await callQ('GET', '/share', { kind: 'e', slug: file.slug })).body)).toContain('"image":["https://');
     // Brouillon, événement inconnu : rien n'est montré
     const draft = await eventOf(a, { title: 'Secret', status: 'draft' });
     expect((await callQ('GET', '/share', { kind: 'e', slug: draft.slug })).status).toBe(404);

@@ -63,7 +63,7 @@ export default function Confirmation() {
   }, [id, key]);
   // Application Android : écran allumé et captures bloquées tant que les billets sont à l'écran
   useTicketScreen(!pending && tickets.some((k) => k.status === 'valid'));
-  useTitle(pending ? t('Commande en attente') : t('Commande confirmée'));
+  useTitle(pending ? t('Commande en attente') : t('Commande confirmée'), { noindex: true });
 
   if (remote.loading && !order) return <Loading />;
   if (!order)

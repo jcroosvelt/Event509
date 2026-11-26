@@ -9,7 +9,7 @@ import { Loading } from '@/components/ui';
 /** Page ouverte depuis le lien de désinscription d'un email de campagne : le jeton prouve que le lien est bien le sien. */
 export default function Unsubscribe() {
   const { t } = useApp();
-  useTitle(t('Désinscription'));
+  useTitle(t('Désinscription'), { noindex: true });
   const [p] = useSearchParams();
   const [state, setState] = useState<{ org: string } | 'error' | null>(null);
   useEffect(() => {

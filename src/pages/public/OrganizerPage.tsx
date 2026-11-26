@@ -16,7 +16,7 @@ export default function OrganizerPage() {
   const { slug = '' } = useParams();
   const { t, lang, follows, toggleFollow, toast, theme } = useApp();
   const { data, loading } = useAsync(() => getOrganizerPage(slug), [slug]);
-  useTitle(data?.org.name);
+  useTitle(data?.org.name, data ? { path: `/o/${data.org.slug}`, description: (data.org.bio || `Les événements de ${data.org.name} sur Event509.`).replace(/\s+/g, ' ').slice(0, 200) } : undefined);
 
   if (loading) return <Loading />;
   if (!data) return <NotFound />;
@@ -38,7 +38,8 @@ export default function OrganizerPage() {
       ].filter((x) => safeHref(x.url))
     : [];
   const share = () => {
-    const url = window.location.href;
+    // Adresse canonique : jamais l'alias /organisateur/…, ni des paramètres de suivi
+    const url = `${window.location.origin}/o/${org.slug}`;
     if (typeof navigator.share === 'function') navigator.share({ title: org.name, url }).catch(() => {});
     else navigator.clipboard?.writeText(url).then(() => toast(t('Lien copié')));
   };
