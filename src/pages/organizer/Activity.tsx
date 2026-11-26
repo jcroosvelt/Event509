@@ -10,6 +10,7 @@ import { relative } from '@/lib/format';
 import { teamRoleLabel } from '@/lib/permissions';
 import { Card, EmptyState, Field, Loading, PageHeader, Segmented, Select, Table, Td } from '@/components/ui';
 import type { TeamRole } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 /** Actions enregistrées par le serveur (en français) : traduites à l'affichage. */
 const actionLabels: Record<string, string> = {
@@ -72,7 +73,7 @@ export default function Activity() {
           </div>
           <Card className="!p-0 overflow-hidden">
             <Table caption={t('Journal d’activité')} head={[t('Quand'), t('Membre'), t('Action'), t('Détail')]}>
-              {d.logs.map((l) => <tr key={l.id}><Td className="whitespace-nowrap text-ink-soft">{new Date(l.at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</Td><Td className="font-semibold">{l.user}</Td><Td>{t(actionLabels[l.action] ?? l.action)}</Td><Td className="max-w-[260px] truncate text-ink-soft">{l.target}</Td></tr>)}
+              {d.logs.map((l) => <tr key={l.id}><Td className="whitespace-nowrap text-ink-soft">{new Date(l.at).toLocaleString(intlLocale(lang), { dateStyle: 'short', timeStyle: 'short' })}</Td><Td className="font-semibold">{l.user}</Td><Td>{t(actionLabels[l.action] ?? l.action)}</Td><Td className="max-w-[260px] truncate text-ink-soft">{l.target}</Td></tr>)}
               {!d.logs.length && <tr><Td className="text-ink-muted">{t('Aucune activité enregistrée.')}</Td><Td /><Td /><Td /></tr>}
             </Table>
           </Card>

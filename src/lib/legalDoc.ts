@@ -51,9 +51,9 @@ export function feeTokens(f: FeeSettings, lang: Lang): Record<string, string> {
   const fixed = (part: number) => (f.fixedHTG * part) / 100;
   const text = (p: number, fx: number) => {
     const parts: string[] = [];
-    if (p > 0) parts.push(lang === 'en' ? `${num(p, lang)}% of the ticket price` : `${num(p, lang)} % du prix du billet`);
-    if (fx > 0) parts.push(lang === 'en' ? `${num(fx, lang)} HTG per ticket` : `${num(fx, lang)} HTG par billet`);
-    return parts.length ? parts.join(' + ') : lang === 'en' ? 'no fee' : 'aucun frais';
+    if (p > 0) parts.push(lang === 'en' ? `${num(p, lang)}% of the ticket price` : lang === 'es' ? `${num(p, lang)} % del precio del boleto` : `${num(p, lang)} % du prix du billet`);
+    if (fx > 0) parts.push(lang === 'en' ? `${num(fx, lang)} HTG per ticket` : lang === 'es' ? `${num(fx, lang)} HTG por boleto` : `${num(fx, lang)} HTG par billet`);
+    return parts.length ? parts.join(' + ') : lang === 'en' ? 'no fee' : lang === 'es' ? 'sin gastos' : 'aucun frais';
   };
   return {
     commission: num(f.percent, lang),
@@ -91,7 +91,7 @@ export function parseDoc(text: string): ParsedDoc {
 
 /** Remplace {{valeur}} par le réglage de l'administrateur ; s'il manque : « [à renseigner] ». */
 export function fillTokens(text: string, values: Record<string, string>, lang: Lang) {
-  const missing = lang === 'en' ? '[to be provided]' : '[à renseigner]';
+  const missing = lang === 'en' ? '[to be provided]' : lang === 'es' ? '[por completar]' : '[à renseigner]';
   return text.replace(/\{\{(\w+)\}\}/g, (_, k: string) => (values[k]?.trim() ? values[k]!.trim() : missing));
 }
 

@@ -6,6 +6,7 @@ import type { EventItem } from '@/types';
 import type { Lang } from '@/types';
 import { BASE_CITIES, distanceKm } from './cityCoords';
 import { WORLD_CITIES } from './worldCities';
+import { intlLocale } from '@/lib/i18n';
 
 export { distanceKm };
 
@@ -21,7 +22,7 @@ export const CITY_COUNTRY: Record<string, string> = { Miami: 'US', 'Montréal': 
 /** Nom d'un pays dans la langue de l'interface. */
 export function countryName(code: string, lang: Lang = 'fr') {
   try {
-    return new Intl.DisplayNames(lang === 'en' ? 'en-US' : 'fr-FR', { type: 'region' }).of(code) ?? code;
+    return new Intl.DisplayNames(intlLocale(lang), { type: 'region' }).of(code) ?? code;
   } catch {
     return code;
   }

@@ -24,6 +24,8 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { notifyFollowers, socialRoutes } from './social.js';
 import { ogImageResponse, robotsTxt, seoPageResponse, sitemapResponse } from './seo.js';
+import { mediaRoutes, sweepMedia } from './media.js';
+import { postRoutes } from './posts.js';
 import { communityRoutes, notifyWaitlist, sweepWaitlists } from './community.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { appReleaseRoutes } from './apprelease.js';
@@ -654,7 +656,7 @@ const createOrder: Handler = async (c) => {
   if (!Array.isArray(b.items) || !b.items.length) fail(422, 'Panier vide');
 
   const accessKey = newAccessKey();
-  const lang = b.lang === 'en' ? 'en' : 'fr';
+  const lang = b.lang === 'en' || b.lang === 'es' ? b.lang : 'fr';
   try {
     const result = await tx(async (q) => {
       // Verrou sur l'événement : deux achats simultanés ne peuvent pas dépasser le quota
@@ -1034,7 +1036,7 @@ const requestRefund: Handler = async (c) => {
 const transferTicket: Handler = async (c) => {
   const to = str(c.body.to, 160).toLowerCase();
   if (!isEmail(to)) fail(422, 'Indiquez l’adresse email du destinataire');
-  const lang = c.body.lang === 'en' ? 'en' : 'fr';
+  const lang = c.body.lang === 'en' || c.body.lang === 'es' ? c.body.lang : 'fr';
   const out = await tx(async (q) => {
     const t = await ownTicket(c, c.params.id, q);
     if (t.status !== 'valid') fail(409, 'Ce billet ne peut plus être transféré');
@@ -1185,6 +1187,7 @@ const saveEvent: Handler = async (c) => {
     tickets: e.tickets.map((t) => ({ ...t, sold: existing?.data.tickets.find((x) => x.id === t.id)?.sold ?? 0 })),
     // Délai de remboursement (jours avant l'événement, 0 = aucun remboursement) : entier de 0 à 30, sinon le délai par défaut
     refundDays: typeof e.refundDays === 'number' && Number.isInteger(e.refundDays) && e.refundDays >= 0 && e.refundDays <= MAX_REFUND_DAYS ? e.refundDays : undefined,
+    commentsEnabled: e.commentsEnabled === false ? false : undefined,
     featured: existing?.data.featured ?? false,
     // Le boost (payant) n'est jamais modifiable par le formulaire
     boostedUntil: existing?.data.boostedUntil,
@@ -1968,7 +1971,7 @@ const saveLegal: Handler = async (c) => {
   admin(c);
   const doc = str(c.body.doc, 20);
   const lang = str(c.body.lang, 4);
-  if (!LEGAL_DOCS.includes(doc) || (lang !== 'fr' && lang !== 'en')) fail(422, 'Document ou langue invalide');
+  if (!LEGAL_DOCS.includes(doc) || (lang !== 'fr' && lang !== 'en' && lang !== 'es')) fail(422, 'Document ou langue invalide');
   const cur = (await one<{ value: Record<string, Record<string, string>> }>(`select value from settings where key = 'legal'`))?.value ?? {};
   const next = { ...cur, [doc]: { ...(cur[doc] ?? {}) } };
   if (c.body.text === null) delete next[doc]![lang];
@@ -2555,6 +2558,7 @@ const runReminders: Handler = async (c) => {
   const rate = await updateMarketRate().catch(() => null);
   const premium = await premiumMaintenance().catch((e) => (console.error('[premium] maintenance', e), null));
   await sweepWaitlists().catch(() => 0);
+  await sweepMedia().catch(() => 0);
   if (!pushConfigured()) return { sent: 0, premium, rate, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
   const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
   const now = Date.parse(`${nowLocal}Z`);
@@ -2590,6 +2594,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ...boostRoutes({ fail, str, auth, admin, org, audit }),
   ...socialRoutes({ fail, str, auth, org, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent }),
+  ...mediaRoutes({ fail, str, auth, rateLimit: (k, m, w) => rateLimit(k, m, w) }),
+  ...postRoutes({ fail, str, auth, org, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent }),
   ...communityRoutes({ fail, str, auth, org, admin, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent, isEnded: eventEnded, publicEvent }),
   ...devApiRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {

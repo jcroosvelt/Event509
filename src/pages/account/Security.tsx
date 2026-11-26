@@ -14,6 +14,7 @@ import { createPasskey, passkeyCancelled, passkeysSupported } from '@/lib/webaut
 import { Badge, Button, Card, Field, Input, Loading, Modal, PageHeader } from '@/components/ui';
 import { inApp, postApp } from '@/lib/appBridge';
 import ReauthModal from '@/components/ReauthModal';
+import { intlLocale } from '@/lib/i18n';
 
 /** Libellés du journal (écrits avec t('…') pour être traduits). */
 const eventLabels = (t: (s: string) => string): Record<string, string> => ({
@@ -73,7 +74,7 @@ export default function Security() {
   if (sum.loading || !sum.data) return <Loading />;
   const s = sum.data;
   const labels = eventLabels(t);
-  const dateTime = (iso: string) => `${dateShort(iso, lang)} ${new Date(iso).toLocaleTimeString(lang === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  const dateTime = (iso: string) => `${dateShort(iso, lang)} ${new Date(iso).toLocaleTimeString(intlLocale(lang), { hour: '2-digit', minute: '2-digit' })}`;
 
   const addPasskey = (name: string) => run(async () => {
     const o = await passkeyRegisterOptions();

@@ -2,6 +2,7 @@ import type { EventItem } from '../../src/types.js';
 import { all, db, one, tx } from './db.js';
 import { newId } from './auth.js';
 import { claimOnce, notifyUsers, organizerUserIds } from './push.js';
+import { attachMedia, dropMedia, mediaFor, TEXT_STYLES, type MediaOut } from './media.js';
 import type { Ctx, UserRow } from './routes.js';
 
 /**
@@ -82,9 +83,9 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
   };
 
   // ---------- Commentaires ----------
-  interface CommentRow { id: string; event_id: string; user_id: string; parent_id: string | null; body: string; created_at: Date; data: UserBits; org_id: string | null }
-  const commentOut = (r: CommentRow, ev: EventItem, viewer: UserRow | null, verified: boolean) => ({
-    id: r.id, eventId: r.event_id, parentId: r.parent_id, body: r.body, createdAt: r.created_at.toISOString(),
+  interface CommentRow { id: string; event_id: string; user_id: string; parent_id: string | null; body: string; style: string | null; created_at: Date; data: UserBits; org_id: string | null }
+  const commentOut = (r: CommentRow, ev: EventItem, viewer: UserRow | null, verified: boolean, media: Map<string, MediaOut[]>) => ({
+    id: r.id, eventId: r.event_id, parentId: r.parent_id, body: r.body, style: r.style || 'plain', media: media.get(r.id) ?? [], createdAt: r.created_at.toISOString(),
     author: { name: shortName(r.data.name ?? ''), avatarUrl: r.data.avatarUrl || undefined, isOrganizer: r.org_id === ev.organizerId, verified: r.org_id === ev.organizerId && verified },
     mine: viewer?.id === r.user_id,
     canDelete: !!viewer && (viewer.id === r.user_id || viewer.role === 'admin' || viewer.organizer_id === ev.organizerId),
@@ -94,22 +95,24 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const ev = await visibleEvent(c, c.params.id!);
     const before = c.query.before && !Number.isNaN(Date.parse(c.query.before)) ? new Date(c.query.before).toISOString() : null;
     const top = await all<CommentRow>(
-      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.created_at, u.data as data, u.organizer_id as org_id
+      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.style, c.created_at, u.data as data, u.organizer_id as org_id
          from event_comments c join users u on u.id = c.user_id
         where c.event_id = $1 and c.parent_id is null and not c.hidden and ($2::timestamptz is null or c.created_at < $2)
           and c.user_id not in (select blocked_id from user_blocks where blocker_id = $3)
         order by c.created_at desc limit 30`, [ev.id, before, c.user?.id ?? '']);
     const ids = top.map((t) => t.id);
     const replies = ids.length ? await all<CommentRow>(
-      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.created_at, u.data as data, u.organizer_id as org_id
+      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.style, c.created_at, u.data as data, u.organizer_id as org_id
          from event_comments c join users u on u.id = c.user_id
         where c.parent_id = any($1) and not c.hidden and c.user_id not in (select blocked_id from user_blocks where blocker_id = $2) order by c.created_at limit 600`, [ids, c.user?.id ?? '']) : [];
     const verified = (await one<{ v: boolean | null }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [ev.organizerId]))?.v === true;
     const total = Number((await one<{ n: string }>(`select count(*) as n from event_comments where event_id = $1 and not hidden`, [ev.id]))?.n ?? 0);
+    const media = await mediaFor('comment', [...top, ...replies].map((r) => r.id));
     return {
       total,
       hasMore: top.length === 30,
-      items: top.map((t) => ({ ...commentOut(t, ev, c.user, verified), replies: replies.filter((r) => r.parent_id === t.id).map((r) => commentOut(r, ev, c.user, verified)) })),
+      enabled: ev.commentsEnabled !== false,
+      items: top.map((t) => ({ ...commentOut(t, ev, c.user, verified, media), replies: replies.filter((r) => r.parent_id === t.id).map((r) => commentOut(r, ev, c.user, verified, media)) })),
     };
   };
 
@@ -117,8 +120,13 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const u = auth(c);
     const ev = await visibleEvent(c, c.params.id!);
     if (ev.status !== 'published' && ev.status !== 'ended') fail(409, 'Les commentaires ne sont pas ouverts pour cet événement');
+    if (ev.commentsEnabled === false) fail(409, 'Les commentaires sont désactivés pour cet événement');
     const body = cleanText(c.body.body, MAX_COMMENT);
-    if (body.length < 1) fail(422, 'Écrivez un commentaire');
+    const rawMedia = c.body.media;
+    const hasMedia = Array.isArray(rawMedia) && rawMedia.length > 0;
+    if (body.length < 1 && !hasMedia) fail(422, 'Écrivez un commentaire ou ajoutez une photo');
+    const styleIn = str(c.body.style, 20);
+    const style = hasMedia || !(TEXT_STYLES as readonly string[]).includes(styleIn) ? 'plain' : styleIn;
     await rateLimit(`comment:${u.id}`, 10, 10);
     await rateLimit(`comment-day:${u.id}`, 100, 24 * 60);
     let parent: { id: string; user_id: string } | null = null;
@@ -128,24 +136,27 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
       if (!parent) fail(404, 'Commentaire introuvable');
     }
     // Même texte déjà publié par la même personne il y a peu : on ne le republie pas (anti-répétition)
-    if (await one(`select 1 from event_comments where user_id = $1 and event_id = $2 and body = $3 and created_at > now() - interval '1 hour'`, [u.id, ev.id, body])) fail(409, 'Vous avez déjà publié ce commentaire');
+    if (body && (await one(`select 1 from event_comments where user_id = $1 and event_id = $2 and body = $3 and created_at > now() - interval '1 hour'`, [u.id, ev.id, body]))) fail(409, 'Vous avez déjà publié ce commentaire');
     const id = newId('cm');
-    await db().query(`insert into event_comments (id, event_id, user_id, parent_id, body) values ($1,$2,$3,$4,$5)`, [id, ev.id, u.id, parent?.id ?? null, body]);
+    await tx(async (q) => {
+      await q.query(`insert into event_comments (id, event_id, user_id, parent_id, body, style) values ($1,$2,$3,$4,$5,$6)`, [id, ev.id, u.id, parent?.id ?? null, body, style]);
+      await attachMedia(q, fail, 'comment', id, u.id, rawMedia, 4);
+    });
     const name = shortName((u.data.name as string) ?? '');
     try {
       // Les personnes qui ont bloqué l'auteur ne reçoivent aucune alerte de sa part
       const blockers = new Set((await all<{ blocker_id: string }>(`select blocker_id from user_blocks where blocked_id = $1`, [u.id])).map((r) => r.blocker_id));
       const team = (await organizerUserIds(ev.organizerId)).filter((t) => !blockers.has(t));
-      if (parent && parent.user_id !== u.id && !blockers.has(parent.user_id)) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
+      if (parent && parent.user_id !== u.id && !blockers.has(parent.user_id)) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body || 'Photo')}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
       const others = team.filter((t) => t !== u.id && t !== parent?.user_id);
-      if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
+      if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body || 'Photo')}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
     } catch (e) {
       console.error('[social] notification', e);
     }
     const row = (await all<CommentRow>(
-      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.created_at, u.data as data, u.organizer_id as org_id from event_comments c join users u on u.id = c.user_id where c.id = $1`, [id]))[0]!;
+      `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.style, c.created_at, u.data as data, u.organizer_id as org_id from event_comments c join users u on u.id = c.user_id where c.id = $1`, [id]))[0]!;
     const verified = (await one<{ v: boolean | null }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [ev.organizerId]))?.v === true;
-    return { ...commentOut(row, ev, u, verified), replies: [] };
+    return { ...commentOut(row, ev, u, verified, await mediaFor('comment', [id])), replies: [] };
   };
 
   const deleteComment: Handler = async (c) => {
@@ -155,6 +166,7 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     if (!r) fail(404, 'Commentaire introuvable');
     const allowed = u.id === r!.user_id || u.role === 'admin' || (!!u.organizer_id && u.organizer_id === r!.organizer_id);
     if (!allowed) fail(404, 'Commentaire introuvable');
+    await dropMedia('comment', [c.params.id!, ...(await all<{ id: string }>(`select id from event_comments where parent_id = $1`, [c.params.id])).map((x) => x.id)]);
     await db().query(`delete from event_comments where id = $1`, [c.params.id]);
     return null;
   };

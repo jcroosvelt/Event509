@@ -16,6 +16,7 @@ import { orgOf } from '@/lib/permissions';
 import { cleanNumber, isEmail, isPhone, useForm } from '@/lib/form';
 import { Badge, Button, Card, EmptyState, Field, Input, Loading, Modal, PageHeader, Segmented, Table, Td, Toggle, type Tone } from '@/components/ui';
 import type { Payout } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 const method: Record<Payout['method'], { l: string; i: typeof Wallet }> = {
   moncash: { l: 'MonCash', i: Smartphone },
@@ -69,7 +70,7 @@ export default function Payouts() {
   const cur = target?.currency ?? 'HTG';
   const max = target?.payable ?? 0;
   const m = req.values.method as Payout['method'];
-  const dateOf = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(lang === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+  const dateOf = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(lang === 'en' ? 'en-GB' : intlLocale(lang), { day: 'numeric', month: 'long', year: 'numeric' }) : '');
   /** Pourquoi l'argent d'un événement n'est pas encore versable. */
   const why = (e: PayoutEvent) =>
     e.reason === 'status' ? t('Événement non publié')

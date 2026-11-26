@@ -8,6 +8,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { cx, dateShort, time } from '@/lib/format';
 import { Badge, Card, EmptyState, Loading, PageHeader, StatCard, type Tone } from '@/components/ui';
+import { intlLocale } from '@/lib/i18n';
 
 const TONE: Record<string, { l: string; tone: Tone }> = {
   published: { l: 'Publié', tone: 'green' }, draft: { l: 'Brouillon', tone: 'gray' }, pending: { l: 'En validation', tone: 'amber' },
@@ -39,8 +40,8 @@ export default function Calendar() {
     const key = `${d.month}-${String(day).padStart(2, '0')}`;
     return d.events.filter((e) => e.start.slice(0, 10) <= key && e.end.slice(0, 10) >= key);
   };
-  const title = new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const weekdays = lang === 'fr' ? ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const title = new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(intlLocale(lang), { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const weekdays = lang === 'fr' ? ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'] : lang === 'es' ? ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const today = new Date().toISOString().slice(0, 10);
 
   return (

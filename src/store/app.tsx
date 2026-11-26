@@ -6,6 +6,7 @@ import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
 import { fetchMyFollows, followOrganizerApi } from '@/services/social';
 import { isDisplayCurrency, type AppUser, type DisplayCurrency, type IssuedTicket, type Lang, type NotificationItem, type Order } from '@/types';
+import { detectLang } from '@/lib/i18n';
 
 /** Lecture/écriture localStorage tolérante aux erreurs (navigation privée, quota…). */
 export function load<T>(key: string, fallback: T): T {
@@ -134,7 +135,7 @@ interface AppState {
 const Ctx = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = usePersisted<Lang>('e509.lang', navigator.language?.startsWith('en') ? 'en' : 'fr');
+  const [lang, setLang] = usePersisted<Lang>('e509.lang', detectLang(navigator.language));
   const [storedCurrency, setCurrency] = usePersisted<DisplayCurrency>('e509.currency', 'HTG');
   // Une valeur inconnue (ancienne version, stockage modifié) retombe sur les gourdes
   const currency: DisplayCurrency = isDisplayCurrency(storedCurrency) ? storedCurrency : 'HTG';

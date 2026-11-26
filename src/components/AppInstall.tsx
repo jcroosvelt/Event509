@@ -5,6 +5,7 @@ import { useApp } from '@/store/app';
 import { APK_PATH, fetchRelease, isAndroidBrowser, isNewer, promptAllowed, rememberInstalled, rememberLater, sizeMo, type AppRelease } from '@/lib/appRelease';
 import { inApp, postApp, useAppBuild } from '@/lib/appBridge';
 import { Button, Modal } from '@/components/ui';
+import { intlLocale } from '@/lib/i18n';
 
 /** Dernière version publiée de l'application (null tant qu'elle n'est pas connue, ou si aucun APK n'est publié). */
 export function useRelease() {
@@ -22,7 +23,7 @@ export function useRelease() {
 /** Fenêtre d'informations avant l'installation : version, taille, étapes, avertissement Android, téléchargement. */
 export function AppInstallInfo({ release, onDownload }: { release: AppRelease; onDownload?: () => void }) {
   const { t, lang } = useApp();
-  const date = release.date ? new Date(release.date).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { dateStyle: 'long' }) : '';
+  const date = release.date ? new Date(release.date).toLocaleDateString(intlLocale(lang), { dateStyle: 'long' }) : '';
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">

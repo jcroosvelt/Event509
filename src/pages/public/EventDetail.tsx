@@ -23,6 +23,7 @@ import { CategoryIcon, EventCard, EventCover, FavoriteButton, categoryOf } from 
 import { useSessionLabel } from '@/components/TicketCard';
 import NotFound from './NotFound';
 import type { Report, TicketType } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 export function ticketAvailability(tt: TicketType) {
   const now = new Date();
@@ -446,7 +447,7 @@ function ReviewsSection({ eventId }: { eventId: string }) {
     <section aria-labelledby="h-reviews">
       <SectionHeader id="h-reviews" title={t('Avis des participants')} />
       <div className="mb-3 flex items-center gap-3">
-        <span className="text-3xl font-extrabold">{data.average.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}</span>
+        <span className="text-3xl font-extrabold">{data.average.toLocaleString(intlLocale(lang))}</span>
         <Stars value={data.average} size={20} label={t('{n} sur 5', { n: data.average })} />
         <span className="text-sm text-ink-muted">{data.count > 1 ? t('{n} avis', { n: data.count }) : t('1 avis')}</span>
       </div>

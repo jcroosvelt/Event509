@@ -5,6 +5,7 @@ import { useApp } from '@/store/app';
 import { cx, dateShort } from '@/lib/format';
 import { createReview } from '@/services/api';
 import type { Review } from '@/types';
+import type { Lang } from '@/types';
 
 /** Étoiles en lecture seule (note moyenne ou note d'un avis). */
 export function Stars({ value, size = 16, label }: { value: number; size?: number; label?: string }) {
@@ -76,7 +77,7 @@ export function ReviewForm({ orderId, orderKey, onDone }: { orderId: string; ord
 }
 
 /** Un avis publié, avec la réponse de l'organisateur s'il y en a une. */
-export function ReviewItem({ r, lang, children }: { r: Review; lang: 'fr' | 'en'; children?: React.ReactNode }) {
+export function ReviewItem({ r, lang, children }: { r: Review; lang: Lang; children?: React.ReactNode }) {
   const { t } = useApp();
   return (
     <li className="rounded-2xl bg-surface p-4 shadow-card">

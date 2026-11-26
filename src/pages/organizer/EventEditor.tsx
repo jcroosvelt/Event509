@@ -426,6 +426,7 @@ export default function EventEditor() {
                 </Field>
                 <Field label={t('Limite par personne')} hint={t('Limite la revente abusive')}><NumberInput min={1} max={50} value={ev.maxPerPerson} onValue={(n) => up({ maxPerPerson: n })} /></Field>
                 <div className="flex items-end pb-2"><Toggle checked={ev.seated} onChange={(v) => up({ seated: v })} label={t('Plan de salle')} description={t('Places numérotées')} /></div>
+                <div className="flex items-end pb-2 sm:col-span-3"><Toggle checked={ev.commentsEnabled !== false} onChange={(v) => up({ commentsEnabled: v })} label={t('Commentaires ouverts')} description={t('Les membres peuvent commenter avec texte, photos, GIF, vidéos et stickers')} /></div>
                 <Field className="sm:col-span-3" label={t('Remboursement possible jusqu’à (jours avant l’événement)')} hint={t('0 = aucun remboursement (sauf annulation). L’argent de l’événement ne vous est versé qu’une fois ce délai terminé.')}>
                   <NumberInput min={0} max={30} value={eventRefundDays(ev)} onValue={(n) => up({ refundDays: n })} />
                 </Field>

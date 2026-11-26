@@ -12,6 +12,7 @@ import { compact, cx, dateLong, dateShort, moneyRaw, num, relative, time, uid } 
 import { useForm, cleanNumber } from '@/lib/form';
 import { Button, Field, Input, Loading, Modal, Segmented, Select, Textarea } from '@/components/ui';
 import type { Order, PlatformTarget } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 /* ------------------------------------------------------------------------- *
  * Tableau de bord administrateur — style « portefeuille » : surfaces givrées,
@@ -131,7 +132,7 @@ export default function Overview() {
   );
 
   if (loading || !s) return <Loading />;
-  const loc = lang === 'en' ? 'en-US' : 'fr-FR';
+  const loc = intlLocale(lang);
   const monthLabel = (m: string) => new Date(`${m}-01T12:00:00`).toLocaleDateString(loc, { month: 'short' }).replace('.', '');
   const balance = period === '6m' ? s.fees : s.feesThisMonth;
   const cur = s.monthly[active];

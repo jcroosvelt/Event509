@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CornerDownRight, MessageCircle, Trash2, UserX } from 'lucide-react';
+import { CornerDownRight, ImagePlus, MessageCircle, Smile, Trash2, UserX, X } from 'lucide-react';
 import { useApp } from '@/store/app';
-import { deleteComment, listComments, postComment, socialAvailable, type CommentList, type EventComment } from '@/services/social';
+import { deleteComment, listComments, postComment, socialAvailable, uploadMedia, type CommentList, type EventComment, type MediaIn } from '@/services/social';
+import { MediaGrid, STICKERS, StyledText } from '@/components/PostMedia';
 import { blockAuthor } from '@/services/community';
 import { ReportContent } from '@/components/ReportContent';
 import { relative } from '@/lib/format';
@@ -15,12 +16,21 @@ function Composer({ eventId, parentId, onDone, autoFocus, placeholder }: { event
   const { t, toast } = useApp();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [stickers, setStickers] = useState<string[]>([]);
+  const [picker, setPicker] = useState(false);
+  const ready = text.trim() || files.length || stickers.length;
   const send = async () => {
-    if (!text.trim()) return;
+    if (!ready) return;
     setBusy(true);
     try {
-      onDone(await postComment(eventId, text, parentId));
+      const media: MediaIn[] = [];
+      for (const f of files) media.push({ fileId: (await uploadMedia(f)).fileId });
+      for (const s of stickers) media.push({ kind: 'sticker', sticker: s });
+      onDone(await postComment(eventId, text, parentId, media));
       setText('');
+      setFiles([]);
+      setStickers([]);
     } catch (e) {
       toast(e instanceof Error ? e.message : t('Le commentaire n’a pas pu être publié. Réessayez.'), 'error');
     } finally {
@@ -38,9 +48,34 @@ function Composer({ eventId, parentId, onDone, autoFocus, placeholder }: { event
         aria-label={placeholder ?? t('Écrire un commentaire…')}
         onChange={(e) => setText(e.target.value)}
       />
+      {(files.length > 0 || stickers.length > 0) && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full bg-canvas px-3 py-1 text-xs font-semibold">{f.name.slice(0, 24)}
+              <button type="button" aria-label={t('Retirer')} onClick={() => setFiles(files.filter((_, j) => j !== i))}><X className="h-3 w-3" aria-hidden /></button></li>
+          ))}
+          {stickers.map((s, i) => (
+            <li key={`${s}-${i}`} className="flex items-center gap-1 rounded-full bg-canvas px-3 py-1 text-lg">{s}
+              <button type="button" aria-label={t('Retirer')} onClick={() => setStickers(stickers.filter((_, j) => j !== i))}><X className="h-3 w-3" aria-hidden /></button></li>
+          ))}
+        </ul>
+      )}
+      {picker && (
+        <div className="mt-2 flex flex-wrap gap-1 rounded-2xl border border-line p-2">
+          {STICKERS.map((s) => <button key={s} type="button" className="rounded-lg p-1 text-3xl hover:bg-canvas" onClick={() => { setStickers([...stickers, s].slice(0, 4)); setPicker(false); }}>{s}</button>)}
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-ink-muted" aria-live="polite">{text.length}/{MAX}</span>
-        <Button size="sm" loading={busy} disabled={!text.trim()} onClick={() => void send()}>{parentId ? t('Répondre') : t('Publier')}</Button>
+        <div className="flex items-center gap-1">
+          <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-brand-ink hover:bg-canvas" title={t('Photos et vidéos')}>
+            <ImagePlus className="h-5 w-5" aria-hidden />
+            <span className="sr-only">{t('Photos et vidéos')}</span>
+            <input type="file" accept="image/*,video/mp4,video/webm" multiple className="hidden" onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 4)); e.target.value = ''; }} />
+          </label>
+          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-ink hover:bg-canvas" aria-label={t('Stickers')} onClick={() => setPicker((v) => !v)}><Smile className="h-5 w-5" aria-hidden /></button>
+          <span className="ml-2 text-xs text-ink-muted" aria-live="polite">{text.length}/{MAX}</span>
+        </div>
+        <Button size="sm" loading={busy} disabled={!ready} onClick={() => void send()}>{parentId ? t('Répondre') : t('Publier')}</Button>
       </div>
     </div>
   );
@@ -64,7 +99,8 @@ function Item({ c, eventId, onReply, onRemove, isReply }: { c: EventComment; eve
             <span className="text-xs text-ink-muted">{relative(c.createdAt, lang)}</span>
           </p>
           {/* Texte brut : React l'affiche tel quel, jamais comme du HTML */}
-          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-ink-soft">{c.body}</p>
+          {c.body && <StyledText text={c.body} style={c.style} />}
+          <MediaGrid media={c.media} />
           <div className="mt-1 flex gap-3 text-xs font-semibold text-ink-muted">
             {!isReply && user && <button type="button" className="hover:text-ink" onClick={() => setReplying((r) => !r)}><CornerDownRight className="mr-1 inline h-3 w-3" aria-hidden />{t('Répondre')}</button>}
             {user && !c.mine && <ReportContent kind="comment" targetId={c.id} />}
@@ -126,7 +162,9 @@ export function EventComments({ eventId }: { eventId: string }) {
     <section aria-labelledby="h-comments" className="mt-8">
       <h2 id="h-comments" className="mb-3 flex items-center gap-2 text-lg font-extrabold"><MessageCircle className="h-5 w-5" aria-hidden /> {t('Commentaires')}{data ? ` (${data.total})` : ''}</h2>
       <Card>
-        {user ? (
+        {data?.enabled === false ? (
+          <p className="text-sm text-ink-soft">{t('Les commentaires sont désactivés pour cet événement.')}</p>
+        ) : user ? (
           <Composer eventId={eventId} onDone={() => load()} />
         ) : (
           <p className="text-sm text-ink-soft">

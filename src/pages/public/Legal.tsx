@@ -8,10 +8,10 @@ import { legalDefaults, type LegalDoc } from '@/data/legalDefaults';
 import { Card, Loading } from '@/components/ui';
 
 // Ce fichier est exclu du contrôle des traductions : les libellés sont donc écrits dans les deux langues ici
-const PAGES: { id: LegalDoc; to: string; fr: string; en: string }[] = [
-  { id: 'terms', to: '/cgu', fr: 'Conditions d’utilisation', en: 'Terms of use' },
-  { id: 'privacy', to: '/confidentialite', fr: 'Politique de confidentialité', en: 'Privacy policy' },
-  { id: 'refund', to: '/remboursement', fr: 'Politique de remboursement', en: 'Refund policy' },
+const PAGES: { id: LegalDoc; to: string; fr: string; en: string; es: string }[] = [
+  { id: 'terms', to: '/cgu', fr: 'Conditions d’utilisation', en: 'Terms of use', es: 'Condiciones de uso' },
+  { id: 'privacy', to: '/confidentialite', fr: 'Politique de confidentialité', en: 'Privacy policy', es: 'Política de privacidad' },
+  { id: 'refund', to: '/remboursement', fr: 'Politique de remboursement', en: 'Refund policy', es: 'Política de reembolso' },
 ];
 
 /** Regroupe les puces consécutives dans une même liste. */
@@ -57,7 +57,7 @@ export default function Legal({ page }: { page: LegalDoc }) {
           ))}
         </div>
       </Card>
-      <nav aria-label={lang === 'en' ? 'Legal documents' : 'Documents légaux'} className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 pb-4 text-sm font-semibold">
+      <nav aria-label={lang === 'en' ? 'Legal documents' : lang === 'es' ? 'Documentos legales' : 'Documents légaux'} className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 pb-4 text-sm font-semibold">
         {PAGES.filter((p) => p.id !== page).map((p) => <Link key={p.id} to={p.to} className="text-brand-ink hover:underline">{p[lang]}</Link>)}
       </nav>
     </div>

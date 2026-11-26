@@ -5,6 +5,8 @@ import { checkFile, safeName } from './files.js';
 import { notifyUsers, organizerUserIds } from './push.js';
 import { sendNoticeEmail } from './mail.js';
 import { cleanText, type SocialDeps } from './social.js';
+import { dropMedia, mediaFor } from './media.js';
+import { POST_SELECT, postsOut, removePost, type PostRow } from './posts.js';
 import type { Ctx, UserRow } from './routes.js';
 
 /**
@@ -214,7 +216,7 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
   const reportContent: Handler = async (c) => {
     const u = auth(c);
     const kind = str(c.body.kind, 20);
-    if (!['comment', 'photo', 'message'].includes(kind)) fail(422, 'Type de contenu invalide');
+    if (!['comment', 'photo', 'message', 'post'].includes(kind)) fail(422, 'Type de contenu invalide');
     const reason = str(c.body.reason, 20) as (typeof REPORT_REASONS)[number];
     if (!REPORT_REASONS.includes(reason)) fail(422, 'Motif invalide');
     const targetId = str(c.body.targetId, 60);
@@ -227,6 +229,12 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
       await visibleEvent(c, r!.event_id);
       owner = r!.user_id;
       snapshot = { text: r!.body, author: r!.name, eventId: r!.event_id };
+    } else if (kind === 'post') {
+      const r = await one<{ user_id: string; organizer_id: string | null; body: string; name: string | null }>(`select p.user_id, p.organizer_id, p.body, u.data->>'name' as name from posts p join users u on u.id = p.user_id where p.id = $1 and not p.hidden`, [targetId]);
+      if (!r) fail(404, 'Contenu introuvable');
+      owner = r!.user_id;
+      const media = (await mediaFor('post', [targetId])).get(targetId) ?? [];
+      snapshot = { text: r!.body, author: r!.name, media: media.map((m) => m.url ?? m.sticker) };
     } else if (kind === 'photo') {
       const r = await one<{ user_id: string; event_id: string; file_id: string; caption: string | null; name: string | null }>(`select p.user_id, p.event_id, p.file_id, p.caption, u.data->>'name' as name from event_photos p join users u on u.id = p.user_id where p.id = $1`, [targetId]);
       if (!r) fail(404, 'Contenu introuvable');
@@ -259,11 +267,12 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
     // Trois personnes différentes : le contenu est masqué en attendant la décision de l'administration (commentaire, photo)
     const n = Number((await one<{ n: string }>(`select count(*) as n from content_reports where kind = $1 and target_id = $2 and status = 'open'`, [kind, targetId]))?.n ?? 0);
     if (n >= REPORT_HIDE_AT && kind === 'comment') await db().query(`update event_comments set hidden = true where id = $1`, [targetId]);
+    if (n >= REPORT_HIDE_AT && kind === 'post') await db().query(`update posts set hidden = true where id = $1`, [targetId]);
     if (n >= REPORT_HIDE_AT && kind === 'photo') await db().query(`update event_photos set hidden = true where id = $1`, [targetId]);
     if (ins) {
       try {
         const admins = await all<{ id: string }>(`select id from users where role = 'admin' and status = 'active'`);
-        await notifyUsers(admins.map((a) => a.id), { title: 'Contenu signalé', body: `${kind === 'comment' ? 'Commentaire' : kind === 'photo' ? 'Photo' : 'Message'} signalé (${reason})`, url: '/admin/signalements', channel: 'sales' });
+        await notifyUsers(admins.map((a) => a.id), { title: 'Contenu signalé', body: `${kind === 'comment' ? 'Commentaire' : kind === 'photo' ? 'Photo' : kind === 'post' ? 'Publication' : 'Message'} signalé (${reason})`, url: '/admin/signalements', channel: 'sales' });
       } catch (e) {
         console.error('[community] notification', e);
       }
@@ -287,11 +296,15 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
     const action = str(c.body.action, 20);
     if (!['remove', 'dismiss'].includes(action)) fail(422, 'Action invalide');
     if (action === 'remove') {
-      if (r!.kind === 'comment') await db().query(`delete from event_comments where id = $1`, [r!.target_id]);
+      if (r!.kind === 'comment') {
+        await dropMedia('comment', [r!.target_id]);
+        await db().query(`delete from event_comments where id = $1`, [r!.target_id]);
+      } else if (r!.kind === 'post') await removePost(r!.target_id);
       else if (r!.kind === 'photo') await removePhoto(r!.target_id);
       else await db().query(`delete from messages where id = $1`, [r!.target_id]);
     } else {
       if (r!.kind === 'comment') await db().query(`update event_comments set hidden = false where id = $1`, [r!.target_id]);
+      if (r!.kind === 'post') await db().query(`update posts set hidden = false where id = $1`, [r!.target_id]);
       if (r!.kind === 'photo') await db().query(`update event_photos set hidden = false where id = $1`, [r!.target_id]);
     }
     await db().query(
@@ -350,7 +363,15 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
         where not p.hidden and p.created_at > now() - interval '14 days' and coalesce(e.data->>'private', 'false') <> 'true'
           and ($2::timestamptz is null or p.created_at < $2) and ${blockFilter('p.user_id', 3)}
         group by p.event_id, e.slug, e.data->>'title' order by at desc limit 20`, [u.id, before, u.id]);
+    const posts = await all<PostRow>(
+      `${POST_SELECT}
+        where not p.hidden and coalesce(e.data->>'private', 'false') <> 'true'
+          and (p.user_id = $1 or coalesce(p.organizer_id, e.organizer_id) in (select organizer_id from follows where user_id = $1))
+          and ($2::timestamptz is null or p.created_at < $2) and ${blockFilter('p.user_id', 1)}
+        order by p.created_at desc limit 20`, [u.id, before]);
+    const postItems = await postsOut(posts, u);
     const items = [
+      ...postItems.map((p) => ({ type: 'post' as const, at: p.createdAt, post: p })),
       ...evs.map((e) => ({ type: 'event' as const, at: e.at.toISOString(), event: publicEvent(e.data, u) })),
       ...photos.map((p) => ({ type: 'photos' as const, at: p.at.toISOString(), event: { id: p.event_id, slug: p.slug, title: p.title }, count: Number(p.n), thumbs: p.files.map((f) => `/api/files/${f}`) })),
     ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 20);

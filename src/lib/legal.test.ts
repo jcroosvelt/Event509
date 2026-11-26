@@ -24,6 +24,10 @@ describe('documents légaux', () => {
       expect(en.title).not.toBe('');
       expect(fr.blocks.filter((b) => b.kind === 'h').length).toBe(en.blocks.filter((b) => b.kind === 'h').length);
       expect(tokensIn(legalDefaults[d].fr).sort()).toEqual(tokensIn(legalDefaults[d].en).sort());
+      expect(tokensIn(legalDefaults[d].fr).sort()).toEqual(tokensIn(legalDefaults[d].es).sort());
+      const es = parseDoc(legalDefaults[d].es);
+      expect(es.blocks.map((b) => b.kind)).toEqual(fr.blocks.map((b) => b.kind));
+      expect(legalDefaults[d].es).not.toMatch(/\[[^\]]+\]/);
       expect(legalDefaults[d].fr).not.toMatch(/\[[^\]]+\]/); // plus aucun crochet à compléter
     }
   });
@@ -45,7 +49,7 @@ describe('commission dans les documents légaux (calculée, jamais saisie)', () 
     expect(AUTO_TOKENS).toContain('feeBuyer');
   });
   it('les textes d’origine n’utilisent que des valeurs connues, en français comme en anglais', () => {
-    for (const d of LEGAL_DOCS) for (const lang of ['fr', 'en'] as const)
+    for (const d of LEGAL_DOCS) for (const lang of ['fr', 'en', 'es'] as const)
       for (const k of tokensIn(legalDefaults[d][lang])) expect(Object.keys({ ...defaultSiteInfo, ...feeTokens(base, lang) }), `${d}/${lang}/${k}`).toContain(k);
   });
 });

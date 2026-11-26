@@ -40,10 +40,12 @@ async function send(to: string, subject: string, html: string, attachments: Atta
   }
 }
 
+export type MailLang = 'fr' | 'en' | 'es';
+
 /** Date d'événement écrite sans fuseau (heure locale d'Haïti) : on garde l'heure telle qu'elle est écrite. */
-function when(iso: string, lang: 'fr' | 'en') {
+function when(iso: string, lang: MailLang) {
   const d = new Date(iso.length === 16 ? `${iso}:00Z` : `${iso}Z`.replace('ZZ', 'Z'));
-  return d.toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR', { dateStyle: 'full', timeStyle: 'short', timeZone: 'UTC' });
+  return d.toLocaleString(lang === 'en' ? 'en-US' : lang === 'es' ? 'es-419' : 'fr-FR', { dateStyle: 'full', timeStyle: 'short', timeZone: 'UTC' });
 }
 
 const T = {
@@ -65,10 +67,19 @@ const T = {
     warn: 'Do not share your QR codes: each ticket is valid only once, for the first person who shows it.',
     footer: 'This email was sent by Event509 because an order was placed with this address.',
   },
+  es: {
+    subject: (e: string) => `Tus boletos para ${e}`,
+    hello: (n: string) => `Hola ${n}:`,
+    intro: '¡Gracias por tu compra! Aquí están tus boletos. Cada boleto tiene un código QR único, adjunto a este correo como imagen: preséntalo en la entrada, desde tu teléfono o impreso.',
+    ticket: 'Boleto', seat: 'Asiento', code: 'Código',
+    button: 'Ver mis boletos',
+    warn: 'No compartas tus códigos QR: cada boleto es válido una sola vez, para la primera persona que lo presente.',
+    footer: 'Este correo fue enviado por Event509 porque se hizo un pedido con esta dirección.',
+  },
 };
 
 /** Email des billets : récapitulatif, lien vers la page des billets, et un QR code unique par billet en pièce jointe. */
-export async function sendTicketsEmail(opts: { to: string; name: string; lang: 'fr' | 'en'; event: EventItem; tickets: IssuedTicket[]; orderId: string; accessKey: string }): Promise<boolean> {
+export async function sendTicketsEmail(opts: { to: string; name: string; lang: MailLang; event: EventItem; tickets: IssuedTicket[]; orderId: string; accessKey: string }): Promise<boolean> {
   if (!mailConfigured()) return false;
   const { to, name, lang, event, tickets, orderId, accessKey } = opts;
   const tx = T[lang];

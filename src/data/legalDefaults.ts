@@ -7,6 +7,7 @@
  * Les valeurs entre doubles accolades ({{email}}, {{commission}}…) viennent des réglages de l'administrateur.
  */
 import type { Lang } from '@/types';
+import { legalEs } from './legalEs';
 
 export type LegalDoc = 'terms' | 'privacy' | 'refund';
 export const LEGAL_DOCS: LegalDoc[] = ['terms', 'privacy', 'refund'];
@@ -161,6 +162,7 @@ We may change these terms. Important changes will be announced in the applicatio
 ## 12. Governing law and disputes
 
 These terms are governed by the laws of the Republic of Haiti. We first seek an amicable solution. Failing that, the dispute will be brought before the competent authorities of Port-au-Prince, in particular the Public Prosecutor's Office of Port-au-Prince, or any other competent authority.`,
+    es: legalEs.terms,
   },
   privacy: {
     fr: `# Politique de confidentialité
@@ -273,6 +275,7 @@ The application may use cookies and measurement tools for it to work properly an
 ## 9. Changes
 
 We may update this policy. Important changes will be reported to you in the application.`,
+    es: legalEs.privacy,
   },
   refund: {
     fr: `# Politique de remboursement
@@ -367,5 +370,6 @@ The refund is made to the original payment method ({{payments}}). The timing may
 ## 9. Consequences for the organizer
 
 When a refund is due because of a cancellation or a fault of the organizer, the amount is deducted from their payouts. If they have already been paid, Event509 may claim the amount from them.`,
+    es: legalEs.refund,
   },
 };

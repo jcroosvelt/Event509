@@ -6,7 +6,7 @@ export type Currency = 'HTG' | 'USD';
 export const DISPLAY_CURRENCIES = ['HTG', 'USD'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export const isDisplayCurrency = (v: unknown): v is DisplayCurrency => typeof v === 'string' && (DISPLAY_CURRENCIES as readonly string[]).includes(v);
-export type Lang = 'fr' | 'en';
+export type Lang = 'fr' | 'en' | 'es';
 
 export type CategoryId =
   | 'music' | 'party' | 'conference' | 'sport' | 'culture'
@@ -91,6 +91,8 @@ export interface EventItem {
   rotateLink?: boolean;
   /** Remboursement possible jusqu'à N jours avant le début (0 = aucun remboursement, sauf annulation) ; absent = délai par défaut (7). */
   refundDays?: number;
+  /** Commentaires ouverts (par défaut) ; l'organisateur peut les désactiver. */
+  commentsEnabled?: boolean;
   tags?: string[];
 }
 

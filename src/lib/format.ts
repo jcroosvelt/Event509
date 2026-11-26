@@ -1,4 +1,5 @@
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 /**
  * Taux de change : gourdes (HTG) pour 1 dollar. Les prix sont fixés en gourdes ; le taux est mis à jour chaque jour
@@ -21,7 +22,7 @@ export function setUsdToHtg(n: number) {
 /** Devises sans centimes. */
 export const zeroDecimal = (c: DisplayCurrency) => c === 'HTG';
 
-const locale = (lang: Lang) => (lang === 'en' ? 'en-US' : 'fr-FR');
+const locale = (lang: Lang) => intlLocale(lang);
 
 export function convert(amount: number, from: DisplayCurrency, to: DisplayCurrency) {
   if (from === to) return amount;
@@ -29,7 +30,7 @@ export function convert(amount: number, from: DisplayCurrency, to: DisplayCurren
 }
 
 export function money(amount: number, currency: DisplayCurrency, lang: Lang = 'fr') {
-  if (amount === 0) return lang === 'en' ? 'Free' : 'Gratuit';
+  if (amount === 0) return lang === 'en' ? 'Free' : lang === 'es' ? 'Gratis' : 'Gratuit';
   return moneyRaw(amount, currency, lang);
 }
 

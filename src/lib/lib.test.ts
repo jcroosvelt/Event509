@@ -8,6 +8,8 @@ import type { AppUser } from '@/types';
 // @ts-expect-error script Node sans types
 import { extract } from '../../scripts/i18n.mjs';
 import en from '@/locales/en.json';
+import es from '@/locales/es.json';
+import { detectLang, intlLocale } from '@/lib/i18n';
 
 const byId = (id: string) => users.find((u) => u.id === id) as AppUser;
 
@@ -191,5 +193,30 @@ describe('webhooks : adresses refusées (protection contre l’accès au réseau
 
   it('accepte une adresse publique en IP', async () => {
     expect(await checkWebhookUrl('https://8.8.8.8/hook')).toBeNull();
+  });
+});
+
+describe('espagnol (3e langue)', () => {
+  it('le catalogue espagnol a exactement les mêmes phrases que l’anglais, avec les mêmes variables', () => {
+    const vars = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(',');
+    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
+    for (const [k, v] of Object.entries(es as Record<string, string>)) {
+      expect(vars(v), k).toBe(vars(k));
+      expect(v.trim(), k).not.toBe('');
+    }
+  });
+  it('traduit, remplace les variables, et retombe sur le français quand la phrase est inconnue', () => {
+    expect(translate('es', 'Connexion')).toBe('Iniciar sesión');
+    expect(translate('es', '{n} billets', { n: 3 })).toBe('3 boletos');
+    expect(translate('es', 'Phrase jamais traduite')).toBe('Phrase jamais traduite');
+    expect(translate('fr', 'Connexion')).toBe('Connexion');
+  });
+  it('langue du navigateur et codes Intl', () => {
+    expect(detectLang('es-DO')).toBe('es');
+    expect(detectLang('en-GB')).toBe('en');
+    expect(detectLang('fr-HT')).toBe('fr');
+    expect(detectLang('de')).toBe('fr');
+    expect(intlLocale('es')).toBe('es-419');
+    expect(money(0, 'USD', 'es')).toBe('Gratis');
   });
 });

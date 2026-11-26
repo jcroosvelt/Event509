@@ -3,6 +3,7 @@ import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
 import { Badge, Button, Field, Textarea, type Tone } from '@/components/ui';
 import type { SupportMessage, SupportTicket } from '@/services/premium';
+import { intlLocale } from '@/lib/i18n';
 
 export const STATUS_LABEL: Record<SupportTicket['status'], { l: string; tone: Tone }> = {
   open: { l: 'En attente de l’équipe Event509', tone: 'amber' }, pending: { l: 'Réponse reçue', tone: 'brand' }, resolved: { l: 'Résolu', tone: 'green' },
@@ -38,7 +39,7 @@ export function SupportThread({ ticket, messages, viewer, onReply, onResolve }: 
           const mine = m.from === viewer;
           return (
             <li key={m.id} className={cx('max-w-[90%] rounded-2xl p-3 text-sm', mine ? 'ml-auto bg-brand-100 text-ink dark:bg-brand/20' : 'bg-surface shadow-card')}>
-              <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs text-ink-muted"><b>{m.author}{m.from === 'admin' && viewer === 'organizer' ? ' · Event509' : ''}</b><span>{new Date(m.at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+              <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs text-ink-muted"><b>{m.author}{m.from === 'admin' && viewer === 'organizer' ? ' · Event509' : ''}</b><span>{new Date(m.at).toLocaleString(intlLocale(lang), { dateStyle: 'short', timeStyle: 'short' })}</span></div>
               <p className="whitespace-pre-line">{m.body}</p>
             </li>
           );

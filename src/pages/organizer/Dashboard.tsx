@@ -11,6 +11,7 @@ import {
   Avatar, BarChart, ButtonLink, Card, IconBadge, Loading, ProgressBar, ProgressRing, Segmented, Select, SparkBars, SparkLine,
 } from '@/components/ui';
 import { EventCover } from '@/components/events';
+import { intlLocale } from '@/lib/i18n';
 
 export default function Dashboard() {
   const { lang, t, user } = useApp();
@@ -45,7 +46,7 @@ export default function Dashboard() {
   const liveTotal = live.reduce((a, s) => a + s.amount, 0);
 
   const week = daily.map((d) => ({
-    label: new Date(`${d.date}T12:00:00`).toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'short' }).replace('.', ''),
+    label: new Date(`${d.date}T12:00:00`).toLocaleDateString(intlLocale(lang), { weekday: 'short' }).replace('.', ''),
     value: metric === 'tickets' ? d.tickets : d.revenue,
     max: metric === 'tickets' ? d.tickets : d.revenue,
   }));

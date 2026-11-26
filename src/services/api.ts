@@ -482,7 +482,7 @@ export interface CheckoutInput {
   src?: string;
   marketingOptIn?: boolean;
   /** Langue de l'email des billets. */
-  lang?: 'fr' | 'en';
+  lang?: Lang;
 }
 
 export interface OrderResult {
@@ -626,7 +626,7 @@ export interface TransferResult {
   link?: string;
   emailSent?: boolean;
 }
-export async function transferTicket(ticketId: string, to: string, lang?: 'fr' | 'en'): Promise<TransferResult> {
+export async function transferTicket(ticketId: string, to: string, lang?: Lang): Promise<TransferResult> {
   if (!DEMO) return http<TransferResult>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: JSON.stringify({ to, lang }) });
   await wait(500);
   if (!to.trim()) throw new ApiError(422, 'Destinataire manquant');

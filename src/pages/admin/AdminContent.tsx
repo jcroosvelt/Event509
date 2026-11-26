@@ -113,7 +113,7 @@ export default function AdminContent() {
               {LEGAL_DOCS.map((d) => <option key={d} value={d}>{t(DOCS[d].label)}</option>)}
             </Select>
           </Field>
-          <Segmented label={t('Langue')} value={lang} onChange={(v) => setLang(v as Lang)} options={[{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }]} />
+          <Segmented label={t('Langue')} value={lang} onChange={(v) => setLang(v as Lang)} options={[{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
           <Link to={DOCS[doc].to} target="_blank" className="inline-flex items-center gap-1.5 pb-3 text-sm font-semibold text-brand-ink">
             <ExternalLink className="h-4 w-4" aria-hidden /> {t('Voir la page')}
           </Link>

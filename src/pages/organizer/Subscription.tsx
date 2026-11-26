@@ -8,6 +8,7 @@ import { getBadgeProgress, getInvoice, getPremium, premiumAvailable, subscribePr
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Badge, Button, Card, EmptyState, Field, Loading, PageHeader, Select, Table, Td, type Tone } from '@/components/ui';
 import type { PremiumBenefit, PremiumPayment } from '@/types';
+import type { Lang } from '@/types';
 
 const benefitLabels: Record<PremiumBenefit, string> = {
   profile: 'Profil officiel certifié', visibility: 'Visibilité renforcée', analytics: 'Statistiques avancées', multiEvents: 'Gestion multi-événements',
@@ -26,7 +27,7 @@ const METHODS: { v: string; l: string }[] = [{ v: 'moncash', l: 'MonCash' }, { v
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Ouvre la facture dans une fenêtre prête à imprimer ou à enregistrer en PDF. */
-async function openInvoice(id: string, lang: 'fr' | 'en', t: (s: string) => string) {
+async function openInvoice(id: string, lang: Lang, t: (s: string) => string) {
   const inv = await getInvoice(id);
   const p = inv.payment;
   const date = dateShort(p.paidAt ?? p.createdAt, lang);

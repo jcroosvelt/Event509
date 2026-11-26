@@ -9,6 +9,7 @@ import { Avatar, Badge, Button, Card, EmptyState, Field, Loading, Modal, PageHea
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { AdminBadgeGiver } from '@/components/AdminBadgeGiver';
 import type { VerificationDocType, VerificationLogEntry, VerificationStatus } from '@/types';
+import { intlLocale } from '@/lib/i18n';
 
 const docLabels: Record<VerificationDocType, string> = {
   id: 'Pièce d’identité', selfie: 'Selfie de vérification', registration: 'Document d’enregistrement', representation: 'Représentation légale', license: 'Patente / NIF', bank: 'Justificatif bancaire',
@@ -259,7 +260,7 @@ function HistoryModal({ req, onClose }: { req: AdminVerification; onClose: () =>
             <ul className="space-y-2">
               {(data?.log ?? []).map((l: VerificationLogEntry) => (
                 <li key={l.id} className={`rounded-2xl p-3 text-sm ${l.internal ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-canvas'}`}>
-                  <div className="flex flex-wrap justify-between gap-2"><b>{t(l.action)}{l.internal && ` (${t('interne')})`}</b><span className="text-xs text-ink-muted">{new Date(l.at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} · {l.actor}</span></div>
+                  <div className="flex flex-wrap justify-between gap-2"><b>{t(l.action)}{l.internal && ` (${t('interne')})`}</b><span className="text-xs text-ink-muted">{new Date(l.at).toLocaleString(intlLocale(lang))} · {l.actor}</span></div>
                   {l.note && <p className="mt-1 text-ink-soft">{l.note}</p>}
                 </li>
               ))}
@@ -268,7 +269,7 @@ function HistoryModal({ req, onClose }: { req: AdminVerification; onClose: () =>
             <div>
               <h3 className="mb-2 text-sm font-bold">{t('Consultations de documents')}</h3>
               <ul className="space-y-1 text-xs text-ink-soft">
-                {(data?.views ?? []).map((x) => <li key={x.id}>{new Date(x.at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} — {x.admin}</li>)}
+                {(data?.views ?? []).map((x) => <li key={x.id}>{new Date(x.at).toLocaleString(intlLocale(lang))} — {x.admin}</li>)}
                 {!data?.views.length && <li>{t('Aucune consultation.')}</li>}
               </ul>
             </div>

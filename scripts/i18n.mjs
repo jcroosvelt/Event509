@@ -66,18 +66,23 @@ const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join('
 
 if (import.meta.url.startsWith('file:') && process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const found = extract();
-  const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
-  const missing = [...found.keys()].filter((k) => !IGNORE.has(k) && !(k in catalog));
-  const badVars = Object.entries(catalog).filter(([k, v]) => vars(k) !== vars(v));
-  const unused = Object.keys(catalog).filter((k) => !found.has(k));
+  let failed = false;
+  // Catalogues : anglais (en.json) et espagnol (es.json). Le français est la phrase d'origine.
+  for (const [name, path] of [['en', catalogPath], ['es', join(src, 'locales', 'es.json')]]) {
+    const catalog = JSON.parse(readFileSync(path, 'utf8'));
+    const missing = [...found.keys()].filter((k) => !IGNORE.has(k) && !(k in catalog));
+    const badVars = Object.entries(catalog).filter(([k, v]) => vars(k) !== vars(v));
+    const unused = Object.keys(catalog).filter((k) => !found.has(k));
 
-  if (process.argv.includes('--json')) {
-    console.log(JSON.stringify(Object.fromEntries(missing.map((k) => [k, [...found.get(k)].join(', ')])), null, 2));
-  } else {
-    console.log(`${found.size} phrases trouvées · ${Object.keys(catalog).length} traductions · ${missing.length} manquantes · ${badVars.length} variables incohérentes · ${unused.length} inutilisées`);
-    for (const k of missing) console.log(`  manquante : ${k}   (${[...found.get(k)][0]})`);
-    for (const [k, v] of badVars) console.log(`  variables : « ${k} » → « ${v} »`);
-    for (const k of unused) console.log(`  inutilisée : ${k}`);
+    if (process.argv.includes('--json')) {
+      if (name === 'en') console.log(JSON.stringify(Object.fromEntries(missing.map((k) => [k, [...found.get(k)].join(', ')])), null, 2));
+    } else {
+      console.log(`[${name}] ${found.size} phrases trouvées · ${Object.keys(catalog).length} traductions · ${missing.length} manquantes · ${badVars.length} variables incohérentes · ${unused.length} inutilisées`);
+      for (const k of missing) console.log(`  manquante : ${k}   (${[...found.get(k)][0]})`);
+      for (const [k, v] of badVars) console.log(`  variables : « ${k} » → « ${v} »`);
+      for (const k of unused) console.log(`  inutilisée : ${k}`);
+    }
+    if (missing.length || badVars.length || unused.length) failed = true;
   }
-  if (process.argv.includes('--check') && (missing.length || badVars.length || unused.length)) process.exit(1);
+  if (process.argv.includes('--check') && failed) process.exit(1);
 }

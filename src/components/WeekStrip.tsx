@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
 import { Card } from './ui';
+import { intlLocale } from '@/lib/i18n';
 
 /** Bandeau semaine avec jour sélectionné en pilule (repris de la maquette). */
 export function WeekStrip({
@@ -15,7 +16,7 @@ export function WeekStrip({
   marked?: string[]; // dates ISO yyyy-mm-dd qui ont des événements
 }) {
   const { lang, t } = useApp();
-  const loc = lang === 'en' ? 'en-US' : 'fr-FR';
+  const loc = intlLocale(lang);
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i)),
     [weekStart],

@@ -179,7 +179,7 @@ create index if not exists files_org on files(organizer_id, kind);
 -- Photo de profil (tout compte, organisateur et administrateur compris) : un seul fichier par personne, sans organisation
 alter table files alter column organizer_id drop not null;
 alter table files drop constraint if exists files_kind_check;
-alter table files add constraint files_kind_check check (kind in ('event_cover', 'org_logo', 'verification', 'avatar', 'event_photo'));
+alter table files add constraint files_kind_check check (kind in ('event_cover', 'org_logo', 'verification', 'avatar', 'event_photo', 'post_media'));
 create unique index if not exists files_avatar_user on files(user_id) where kind = 'avatar';
 
 -- Achat sans compte : la clé d'accès (dans le lien reçu par email) permet de retrouver une commande et ses billets.
@@ -769,7 +769,7 @@ create index if not exists waitlist_user on waitlist(user_id);
 
 create table if not exists content_reports (
   id text primary key,
-  kind text not null check (kind in ('comment', 'photo', 'message')),
+  kind text not null check (kind in ('comment', 'photo', 'message', 'post')),
   target_id text not null,
   reporter_id text not null references users(id) on delete cascade,
   reason text not null check (reason in ('spam', 'abuse', 'inappropriate', 'scam', 'other')),
@@ -799,3 +799,49 @@ create table if not exists organizer_blocks (
   created_at timestamptz not null default now(),
   primary key (organizer_id, user_id)
 );
+
+-- Publications du fil d'actualité, médias (photos avec filtre, GIF, vidéos, autocollants) des commentaires et des publications.
+alter table event_comments add column if not exists style text;
+alter table event_comments drop constraint if exists event_comments_body_check;
+alter table event_comments add constraint event_comments_body_check check (char_length(body) <= 1000);
+
+create table if not exists posts (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  organizer_id text references organizers(id) on delete cascade,
+  event_id text references events(id) on delete cascade,
+  body text not null default '' check (char_length(body) <= 2000),
+  style text,
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists posts_org on posts(organizer_id, created_at desc);
+create index if not exists posts_event on posts(event_id, created_at desc);
+create index if not exists posts_user on posts(user_id, created_at desc);
+
+create table if not exists post_media (
+  id text primary key,
+  owner_kind text not null check (owner_kind in ('comment', 'post')),
+  owner_id text not null,
+  position integer not null default 0,
+  kind text not null check (kind in ('image', 'gif', 'video', 'sticker')),
+  file_id text,
+  sticker text,
+  filter text,
+  duration integer,
+  created_at timestamptz not null default now()
+);
+create index if not exists post_media_owner on post_media(owner_kind, owner_id, position);
+create unique index if not exists post_media_file on post_media(file_id) where file_id is not null;
+
+-- Morceaux d'un envoi en cours (vidéos : 3 Mo par morceau, assemblés à la fin puis supprimés)
+create table if not exists media_chunks (
+  upload_id text not null,
+  idx integer not null,
+  user_id text not null,
+  data bytea not null,
+  created_at timestamptz not null default now(),
+  primary key (upload_id, idx)
+);
+alter table content_reports drop constraint if exists content_reports_kind_check;
+alter table content_reports add constraint content_reports_kind_check check (kind in ('comment', 'photo', 'message', 'post'));

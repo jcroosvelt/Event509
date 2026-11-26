@@ -10,6 +10,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort, moneyRaw } from '@/lib/format';
 import { Badge, Button, Card, EmptyState, Field, Loading, PageHeader, Select, StatCard, Table, Td, type Tone } from '@/components/ui';
+import { intlLocale } from '@/lib/i18n';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const ago = (n: number) => iso(new Date(Date.now() - n * 86_400_000));
@@ -36,7 +37,7 @@ export default function Finances() {
   if (!q.data) return <Loading />;
   const d = q.data;
   const max = Math.max(1, ...d.monthly.map((m) => m.gross));
-  const month = (m: string) => new Date(`${m}-15T00:00:00Z`).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  const month = (m: string) => new Date(`${m}-15T00:00:00Z`).toLocaleDateString(intlLocale(lang), { month: 'short', year: '2-digit', timeZone: 'UTC' });
 
   const txRows = d.transactions.map((x) => ({
     [t('Commande')]: x.id, [t('Date')]: x.date.slice(0, 10), [t('Événement')]: x.event, [t('Méthode')]: methodLabel[x.method] ?? x.method, [t('Statut')]: t(orderStatus[x.status]?.l ?? x.status),

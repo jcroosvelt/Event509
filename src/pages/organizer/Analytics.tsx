@@ -11,6 +11,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort, moneyRaw, num } from '@/lib/format';
 import { Button, Card, EmptyState, Field, Input, Loading, PageHeader, Select, StatCard, Table, Td } from '@/components/ui';
+import type { Lang } from '@/types';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const ago = (n: number) => iso(new Date(Date.now() - n * 86_400_000));
@@ -31,7 +32,7 @@ function Bars({ rows }: { rows: { label: string; value: number; text: string }[]
 }
 
 /** Évolution des ventes : une barre par jour (regroupées par semaine au-delà de 60 jours) avec un tableau pour les lecteurs d'écran. */
-function SalesChart({ data, lang }: { data: Analytics['series']; lang: 'fr' | 'en' }) {
+function SalesChart({ data, lang }: { data: Analytics['series']; lang: Lang }) {
   const { t } = useApp();
   const step = data.length > 60 ? 7 : 1;
   const pts = useMemo(() => {
