@@ -23,12 +23,12 @@ export const deleteComment = (id: string) => http<null>(`/comments/${encodeURICo
 export interface ConversationItem {
   id: string; at: string; unread: number; event?: string; last: { body: string; from: 'user' | 'org' } | null;
   organizer?: { id: string; name: string; logo?: string; verified: boolean };
-  from?: string;
+  from?: string; blocked?: boolean;
 }
 export interface Thread {
   id: string; messages: { id: string; from: 'user' | 'org'; body: string; at: string }[];
   organizer?: { id: string; name: string; logo?: string; verified: boolean };
-  from?: string; avatarUrl?: string;
+  from?: string; avatarUrl?: string; blocked?: boolean;
 }
 export const startConversation = (organizerId: string, body: string, eventId?: string) =>
   http<{ id: string }>('/messages', { method: 'POST', body: JSON.stringify({ organizerId, body, eventId }) });

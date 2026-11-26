@@ -16,6 +16,8 @@ import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 const NOTIF_KEY = 'e509.notifPrefs';
 const defaultPrefs = { reminders: true, updates: true, reco: true, marketing: false };
 
+import { BlockedMembers } from '@/components/BlockedMembers';
+
 export default function Settings() {
   const { lang, setLang, currency, setCurrency, theme, setTheme, user, updateUser, logout, toast, t, place, tastes } = useApp();
   const [personalize, setPersonalize] = useState(false);
@@ -215,6 +217,7 @@ export default function Settings() {
           </Field>
         </form>
       </Modal>
+      <BlockedMembers />
       <PersonalizeModal open={personalize} onClose={() => setPersonalize(false)} />
     </div>
   );

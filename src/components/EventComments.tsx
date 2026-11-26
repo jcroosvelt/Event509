@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CornerDownRight, MessageCircle, Trash2 } from 'lucide-react';
+import { CornerDownRight, MessageCircle, Trash2, UserX } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { deleteComment, listComments, postComment, socialAvailable, type CommentList, type EventComment } from '@/services/social';
+import { blockAuthor } from '@/services/community';
+import { ReportContent } from '@/components/ReportContent';
 import { relative } from '@/lib/format';
 import { Avatar, Badge, Button, Card, Spinner, Textarea } from '@/components/ui';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -45,7 +47,11 @@ function Composer({ eventId, parentId, onDone, autoFocus, placeholder }: { event
 }
 
 function Item({ c, eventId, onReply, onRemove, isReply }: { c: EventComment; eventId: string; onReply: (c: EventComment) => void; onRemove: (c: EventComment) => void; isReply?: boolean }) {
-  const { t, lang, user } = useApp();
+  const { t, lang, user, toast } = useApp();
+  const block = async () => {
+    if (!window.confirm(t('Bloquer ce membre ? Vous ne verrez plus ses commentaires ni ses photos.'))) return;
+    try { await blockAuthor('comment', c.id); toast(t('Membre bloqué')); onReply(c); } catch { toast(t('Action impossible. Réessayez.'), 'error'); }
+  };
   const [replying, setReplying] = useState(false);
   return (
     <li className={isReply ? 'mt-3' : ''}>
@@ -61,6 +67,8 @@ function Item({ c, eventId, onReply, onRemove, isReply }: { c: EventComment; eve
           <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-ink-soft">{c.body}</p>
           <div className="mt-1 flex gap-3 text-xs font-semibold text-ink-muted">
             {!isReply && user && <button type="button" className="hover:text-ink" onClick={() => setReplying((r) => !r)}><CornerDownRight className="mr-1 inline h-3 w-3" aria-hidden />{t('Répondre')}</button>}
+            {user && !c.mine && <ReportContent kind="comment" targetId={c.id} />}
+            {user && !c.mine && <button type="button" className="hover:text-red-600" onClick={() => void block()}><UserX className="mr-1 inline h-3 w-3" aria-hidden />{t('Bloquer')}</button>}
             {c.canDelete && <button type="button" className="hover:text-red-600" onClick={() => onRemove(c)}><Trash2 className="mr-1 inline h-3 w-3" aria-hidden />{t('Supprimer')}</button>}
           </div>
           {replying && (

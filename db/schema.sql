@@ -179,7 +179,7 @@ create index if not exists files_org on files(organizer_id, kind);
 -- Photo de profil (tout compte, organisateur et administrateur compris) : un seul fichier par personne, sans organisation
 alter table files alter column organizer_id drop not null;
 alter table files drop constraint if exists files_kind_check;
-alter table files add constraint files_kind_check check (kind in ('event_cover', 'org_logo', 'verification', 'avatar'));
+alter table files add constraint files_kind_check check (kind in ('event_cover', 'org_logo', 'verification', 'avatar', 'event_photo'));
 create unique index if not exists files_avatar_user on files(user_id) where kind = 'avatar';
 
 -- Achat sans compte : la clé d'accès (dans le lien reçu par email) permet de retrouver une commande et ses billets.
@@ -729,3 +729,73 @@ create table if not exists messages (
   created_at timestamptz not null default now()
 );
 create index if not exists messages_conv on messages(conversation_id, created_at);
+
+-- Vie de la communauté : date de publication (fil d'actualité), photos des événements passés, « Je participe », liste d'attente,
+-- signalements de contenu, blocage de membres (par un membre, ou par une organisation pour ses messages).
+alter table events add column if not exists published_at timestamptz;
+
+create table if not exists event_photos (
+  id text primary key,
+  event_id text not null references events(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  file_id text not null,
+  caption text,
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists event_photos_event on event_photos(event_id, created_at desc);
+create index if not exists event_photos_user on event_photos(user_id);
+
+create table if not exists event_rsvps (
+  event_id text not null references events(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (event_id, user_id)
+);
+create index if not exists event_rsvps_user on event_rsvps(user_id);
+
+create table if not exists waitlist (
+  id text primary key,
+  event_id text not null references events(id) on delete cascade,
+  ticket_type_id text not null,
+  user_id text not null references users(id) on delete cascade,
+  qty integer not null check (qty between 1 and 10),
+  created_at timestamptz not null default now(),
+  notified_at timestamptz,
+  unique (event_id, ticket_type_id, user_id)
+);
+create index if not exists waitlist_event on waitlist(event_id, ticket_type_id, created_at);
+create index if not exists waitlist_user on waitlist(user_id);
+
+create table if not exists content_reports (
+  id text primary key,
+  kind text not null check (kind in ('comment', 'photo', 'message')),
+  target_id text not null,
+  reporter_id text not null references users(id) on delete cascade,
+  reason text not null check (reason in ('spam', 'abuse', 'inappropriate', 'scam', 'other')),
+  note text,
+  status text not null default 'open' check (status in ('open', 'removed', 'dismissed')),
+  snapshot jsonb not null default '{}',
+  handled_by text,
+  handled_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (kind, target_id, reporter_id)
+);
+create index if not exists content_reports_status on content_reports(status, created_at desc);
+create index if not exists content_reports_target on content_reports(kind, target_id);
+
+create table if not exists user_blocks (
+  id text primary key,
+  blocker_id text not null references users(id) on delete cascade,
+  blocked_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (blocker_id, blocked_id)
+);
+create index if not exists user_blocks_blocked on user_blocks(blocked_id);
+
+create table if not exists organizer_blocks (
+  organizer_id text not null references organizers(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (organizer_id, user_id)
+);

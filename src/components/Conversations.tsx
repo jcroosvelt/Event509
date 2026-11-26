@@ -3,6 +3,8 @@ import { ArrowLeft, MessageCircle, Send } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { myConversations, myThread, orgConversations, orgThread, replyMine, replyOrg, type ConversationItem, type Thread } from '@/services/social';
 import { relative } from '@/lib/format';
+import { blockConversationUser } from '@/services/community';
+import { ReportContent } from '@/components/ReportContent';
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Textarea } from '@/components/ui';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 
@@ -57,6 +59,13 @@ export function Conversations({ mode }: { mode: 'user' | 'org' }) {
           <div className="flex items-center gap-3 border-b border-line p-4">
             <Avatar name={title} src={mode === 'org' ? thread.avatarUrl : thread.organizer?.logo} size={40} />
             <h1 className="flex items-center gap-1 font-bold">{title} {mode === 'user' && thread.organizer?.verified && <VerifiedBadge size={16} />}</h1>
+            {mode === 'org' && (
+              <Button size="sm" variant="outline" className="ml-auto" onClick={() => {
+                const on = !thread.blocked;
+                if (on && !window.confirm(t('Bloquer cette personne ? Elle ne pourra plus écrire à votre organisation.'))) return;
+                void blockConversationUser(thread.id, on).then(() => { setThread({ ...thread, blocked: on }); loadList(); toast(on ? t('Personne bloquée') : t('Personne débloquée')); }).catch(() => toast(t('Action impossible. Réessayez.'), 'error'));
+              }}>{thread.blocked ? t('Débloquer') : t('Bloquer')}</Button>
+            )}
           </div>
           <ul className="flex-1 space-y-2 overflow-y-auto p-4" aria-live="polite">
             {thread.messages.map((m) => {
@@ -65,7 +74,7 @@ export function Conversations({ mode }: { mode: 'user' | 'org' }) {
                 <li key={m.id} className={mine ? 'flex justify-end' : 'flex justify-start'}>
                   <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-brand text-white' : 'bg-canvas text-ink'}`}>
                     <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                    <p className={`mt-1 text-[11px] ${mine ? 'text-white/70' : 'text-ink-muted'}`}>{relative(m.at, lang)}</p>
+                    <p className={`mt-1 text-[11px] ${mine ? 'text-white/70' : 'text-ink-muted'}`}>{relative(m.at, lang)}{!mine && <> · <ReportContent kind="message" targetId={m.id} className="underline" label={t('Signaler')} /></>}</p>
                   </div>
                 </li>
               );

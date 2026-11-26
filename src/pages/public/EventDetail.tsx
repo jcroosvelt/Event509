@@ -1,5 +1,8 @@
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { EventComments } from '@/components/EventComments';
+import { EventGoing } from '@/components/EventGoing';
+import { EventPhotos } from '@/components/EventPhotos';
+import { WaitlistButton } from '@/components/WaitlistButton';
 import { MessageOrganizer } from '@/components/MessageOrganizer';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -182,6 +185,7 @@ export default function EventDetail() {
                 </span>
               </div>
             )}
+            <EventGoing eventId={ev.id} open={ev.status === 'published' && ev.end >= new Date().toISOString().slice(0, 16)} onInvite={() => setShareOpen(true)} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -286,6 +290,7 @@ export default function EventDetail() {
           </Card>
 
           <ReviewsSection eventId={ev.id} />
+          <EventPhotos eventId={ev.id} slug={ev.slug} title={ev.title} />
           <EventComments eventId={ev.id} />
 
           {resale && resale.length > 0 && (
@@ -325,6 +330,7 @@ export default function EventDetail() {
                         {tt.description && <p className="mt-1 text-xs text-ink-muted">{tt.description}</p>}
                         <div className="mt-2 text-lg font-extrabold">{shownPrice(tt.price)}</div>
                         {a.label && <div className={cx('text-xs font-semibold', a.ok ? 'text-orange-700' : 'text-ink-soft')}>{t(a.label, { n: a.left })}</div>}
+                        {a.label === 'Complet' && <WaitlistButton eventId={ev.id} ticketTypeId={tt.id} />}
                       </div>
                       {a.ok && (
                         <div className="flex items-center gap-2" role="group" aria-label={t('Quantité {name}', { name: tt.name })}>

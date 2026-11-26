@@ -23,6 +23,7 @@ import { marketingRoutes } from './marketing.js';
 import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { notifyFollowers, socialRoutes } from './social.js';
+import { communityRoutes, notifyWaitlist, sweepWaitlists } from './community.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { appReleaseRoutes } from './apprelease.js';
 import { benefitsFor, checkPremiumPayment, checkSalesBadge, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
@@ -489,7 +490,7 @@ const deleteMe: Handler = async (c) => {
   if (u.role === 'admin') fail(409, 'Un administrateur ne peut pas supprimer son compte ici');
   // Opération irréversible : l'identité doit avoir été confirmée il y a moins de 10 minutes (session par cookie)
   if (c.session && !isRecent(c.session)) fail(403, 'Confirmez votre identité pour supprimer votre compte.', 'reauth_required');
-  await db().query(`delete from files where user_id = $1 and kind = 'avatar'`, [u.id]);
+  await db().query(`delete from files where user_id = $1 and kind in ('avatar', 'event_photo')`, [u.id]);
   await db().query(`delete from users where id = $1`, [u.id]);
   return null;
 };
@@ -553,6 +554,17 @@ async function visibleEvent(c: Ctx, idOrSlug: string): Promise<EventItem> {
   if (!e || (e.status !== 'published' && e.status !== 'ended' && !mine)) fail(404, 'Événement introuvable');
   if (e!.private === true && !mine && idOrSlug !== e!.slug && !(await holdsTicketFor(u, e!.id))) fail(404, 'Événement introuvable');
   return e!;
+}
+
+/** Événement terminé : sa fin (heure locale d'Haïti) est passée. */
+function eventEnded(ev: EventItem) {
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  return localMs(ev.end) < Date.parse(`${nowLocal}Z`);
+}
+
+/** Date de première publication (fil d'actualité) : posée une seule fois, jamais à chaque enregistrement. */
+async function stampPublished(id: string) {
+  await db().query(`update events set published_at = now() where id = $1 and status = 'published' and published_at is null`, [id]);
 }
 
 /** La personne connectée a-t-elle une commande ou un billet pour cet événement ? */
@@ -745,6 +757,7 @@ const createOrder: Handler = async (c) => {
         );
       return { order, tickets, event: ev! };
     });
+    if (c.user) await safely(() => db().query(`delete from waitlist where event_id = $1 and user_id = $2 and ticket_type_id = any($3)`, [result.event.id, c.user!.id, result.order.items.map((i) => i.ticketTypeId)]));
     // Paiement en ligne : la plateforme renvoie l'adresse de sa page sécurisée (MonCash, NatCash, KashPaw ou carte)
     let payUrl: string | undefined;
     if (result.order.status === 'pending' && payConfigured() && ONLINE_METHODS.includes(result.order.method)) {
@@ -1179,8 +1192,10 @@ const saveEvent: Handler = async (c) => {
     status: await allowedStatus(c, e.status ?? 'draft', existing?.data.status, existing?.organizer_id ?? orgId, existing?.data.id),
   };
   await saveEventRow(next);
+  await stampPublished(next.id);
   await act(c, orgId, existing ? 'Événement modifié' : 'Événement créé', next.title);
   await notifyEventChange(existing?.data, next);
+  await safely(() => notifyWaitlist(next.id)); // quota augmenté : la liste d'attente est prévenue
   return next;
 };
 
@@ -1211,6 +1226,7 @@ const setEventStatus: Handler = async (c) => {
   if (!e || (e.organizerId !== orgId && c.user!.role !== 'admin')) fail(404, 'Événement introuvable');
   const status = await allowedStatus(c, wanted, e!.status, e!.organizerId, e!.id);
   await saveEventRow({ ...e!, status });
+  await stampPublished(e!.id);
   await act(c, orgId, 'Statut d’événement modifié', `${e!.title} → ${status}`);
   await notifyEventChange(e!, { ...e!, status });
   return { status };
@@ -1269,6 +1285,7 @@ const deleteOrder: Handler = async (c) => {
     }
     await purgeOrders(q, 'id = $1', [o!.id]);
   });
+  await safely(() => notifyWaitlist(o!.eventId));
   await audit(c, 'Commande supprimée', o!.id);
   const ev = await eventById(o!.eventId);
   await notifyDeletion({
@@ -2186,6 +2203,7 @@ async function dropOrder(orderId: string) {
     }
     await purgeOrders(q, 'id = $1', [o.id]);
   });
+  await safely(() => notifyWaitlist(o.eventId));
 }
 
 /** Interroge la plateforme de paiement pour une commande en ligne : confirmée, échouée ou toujours en attente. */
@@ -2575,6 +2593,7 @@ const runReminders: Handler = async (c) => {
   for (const o of stale) if ((await checkPayment(o.id)) === 'pending') await dropOrder(o.id);
   const rate = await updateMarketRate().catch(() => null);
   const premium = await premiumMaintenance().catch((e) => (console.error('[premium] maintenance', e), null));
+  await sweepWaitlists().catch(() => 0);
   if (!pushConfigured()) return { sent: 0, premium, rate, note: 'FIREBASE_SERVICE_ACCOUNT non défini' };
   const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
   const now = Date.parse(`${nowLocal}Z`);
@@ -2610,6 +2629,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ...boostRoutes({ fail, str, auth, admin, org, audit }),
   ...socialRoutes({ fail, str, auth, org, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent }),
+  ...communityRoutes({ fail, str, auth, org, admin, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent, isEnded: eventEnded, publicEvent }),
   ...devApiRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur

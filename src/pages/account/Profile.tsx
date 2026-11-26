@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, Download, Heart, LayoutDashboard, LogOut, Megaphone, Receipt, Repeat2, Settings, ShieldCheck, Ticket } from 'lucide-react';
+import { Bell, Newspaper, ChevronRight, Download, Heart, LayoutDashboard, LogOut, Megaphone, Receipt, Repeat2, Settings, ShieldCheck, Ticket } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { useTitle } from '@/lib/hooks';
 import { can, hasOrganizerAccess, teamRoleLabel } from '@/lib/permissions';
@@ -17,6 +17,7 @@ export default function Profile() {
     { to: '/compte/billets', i: Ticket, l: t('Mes billets'), tone: 'orange' },
     { to: '/compte/achats', i: Receipt, l: t('Historique des achats'), tone: 'brand' },
     { to: '/compte/favoris', i: Heart, l: t('Favoris'), tone: 'red' },
+    { to: '/fil', i: Newspaper, l: t('Fil d’actualité'), tone: 'brand' },
     { to: '/compte/notifications', i: Bell, l: t('Notifications'), tone: 'amber' },
     { to: '/revente', i: Repeat2, l: t('Billets en revente'), tone: 'green' },
     { to: '/ambassadeurs', i: Megaphone, l: t('Ambassadeurs'), tone: 'violet' },

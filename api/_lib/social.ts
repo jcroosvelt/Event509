@@ -97,12 +97,13 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
       `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.created_at, u.data as data, u.organizer_id as org_id
          from event_comments c join users u on u.id = c.user_id
         where c.event_id = $1 and c.parent_id is null and not c.hidden and ($2::timestamptz is null or c.created_at < $2)
-        order by c.created_at desc limit 30`, [ev.id, before]);
+          and c.user_id not in (select blocked_id from user_blocks where blocker_id = $3)
+        order by c.created_at desc limit 30`, [ev.id, before, c.user?.id ?? '']);
     const ids = top.map((t) => t.id);
     const replies = ids.length ? await all<CommentRow>(
       `select c.id, c.event_id, c.user_id, c.parent_id, c.body, c.created_at, u.data as data, u.organizer_id as org_id
          from event_comments c join users u on u.id = c.user_id
-        where c.parent_id = any($1) and not c.hidden order by c.created_at limit 600`, [ids]) : [];
+        where c.parent_id = any($1) and not c.hidden and c.user_id not in (select blocked_id from user_blocks where blocker_id = $2) order by c.created_at limit 600`, [ids, c.user?.id ?? '']) : [];
     const verified = (await one<{ v: boolean | null }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [ev.organizerId]))?.v === true;
     const total = Number((await one<{ n: string }>(`select count(*) as n from event_comments where event_id = $1 and not hidden`, [ev.id]))?.n ?? 0);
     return {
@@ -132,8 +133,10 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     await db().query(`insert into event_comments (id, event_id, user_id, parent_id, body) values ($1,$2,$3,$4,$5)`, [id, ev.id, u.id, parent?.id ?? null, body]);
     const name = shortName((u.data.name as string) ?? '');
     try {
-      const team = await organizerUserIds(ev.organizerId);
-      if (parent && parent.user_id !== u.id) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
+      // Les personnes qui ont bloqué l'auteur ne reçoivent aucune alerte de sa part
+      const blockers = new Set((await all<{ blocker_id: string }>(`select blocker_id from user_blocks where blocked_id = $1`, [u.id])).map((r) => r.blocker_id));
+      const team = (await organizerUserIds(ev.organizerId)).filter((t) => !blockers.has(t));
+      if (parent && parent.user_id !== u.id && !blockers.has(parent.user_id)) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
       const others = team.filter((t) => t !== u.id && t !== parent?.user_id);
       if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
     } catch (e) {
@@ -157,6 +160,10 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
   };
 
   // ---------- Messages privés ----------
+  /** L'organisation a bloqué cette personne : elle ne peut plus lui écrire (message volontairement neutre). */
+  async function assertNotBlocked(orgId: string, userId: string) {
+    if (await one(`select 1 from organizer_blocks where organizer_id = $1 and user_id = $2`, [orgId, userId])) fail(403, 'Cet organisateur ne peut pas recevoir votre message.');
+  }
   interface ConvRow { id: string; user_id: string; organizer_id: string; event_id: string | null; last_at: Date; user_unread: number; org_unread: number }
   const msgOut = (m: { id: string; sender: string; body: string; created_at: Date }) => ({ id: m.id, from: m.sender as 'user' | 'org', body: m.body, at: m.created_at.toISOString() });
 
@@ -179,6 +186,7 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const o = await one<{ id: string; name: string }>(`select id, data->>'name' as name from organizers where id = $1`, [str(c.body.organizerId, 60)]);
     if (!o) fail(404, 'Organisateur introuvable');
     if (u.organizer_id === o!.id) fail(409, 'Vous ne pouvez pas vous écrire à vous-même');
+    await assertNotBlocked(o!.id, u.id);
     const body = cleanText(c.body.body, MAX_MESSAGE);
     if (!body) fail(422, 'Écrivez votre message');
     await rateLimit(`msg:${u.id}`, 30, 60);
@@ -239,6 +247,7 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const u = auth(c);
     const conv = await one<ConvRow>(`select * from conversations where id = $1 and user_id = $2`, [c.params.id, u.id]);
     if (!conv) fail(404, 'Conversation introuvable');
+    await assertNotBlocked(conv!.organizer_id, u.id);
     const body = cleanText(c.body.body, MAX_MESSAGE);
     if (!body) fail(422, 'Écrivez votre message');
     await rateLimit(`msg:${u.id}`, 30, 60);
@@ -249,13 +258,14 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
 
   const orgConversations: Handler = async (c) => {
     const orgId = org(c, 'marketing');
-    const rows = await all<ConvRow & { name: string | null; body: string | null; sender: string | null; title: string | null }>(
-      `select c.*, u.data->>'name' as name, m.body, m.sender, e.data->>'title' as title
+    const rows = await all<ConvRow & { name: string | null; body: string | null; sender: string | null; title: string | null; blocked: boolean }>(
+      `select c.*, u.data->>'name' as name, m.body, m.sender, e.data->>'title' as title,
+              exists (select 1 from organizer_blocks b where b.organizer_id = c.organizer_id and b.user_id = c.user_id) as blocked
          from conversations c join users u on u.id = c.user_id
          left join lateral (select body, sender from messages where conversation_id = c.id order by created_at desc limit 1) m on true
          left join events e on e.id = c.event_id
         where c.organizer_id = $1 order by c.last_at desc limit 300`, [orgId]);
-    return rows.map((r) => ({ id: r.id, from: shortName(r.name ?? ''), event: r.title || undefined, last: r.body ? { body: preview(r.body), from: r.sender } : null, at: r.last_at.toISOString(), unread: r.org_unread }));
+    return rows.map((r) => ({ id: r.id, blocked: r.blocked, from: shortName(r.name ?? ''), event: r.title || undefined, last: r.body ? { body: preview(r.body), from: r.sender } : null, at: r.last_at.toISOString(), unread: r.org_unread }));
   };
 
   const orgThread: Handler = async (c) => {
@@ -265,7 +275,8 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const msgs = await all<{ id: string; sender: string; body: string; created_at: Date }>(`select id, sender, body, created_at from messages where conversation_id = $1 order by created_at limit 500`, [conv!.id]);
     await db().query(`update conversations set org_unread = 0 where id = $1`, [conv!.id]);
     const u = await one<{ data: UserBits }>(`select data from users where id = $1`, [conv!.user_id]);
-    return { id: conv!.id, from: shortName(u?.data.name ?? ''), avatarUrl: u?.data.avatarUrl || undefined, messages: msgs.map(msgOut) };
+    const blocked = !!(await one(`select 1 from organizer_blocks where organizer_id = $1 and user_id = $2`, [orgId, conv!.user_id]));
+    return { id: conv!.id, from: shortName(u?.data.name ?? ''), avatarUrl: u?.data.avatarUrl || undefined, blocked, messages: msgs.map(msgOut) };
   };
 
   const orgReply: Handler = async (c) => {

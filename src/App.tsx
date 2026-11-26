@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  FileText, Heart, LifeBuoy, Bell, MessageCircle, Repeat2, ScanLine, Search, Settings, Ticket, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  FileText, Heart, LifeBuoy, Bell, MessageCircle, Newspaper, Repeat2, ScanLine, Search, Settings, Ticket, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
@@ -55,6 +55,8 @@ const Marketing = lazy(() => import('@/pages/organizer/Marketing'));
 const Reviews = lazy(() => import('@/pages/organizer/Reviews'));
 const OrgMessages = lazy(() => import('@/pages/organizer/Messages'));
 const Messages = lazy(() => import('@/pages/account/Messages'));
+const Feed = lazy(() => import('@/pages/account/Feed'));
+const ContentReports = lazy(() => import('@/pages/admin/ContentReports'));
 const VerifiedProgram = lazy(() => import('@/pages/public/VerifiedProgram'));
 const OrgVerification = lazy(() => import('@/pages/organizer/Verification'));
 const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
@@ -153,6 +155,7 @@ export default function App() {
             <Route path="billets/:id" element={auth(<TicketDetail />)} />
             <Route path="favoris" element={<Favorites />} />
             <Route path="notifications" element={auth(<Notifications />)} />
+            <Route path="fil" element={auth(<Feed />)} />
             <Route path="compte/completer" element={auth(<CompleteProfile />)} />
             <Route path="*" element={<NotFound />} />
           </Route>
@@ -170,6 +173,7 @@ export default function App() {
                     { to: '/compte/billets', label: t('Mes billets'), icon: Ticket, perm: 'buyer' },
                     { to: '/compte/achats', label: t('Historique des achats'), icon: Receipt, perm: 'buyer' },
                     { to: '/compte/favoris', label: t('Favoris'), icon: Heart, perm: 'buyer' },
+                    { to: '/fil', label: t('Fil d’actualité'), icon: Newspaper, perm: 'buyer' },
                   ] },
                   { title: t('Après l’achat'), items: [
                     { to: '/compte/remboursements', label: t('Remboursements'), icon: Undo2, perm: 'buyer' },
@@ -298,6 +302,7 @@ export default function App() {
                   { items: [
                     { to: A, label: t('Vue d’ensemble'), icon: BarChart3, end: true, perm: 'admin' },
                     { to: `${A}/moderation`, label: t('Modération'), icon: Flag, perm: 'admin', badge: String(pending.events + pending.reports || '') || undefined },
+                    { to: `${A}/signalements`, label: t('Signalements de contenu'), icon: Flag, perm: 'admin' },
                     { to: `${A}/utilisateurs`, label: t('Utilisateurs'), icon: Users, perm: 'admin' },
                     { to: `${A}/verification`, label: t('Vérification organisateurs'), icon: ShieldCheck, perm: 'admin' },
                     { to: `${A}/recuperations`, label: t('Récupérations de compte'), icon: LifeBuoy, perm: 'admin' },
@@ -328,6 +333,7 @@ export default function App() {
           >
             <Route index element={<AdminOverview />} />
             <Route path="moderation" element={<Moderation />} />
+            <Route path="signalements" element={<ContentReports />} />
             <Route path="utilisateurs" element={<AdminUsers />} />
             <Route path="verification" element={<Verification />} />
             <Route path="recuperations" element={<RecoveryRequests />} />
