@@ -1,11 +1,13 @@
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { EventComments } from '@/components/EventComments';
+import { MessageOrganizer } from '@/components/MessageOrganizer';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, BellRing, CalendarDays, Check, Clock, Copy, Info, MapPin, Minus, MonitorPlay, Plus, Repeat, Repeat2, Share2, Users, Flag,
   Lock,
 } from 'lucide-react';
-import { eventRefundDays, getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
+import { DEMO, eventRefundDays, getEvent, getOrganizer, listEvents, listResale, listReviews, occurrences, reportEvent } from '@/services/api';
 import { useForm } from '@/lib/form';
 import { reportReason } from '@/lib/labels';
 import { useAsync, useTitle } from '@/lib/hooks';
@@ -162,20 +164,22 @@ export default function EventDetail() {
                   <Link to={`/o/${org.slug}`} className="flex items-center gap-1 text-sm font-bold hover:text-brand-ink">
                     {org.name} {org.verified && <VerifiedBadge size={18} />}
                   </Link>
-                  <div className="text-xs text-ink-muted">{t('{n} abonnés', { n: num(org.followers + (following ? 1 : 0), lang) })} · {t('{n} événements', { n: org.eventsCount })}</div>
+                  <div className="text-xs text-ink-muted">{t('{n} abonnés', { n: num(org.followers + (DEMO && following ? 1 : 0), lang) })} · {t('{n} événements', { n: org.eventsCount })}</div>
                 </div>
+                <span className="ml-auto flex items-center gap-2">
+                <MessageOrganizer organizerId={org.id} organizerName={org.name} eventId={ev.id} size="sm" />
                 <Button
                   size="sm"
                   variant={following ? 'soft' : 'outline'}
-                  className="ml-auto"
                   aria-pressed={following}
                   onClick={() => {
-                    toggleFollow(org.id);
+                    if (!toggleFollow(org.id)) { toast(t('Connectez-vous pour suivre un organisateur'), 'error'); return; }
                     toast(following ? t('Vous ne suivez plus {name}', { name: org.name }) : t('Vous suivez {name}. Vous serez prévenu de ses nouveaux événements.', { name: org.name }));
                   }}
                 >
                   {following && <Check className="h-4 w-4" aria-hidden />} {following ? t('Abonné') : t('Suivre')}
                 </Button>
+                </span>
               </div>
             )}
           </div>
@@ -282,6 +286,7 @@ export default function EventDetail() {
           </Card>
 
           <ReviewsSection eventId={ev.id} />
+          <EventComments eventId={ev.id} />
 
           {resale && resale.length > 0 && (
             <Card className="flex flex-wrap items-center gap-4">

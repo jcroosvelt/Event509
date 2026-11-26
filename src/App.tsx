@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import {
   BadgeCheck, BadgePercent, BarChart3, CalendarRange, ClipboardList, Code2, Headphones, LineChart, Link2, Rocket, CreditCard, History, Receipt, CalendarDays, CircleDollarSign, Flag, Gavel, Home, LayoutDashboard, Mail, Megaphone, Percent,
-  FileText, Heart, LifeBuoy, Bell, Repeat2, ScanLine, Search, Settings, Ticket, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
+  FileText, Heart, LifeBuoy, Bell, MessageCircle, Repeat2, ScanLine, Search, Settings, Ticket, Share2, Star, TrendingUp, ShieldCheck, Undo2, UserCog, Users, Wallet,
 } from 'lucide-react';
 import { Loading, Toaster } from '@/components/ui';
 import { AppInstallPopup, AppUpdateBanner } from '@/components/AppInstall';
@@ -53,6 +53,8 @@ const Promos = lazy(() => import('@/pages/organizer/Promos'));
 const Refunds = lazy(() => import('@/pages/organizer/Refunds'));
 const Marketing = lazy(() => import('@/pages/organizer/Marketing'));
 const Reviews = lazy(() => import('@/pages/organizer/Reviews'));
+const OrgMessages = lazy(() => import('@/pages/organizer/Messages'));
+const Messages = lazy(() => import('@/pages/account/Messages'));
 const VerifiedProgram = lazy(() => import('@/pages/public/VerifiedProgram'));
 const OrgVerification = lazy(() => import('@/pages/organizer/Verification'));
 const Subscription = lazy(() => import('@/pages/organizer/Subscription'));
@@ -172,6 +174,7 @@ export default function App() {
                   { title: t('Après l’achat'), items: [
                     { to: '/compte/remboursements', label: t('Remboursements'), icon: Undo2, perm: 'buyer' },
                     { to: '/revente', label: t('Billets en revente'), icon: Repeat2, perm: 'buyer' },
+                    { to: '/compte/messages', label: t('Messages'), icon: MessageCircle, perm: 'buyer' },
                     { to: '/compte/notifications', label: t('Notifications'), icon: Bell, perm: 'buyer' },
                   ] },
                   { title: t('Compte'), items: [
@@ -197,6 +200,7 @@ export default function App() {
             <Route path="remboursements" element={<BuyerRefunds />} />
             <Route path="devenir-organisateur" element={<BecomeOrganizer />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="messages" element={<Messages />} />
             <Route path="profil" element={<Profile />} />
             <Route path="parametres" element={<AccountSettings />} />
             <Route path="securite" element={<Security />} />
@@ -231,6 +235,7 @@ export default function App() {
                     { to: `${O}/liens`, label: t('Liens de suivi'), icon: Link2, perm: 'marketing' },
                     { to: `${O}/api`, label: t('API et intégrations'), icon: Code2, perm: 'settings' },
                     { to: `${O}/avis`, label: t('Avis'), icon: Star, perm: 'marketing' },
+                    { to: `${O}/messages`, label: t('Messages'), icon: MessageCircle, perm: 'marketing' },
                     { to: `${O}/analyses`, label: t('Statistiques avancées'), icon: TrendingUp, perm: 'dashboard' },
                   ] },
                   { title: t('Organisation'), items: [
@@ -266,6 +271,7 @@ export default function App() {
             <Route path="marketing" element={<Marketing />} />
             <Route path="emails" element={<Automations />} />
             <Route path="avis" element={<Reviews />} />
+            <Route path="messages" element={<OrgMessages />} />
             <Route path="analyses" element={<Analytics />} />
             <Route path="calendrier" element={<Calendar />} />
             <Route path="activite" element={<Activity />} />

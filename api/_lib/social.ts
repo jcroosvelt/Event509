@@ -58,7 +58,7 @@ export async function notifyFollowers(ev: EventItem, orgName: string) {
   const ids = (await followerIds(ev.organizerId)).filter((id) => !team.has(id));
   let sent = 0;
   for (let i = 0; i < ids.length; i += 100)
-    sent += await notifyUsers(ids.slice(i, i + 100), { title: `${orgName} a publié un événement`, body: ev.title, url: `/evenement/${ev.slug || ev.id}`, channel: 'updates' });
+    sent += await notifyUsers(ids.slice(i, i + 100), { title: `${orgName} a publié un événement`, body: ev.title, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
   return sent;
 }
 
@@ -133,9 +133,9 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const name = shortName((u.data.name as string) ?? '');
     try {
       const team = await organizerUserIds(ev.organizerId);
-      if (parent && parent.user_id !== u.id) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body)}`, url: `/evenement/${ev.slug || ev.id}`, channel: 'updates' });
+      if (parent && parent.user_id !== u.id) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
       const others = team.filter((t) => t !== u.id && t !== parent?.user_id);
-      if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body)}`, url: `/evenement/${ev.slug || ev.id}`, channel: 'updates' });
+      if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body)}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
     } catch (e) {
       console.error('[social] notification', e);
     }

@@ -4,6 +4,7 @@ import { claimOrder, DEMO, detectPlace, fetchMe, fetchMyOrders, fetchMyTickets, 
 import { DEFAULT_PLACE, type Place, type TasteProfile } from '@/data/countries';
 import { translate, type Vars } from '@/lib/i18n';
 import { registerPush, unregisterPush } from '@/lib/push';
+import { fetchMyFollows, followOrganizerApi } from '@/services/social';
 import { isDisplayCurrency, type AppUser, type DisplayCurrency, type IssuedTicket, type Lang, type NotificationItem, type Order } from '@/types';
 
 /** Lecture/écriture localStorage tolérante aux erreurs (navigation privée, quota…). */
@@ -105,7 +106,8 @@ interface AppState {
   reminders: string[];
   toggleReminder: (eventId: string) => void;
   follows: string[];
-  toggleFollow: (organizerId: string) => void;
+  /** Suit ou ne suit plus un organisateur ; renvoie faux si l'action n'a pas eu lieu (connexion requise). */
+  toggleFollow: (organizerId: string) => boolean;
 
   tickets: IssuedTicket[];
   addTickets: (t: IssuedTicket[]) => void;
@@ -212,15 +214,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sync = useCallback(async () => {
     if (DEMO) return;
     try {
-      const [me, tk, od] = await Promise.all([fetchMe(), fetchMyTickets(), fetchMyOrders()]);
+      const [me, tk, od, fl] = await Promise.all([fetchMe(), fetchMyTickets(), fetchMyOrders(), fetchMyFollows().catch(() => null)]);
       persist('e509.user', me);
       setUser(me);
       setTickets(tk);
       setOrders(od);
+      if (fl) setFollows(fl);
     } catch {
       /* hors ligne : on garde la copie locale ; une session expirée déclenche la déconnexion */
     }
-  }, [setUser, setTickets, setOrders]);
+  }, [setUser, setTickets, setOrders, setFollows]);
 
   const startSession = useCallback(
     async (s: Session_) => {
@@ -361,7 +364,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       favorites, toggleFavorite: toggle(setFavorites),
       reminders, toggleReminder: toggle(setReminders),
-      follows, toggleFollow: toggle(setFollows),
+      follows,
+      toggleFollow: (id) => {
+        const on = !follows.includes(id);
+        // Abonnement enregistré sur le serveur : il faut un compte
+        if (!DEMO && !user) {
+          return false;
+        }
+        setFollows((f) => (on ? [...f.filter((x) => x !== id), id] : f.filter((x) => x !== id)));
+        if (!DEMO)
+          followOrganizerApi(id, on)
+            .then(() => refreshCatalog())
+            .catch(() => {
+              setFollows((f) => (on ? f.filter((x) => x !== id) : [...f.filter((x) => x !== id), id]));
+              toast(translate(lang, 'L’enregistrement a échoué. Réessayez.'), 'error');
+            });
+        return true;
+      },
       tickets,
       addTickets: (n) => setTickets((s) => [...n, ...s]),
       updateTicket: (id, patch) => setTickets((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x))),

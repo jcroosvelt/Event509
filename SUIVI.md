@@ -221,3 +221,4 @@
 - 2026-11-26 : tests déplacés de api/ vers tests/api/ (Vercel compte chaque fichier de api/ comme une fonction : limite de 12 atteinte, le déploiement échouait).
 - 2026-11-26 : badge « à vie » (jamais expiré) possible par l'administration ; compte Event509 passé à vie.
 - 2026-11-26 : forfait à vie (200 USD réglable, converti en gourdes au taux du jour) pour les organisateurs ; taux de change réglable à la main par l'administration (retour automatique possible) ; socle serveur du réseau social : abonnements aux organisateurs, commentaires, messages privés (interface à venir).
+- 2026-11-26 : réseau social en ligne : s'abonner aux organisateurs (enregistré sur le serveur, abonnés réels, alerte à chaque nouvel événement public), commentaires et réponses sur les événements, messages privés acheteur ↔ organisation (boîte « Messages » des deux côtés), vérifiés par un parcours réel dans un navigateur (scripts/api-dev-session.mjs).

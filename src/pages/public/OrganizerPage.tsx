@@ -1,7 +1,8 @@
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useParams } from 'react-router-dom';
 import { CalendarX, Check, Facebook, Globe, Instagram, Link2, Linkedin, MapPin, Share2, Youtube } from 'lucide-react';
-import { getOrganizerPage } from '@/services/api';
+import { DEMO, getOrganizerPage } from '@/services/api';
+import { MessageOrganizer } from '@/components/MessageOrganizer';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { dateShort, num } from '@/lib/format';
@@ -61,18 +62,19 @@ export default function OrganizerPage() {
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
               <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden /> {org.city}</span>
-              <span>{t('{n} abonnés', { n: num(org.followers + (following ? 1 : 0), lang) })}</span>
+              <span>{t('{n} abonnés', { n: num(org.followers + (DEMO && following ? 1 : 0), lang) })}</span>
               <span>{t('{n} événements', { n: org.eventsCount })}</span>
               {pro && org.verifiedSince && <span>{t('Certifié depuis le {date}', { date: dateShort(org.verifiedSince, lang) })}</span>}
             </p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={share} aria-label={t('Partager')}><Share2 className="h-4 w-4" aria-hidden /></Button>
+            <MessageOrganizer organizerId={org.id} organizerName={org.name} />
             <Button
               variant={following ? 'soft' : 'primary'}
               aria-pressed={following}
               onClick={() => {
-                toggleFollow(org.id);
+                if (!toggleFollow(org.id)) { toast(t('Connectez-vous pour suivre un organisateur'), 'error'); return; }
                 toast(following ? t('Vous ne suivez plus {name}', { name: org.name }) : t('Vous suivez {name}. Vous serez prévenu de ses nouveaux événements.', { name: org.name }));
               }}
             >
