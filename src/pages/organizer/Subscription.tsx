@@ -4,7 +4,7 @@ import { CalendarClock, Check, Download, Lock, RefreshCw } from 'lucide-react';
 import { useApp } from '@/store/app';
 import { useAsync, useTitle } from '@/lib/hooks';
 import { dateShort, moneyRaw, platformMoney } from '@/lib/format';
-import { getInvoice, getPremium, premiumAvailable, subscribePremium, type PremiumOverview } from '@/services/premium';
+import { getBadgeProgress, getInvoice, getPremium, premiumAvailable, subscribePremium, type PremiumOverview } from '@/services/premium';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Badge, Button, Card, EmptyState, Field, Loading, PageHeader, Select, Table, Td, type Tone } from '@/components/ui';
 import type { PremiumBenefit, PremiumPayment } from '@/types';
@@ -80,6 +80,7 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader title={t('Mon abonnement professionnel')} subtitle={t('Votre formule, vos paiements et vos avantages.')} />
+      <SalesProgress />
 
       <Card>
         <div className="flex flex-wrap items-center gap-3">
@@ -161,5 +162,26 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
         )}
       </section>
     </div>
+  );
+}
+
+/** Progression vers le badge offert : 500 billets payés vendus au total = badge rouge pour 1 an, sans payer. */
+function SalesProgress() {
+  const { t } = useApp();
+  const p = useAsync(() => getBadgeProgress().catch(() => null), []);
+  if (!p.data) return null;
+  const { sold, goal, reached } = p.data;
+  const pct = Math.min(100, Math.round((sold / goal) * 100));
+  return (
+    <Card className="mb-4">
+      <h2 className="font-bold">{t('Badge offert avec vos ventes')}</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        {reached ? t('Bravo : vous avez dépassé {n} billets vendus, votre badge a été offert pour 1 an.', { n: goal }) : t('Vendez {n} billets au total et recevez le badge vérifié pour 1 an, sans payer.', { n: goal })}
+      </p>
+      <div role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(sold, goal)} aria-label={t('Billets vendus')} className="mt-3 h-2.5 overflow-hidden rounded-full bg-canvas">
+        <div className="h-full rounded-full bg-red-600" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-ink-muted">{t('{sold} / {goal} billets payés vendus', { sold, goal })}</p>
+    </Card>
   );
 }

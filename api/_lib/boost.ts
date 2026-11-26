@@ -90,7 +90,8 @@ export function boostRoutes(h: PremiumDeps): [string, string, Handler][] {
     const orgId = c0.user?.organizer_id;
     const billingCurrency = billingCurrencyFor(orgId ? (await one<{ c: string | null }>(`select data->>'country' as c from organizers where id = $1`, [orgId]))?.c : null);
     const used = await slotsUsed();
-    return { enabled: c.enabled, packages: c.packages, maxActive: c.maxActive, slotsLeft: Math.max(0, c.maxActive - used), onlinePayment: payConfigured(), billingCurrency };
+    // L'administration de la plateforme booste ses événements gratuitement (indiqué à l'interface pour afficher « Gratuit »)
+    return { enabled: c.enabled, packages: c.packages, maxActive: c.maxActive, slotsLeft: Math.max(0, c.maxActive - used), onlinePayment: payConfigured(), billingCurrency, free: c0.user?.role === 'admin' };
   };
 
   const list: Handler = async (c) => {
@@ -121,8 +122,10 @@ export function boostRoutes(h: PremiumDeps): [string, string, Handler][] {
     if (ev!.data.end < new Date().toISOString().slice(0, 16)) fail(409, 'Cet événement est terminé');
     if (await one(`select 1 from event_boosts where event_id = $1 and ((status = 'active' and ends_at > now()) or (status = 'pending' and created_at > now() - interval '2 hours'))`, [ev!.id]))
       fail(409, 'Cet événement a déjà un boost en cours ou en attente de paiement');
-    if ((await slotsUsed()) >= cfg.maxActive) fail(409, 'Toutes les places de boost sont occupées pour le moment : réessayez dans quelques jours');
-    const amount = pack!.price;
+    // Administration de la plateforme : boost gratuit, et hors limite de places (la plateforme se met en avant elle-même sans payer)
+    const free = c.user?.role === 'admin';
+    if (!free && (await slotsUsed()) >= cfg.maxActive) fail(409, 'Toutes les places de boost sont occupées pour le moment : réessayez dans quelques jours');
+    const amount = free ? 0 : pack!.price;
     const method = str(c.body.method, 20) || 'moncash';
     const online = payConfigured() && amount >= MIN_HTG;
     if (online && !ONLINE_METHODS.includes(method)) fail(422, 'Moyen de paiement invalide');

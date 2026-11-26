@@ -68,15 +68,15 @@ export default function Boosts() {
                 {c.packages.map((p) => (
                   <button key={p.days} type="button" role="radio" aria-checked={days === p.days} onClick={() => setDays(p.days)} className={`rounded-3xl border p-4 text-left transition ${days === p.days ? 'border-brand ring-4 ring-brand/10' : 'border-line hover:border-ink/20'}`}>
                     <span className="block font-bold">{p.days} {t('jours')}</span>
-                    <span className="mt-1 block text-2xl font-extrabold">{platformMoney(p.price, c.billingCurrency, lang)}</span>
-                    <span className="text-xs text-ink-muted">{platformMoney(p.price / p.days, c.billingCurrency, lang)} / {t('jour')}</span>
+                    <span className="mt-1 block text-2xl font-extrabold">{c.free ? t('Gratuit') : platformMoney(p.price, c.billingCurrency, lang)}</span>
+                    <span className="text-xs text-ink-muted">{c.free ? t('Offert à l’administration') : `${platformMoney(p.price / p.days, c.billingCurrency, lang)} / ${t('jour')}`}</span>
                   </button>
                 ))}
               </div>
-              {c.onlinePayment && <div className="max-w-xs"><Field label={t('Moyen de paiement')}><Select value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m.v} value={m.v}>{t(m.l)}</option>)}</Select></Field></div>}
-              {!c.onlinePayment && <p className="rounded-2xl bg-canvas p-3 text-sm text-ink-soft">{t('Le paiement en ligne n’est pas encore disponible : votre demande est enregistrée et l’administration la confirme dès réception de votre paiement.')}</p>}
+              {c.onlinePayment && !c.free && <div className="max-w-xs"><Field label={t('Moyen de paiement')}><Select value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m.v} value={m.v}>{t(m.l)}</option>)}</Select></Field></div>}
+              {!c.onlinePayment && !c.free && <p className="rounded-2xl bg-canvas p-3 text-sm text-ink-soft">{t('Le paiement en ligne n’est pas encore disponible : votre demande est enregistrée et l’administration la confirme dès réception de votre paiement.')}</p>}
               <p className="text-xs text-ink-muted">{t('Places de boost disponibles : {n} sur {max}. Le boost augmente la visibilité mais ne garantit pas un nombre de ventes.', { n: c.slotsLeft, max: c.maxActive })}</p>
-              <Button loading={busy} disabled={c.slotsLeft === 0} onClick={pay}><Rocket className="h-4 w-4" aria-hidden /> {pack ? t('Booster pour {price}', { price: platformMoney(pack.price, c.billingCurrency, lang) }) : t('Booster')}</Button>
+              <Button loading={busy} disabled={c.slotsLeft === 0 && !c.free} onClick={pay}><Rocket className="h-4 w-4" aria-hidden /> {c.free ? t('Booster gratuitement') : pack ? t('Booster pour {price}', { price: platformMoney(pack.price, c.billingCurrency, lang) }) : t('Booster')}</Button>
             </div>
           )}
         </Card>

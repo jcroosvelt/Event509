@@ -12,7 +12,7 @@ import { Badge, Button, ButtonLink, Card, EmptyState, Field, Input, Loading, Pag
 import type { VerificationApplication, VerificationDocType, VerificationStatus } from '@/types';
 
 const STATUS: Record<VerificationStatus | 'none', { l: string; tone: Tone; d: string }> = {
-  none: { l: 'Non demandée', tone: 'gray', d: 'Déposez votre demande pour obtenir la coche bleue.' },
+  none: { l: 'Non demandée', tone: 'gray', d: 'Déposez votre demande pour obtenir la coche rouge.' },
   draft: { l: 'Brouillon', tone: 'gray', d: 'Votre demande n’est pas encore envoyée.' },
   pending: { l: 'En attente', tone: 'amber', d: 'Votre demande est bien reçue : un administrateur va l’examiner.' },
   in_review: { l: 'En cours de vérification', tone: 'brand', d: 'Un administrateur examine actuellement votre dossier.' },

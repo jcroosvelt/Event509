@@ -24,7 +24,7 @@ import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { appReleaseRoutes } from './apprelease.js';
-import { benefitsFor, checkPremiumPayment, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
+import { benefitsFor, checkPremiumPayment, checkSalesBadge, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
 import { randomBytes } from 'node:crypto';
 import { cityCoords, cleanPosition, distanceKm, plainPlace } from './geo.js';
 import { DEFAULT_REFUND_DAYS, MAX_REFUND_DAYS, PAYOUT_LAST_DAYS, PAYOUT_MIN_SOLD, payoutState, refundDaysOf, refundOpen, type PayoutReason } from '../../src/lib/payouts.js';
@@ -769,6 +769,8 @@ async function emitSale(order: Order, ev: EventItem, count: number) {
 
 /** Nouvelle vente et « presque complet » pour l'organisation. */
 async function notifyTeamSale(ev: EventItem, count: number) {
+  // Règle des 500 billets vendus : badge offert pour 1 an (contrôle léger, jamais bloquant pour la vente)
+  await safely(() => checkSalesBadge(ev.organizerId));
   if (!pushConfigured()) return;
   await safely(async () => {
     const team = await organizerUserIds(ev.organizerId);

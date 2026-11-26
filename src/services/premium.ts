@@ -125,7 +125,7 @@ export const getFinance = (from: string, to: string) => http<FinanceData>(`/org/
 
 // Boost par événement
 export interface BoostConfig { enabled: boolean; packages: { days: number; price: number }[]; maxActive: number }
-export interface BoostPublicConfig extends BoostConfig { slotsLeft: number; onlinePayment: boolean; billingCurrency?: 'HTG' | 'USD' }
+export interface BoostPublicConfig extends BoostConfig { slotsLeft: number; onlinePayment: boolean; billingCurrency?: 'HTG' | 'USD'; free?: boolean }
 export interface OrgBoost { id: string; eventId: string; event: string; days: number; amount: number; state: 'pending' | 'active' | 'ended' | 'canceled' | 'failed'; method: 'online' | 'transfer'; createdAt: string; startsAt: string | null; endsAt: string | null; views: number; orders: number; tickets: number }
 export const getBoostConfig = () => http<BoostPublicConfig>('/boost/config');
 export const listBoosts = () => http<OrgBoost[]>('/org/boosts');
@@ -150,3 +150,9 @@ export const listWebhooks = () => http<WebhookData>('/org/api/webhooks');
 export const createWebhook = (url: string, events: string[]) => http<{ id: string; secret: string }>('/org/api/webhooks', { method: 'POST', body: JSON.stringify({ url, events }) });
 export const deleteWebhook = (id: string) => http<null>(`/org/api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const testWebhook = (id: string) => http<{ ok: boolean; code: number | null; error: string | null }>(`/org/api/webhooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
+
+/** Administration : tous les organisateurs (même sans demande ni paiement), pour leur donner ou retirer le badge. */
+export interface AdminOrganizerRow { id: string; name: string; city: string; verified: boolean; since?: string; owner?: string; ticketsSold: number; goal: number; until?: string; gift: boolean; bySales: boolean }
+export const getAdminOrganizers = (q = '') => http<AdminOrganizerRow[]>(`/admin/organizers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+/** Organisation : progression vers le badge offert (billets payés vendus / seuil). */
+export const getBadgeProgress = () => http<{ sold: number; goal: number; reached: boolean }>('/org/badge-progress');

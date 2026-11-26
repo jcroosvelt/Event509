@@ -172,7 +172,7 @@ export default function OrgSettings() {
           <Card>
             <div className="flex flex-wrap items-center gap-3">
               <IconBadge tone="green"><BadgeCheck className="h-[18px] w-[18px]" /></IconBadge>
-              <div className="min-w-0 flex-1"><h2 className="font-bold">{t('Organisateur vérifié')}</h2><p className="text-sm text-ink-muted">{t('Coche bleue officielle, outils professionnels et support prioritaire')}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="font-bold">{t('Organisateur vérifié')}</h2><p className="text-sm text-ink-muted">{t('Coche rouge officielle, outils professionnels et support prioritaire')}</p></div>
               <Badge tone={verified ? 'green' : 'gray'}>{verified ? t('Vérifié') : t('Non vérifié')}</Badge>
               <Link to="/organisateur/verification" className="text-sm font-semibold text-brand-ink">{verified ? t('Gérer') : t('Demander la vérification')}</Link>
             </div>

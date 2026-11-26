@@ -7,6 +7,7 @@ import { useApp } from '@/store/app';
 import { dateShort, moneyRaw, relative } from '@/lib/format';
 import { Avatar, Badge, Button, Card, EmptyState, Field, Loading, Modal, PageHeader, Segmented, Spinner, Textarea, Toggle, type Tone } from '@/components/ui';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { AdminBadgeGiver } from '@/components/AdminBadgeGiver';
 import type { VerificationDocType, VerificationLogEntry, VerificationStatus } from '@/types';
 
 const docLabels: Record<VerificationDocType, string> = {
@@ -112,6 +113,7 @@ export default function Verification() {
   return (
     <div>
       <PageHeader title={t('Vérification des organisateurs')} subtitle={t('Contrôlez l’identité et les documents avant d’attribuer le badge. Chaque décision est enregistrée à votre nom.')} />
+      <AdminBadgeGiver />
       <Segmented label={t('Filtre')} className="mb-5" value={tab} onChange={setTab} options={[
         { value: 'todo', label: t('À traiter ({n})', { n: count('todo') }) }, { value: 'active', label: t('Certifiés ({n})', { n: count('active') }) }, { value: 'closed', label: t('Refusés ({n})', { n: count('closed') }) },
       ]} />

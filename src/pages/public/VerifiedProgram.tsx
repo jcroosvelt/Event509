@@ -11,7 +11,7 @@ import { ButtonLink, Card, Loading, SectionHeader } from '@/components/ui';
 import type { PremiumBenefit } from '@/types';
 
 const BENEFITS: { key: PremiumBenefit; icon: LucideIcon; l: string; d: string }[] = [
-  { key: 'profile', icon: ShieldCheck, l: 'Profil officiel certifié', d: 'Coche bleue à côté de votre nom et sur tous vos événements, avec la date de certification.' },
+  { key: 'profile', icon: ShieldCheck, l: 'Profil officiel certifié', d: 'Coche rouge à côté de votre nom et sur tous vos événements, avec la date de certification.' },
   { key: 'visibility', icon: Search, l: 'Visibilité renforcée', d: 'Une section dédiée et un coup de pouce transparent dans les résultats, sans jamais masquer les autres organisateurs.' },
   { key: 'analytics', icon: BarChart3, l: 'Statistiques avancées', d: 'Ventes, conversion, provenance, comparaison d’événements, exportation PDF et Excel.' },
   { key: 'multiEvents', icon: CalendarClock, l: 'Gestion multi-événements', d: 'Événements récurrents, modèles enregistrés, calendrier professionnel et vue globale.' },
@@ -27,7 +27,7 @@ const STEPS = [
   { icon: FileCheck2, l: 'Vous déposez votre demande', d: 'Un formulaire en quatre étapes, enregistré automatiquement : vous pouvez le reprendre plus tard.' },
   { icon: CreditCard, l: 'Vous réglez l’abonnement', d: 'Le paiement est une étape distincte : il n’active jamais le badge à lui seul.' },
   { icon: ShieldCheck, l: 'Notre équipe vérifie', d: 'Identité, informations professionnelles et présence en ligne sont contrôlées par un administrateur.' },
-  { icon: Sparkles, l: 'Votre badge s’active', d: 'Dès l’approbation et l’abonnement actifs, la coche bleue apparaît automatiquement.' },
+  { icon: Sparkles, l: 'Votre badge s’active', d: 'Dès l’approbation et l’abonnement actifs, la coche rouge apparaît automatiquement.' },
 ];
 
 /** Présentation du programme. Tarifs, conditions et avantages viennent des réglages de l'administration. */
@@ -44,7 +44,7 @@ export default function VerifiedProgram() {
       <header className="text-center">
         <div className="mx-auto mb-5 grid h-24 w-24 place-items-center rounded-full bg-brand-100 dark:bg-brand/20"><VerifiedBadge size={64} /></div>
         <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{t('Devenez un organisateur vérifié')}</h1>
-        <p className="mx-auto mt-3 max-w-2xl text-ink-soft">{t('Une coche bleue officielle et des outils professionnels pour les organisateurs dont l’identité et les informations ont été vérifiées par notre équipe.')}</p>
+        <p className="mx-auto mt-3 max-w-2xl text-ink-soft">{t('Une coche rouge officielle et des outils professionnels pour les organisateurs dont l’identité et les informations ont été vérifiées par notre équipe.')}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <ButtonLink to="/organisateur/verification" size="lg">{t('Demander la vérification')}</ButtonLink>
         </div>
@@ -110,7 +110,7 @@ export default function VerifiedProgram() {
           <Card><p className="text-sm text-ink-soft">{premiumAvailable ? t('Le programme n’est pas ouvert aux nouvelles demandes pour le moment.') : t('Les tarifs sont affichés sur le site en ligne.')}</p></Card>
         )}
         <p className="mt-3 text-sm text-ink-muted">
-          {t('La coche bleue certifie l’identité de l’organisateur. Elle ne garantit pas la réussite de ses événements.')}
+          {t('La coche rouge certifie l’identité de l’organisateur. Elle ne garantit pas la réussite de ses événements.')}
           {c && c.refund.onRejection !== 'none' && ` ${c.refund.onRejection === 'full' ? t('En cas de refus de la vérification, l’abonnement est remboursé.') : t('En cas de refus de la vérification, l’abonnement est remboursé à {n} %.', { n: c.refund.percent })}`}
         </p>
         <div className="mt-6 text-center"><ButtonLink to="/organisateur/verification" size="lg">{t('Demander la vérification')}</ButtonLink></div>

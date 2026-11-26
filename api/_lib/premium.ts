@@ -221,7 +221,16 @@ export async function premiumMaintenance() {
       }
     }
   }
-  return { expired: expired.length, reminded };
+  // Règle des ventes : balayage quotidien (filet de sécurité en plus du contrôle fait à chaque vente)
+  let granted = 0;
+  const near = await all<{ organizer_id: string }>(
+    `select e.organizer_id from tickets t join events e on e.id = t.event_id
+       join organizers o on o.id = e.organizer_id
+      where t.status in ('valid','used','resale') and coalesce((t.data->>'amount')::numeric, 0) > 0
+        and o.data->>'salesBadgeAt' is null and coalesce((o.data->>'verified')::boolean, false) = false
+      group by e.organizer_id having count(*) >= $1`, [SALES_BADGE_TICKETS]);
+  for (const r of near) if (await checkSalesBadge(r.organizer_id).catch((e) => (console.error('[premium] badge ventes', e), false))) granted++;
+  return { expired: expired.length, reminded, salesBadges: granted };
 }
 
 /** Fonctions premium accessibles ? (organisation vérifiée, avantage activé par l'administration). Utilisé côté serveur partout. */
@@ -230,6 +239,59 @@ export async function benefitsFor(orgId: string): Promise<PremiumBenefit[]> {
   if (!o?.v) return [];
   const cfg = await getConfig();
   return (Object.keys(cfg.benefits) as PremiumBenefit[]).filter((k) => cfg.benefits[k]);
+}
+
+/** Nombre de billets PAYÉS vendus (hors remboursés) pour l'ensemble des événements d'une organisation. Les billets gratuits ne comptent pas :
+ *  sinon on obtiendrait le badge en se « réservant » 500 places gratuites avec de faux comptes. */
+export async function paidTicketsSold(orgId: string, q: Q = db()): Promise<number> {
+  const r = await one<{ n: string }>(
+    `select count(*) as n from tickets t join events e on e.id = t.event_id
+      where e.organizer_id = $1 and t.status in ('valid','used','resale') and coalesce((t.data->>'amount')::numeric, 0) > 0`, [orgId], q);
+  return Number(r?.n ?? 0);
+}
+
+/** Seuil de ventes à partir duquel le badge est offert pour un an. */
+export const SALES_BADGE_TICKETS = 500;
+
+/**
+ * Offre le badge vérifié (sans demande ni paiement) pour la durée de validité du programme (1 an) : demande créée déjà approuvée et
+ * abonnement offert. Sert à l'administration (choix libre de l'organisateur) et à la règle des 500 billets. Un abonnement déjà payé
+ * n'est jamais raccourci. Le badge reste calculé par recompute().
+ */
+export async function grantVerified(orgId: string, actor: string, note: string, q0?: Q): Promise<string> {
+  const o = await one<{ data: { name?: string; city?: string } }>(`select data from organizers where id = $1`, [orgId], q0);
+  if (!o) throw new Error('Organisation introuvable');
+  const owner = await one<{ email: string; data: { name?: string } }>(`select email, data from users where organizer_id = $1 order by (team_role = 'admin') desc, created_at limit 1`, [orgId], q0);
+  const base = { name: o.data.name ?? '', owner: owner?.data.name ?? '', email: owner?.email ?? '', city: o.data.city ?? '' };
+  const cfg = await getConfig(q0);
+  const run = async (q: Q) => {
+    const now = new Date().toISOString();
+    await patchRequest(orgId, { status: 'approved', approvedAt: now, submittedAt: now, note: undefined, directByAdmin: true, checklist: { identity: true, email: true, phone: true, presence: true } }, base, q);
+    await q.query(`update verification_requests set status = 'approved' where organizer_id = $1`, [orgId]);
+    await q.query(
+      `insert into premium_subscriptions (id, organizer_id, plan, status, started_at, expires_at)
+       values ($1, $2, 'yearly', 'active', now(), now() + ($3 || ' days')::interval)
+       on conflict (organizer_id) do update set plan = 'yearly', status = 'active', started_at = now(),
+         expires_at = greatest(coalesce(premium_subscriptions.expires_at, now()), now() + ($3 || ' days')::interval), cancel_at_period_end = false`,
+      [newId('sub'), orgId, String(cfg.validityDays)]);
+    await logEntry(orgId, actor, 'Vérifié directement par l’administration', note || 'Sans demande ni paiement', false, q);
+    await recompute(orgId, q);
+  };
+  if (q0) await run(q0);
+  else await tx(run);
+  return base.name;
+}
+
+/** Règle des ventes : 500 billets payés vendus au total → badge offert pour 1 an, une seule fois par organisation (marqueur salesBadgeAt). */
+export async function checkSalesBadge(orgId: string): Promise<boolean> {
+  if (!orgId) return false;
+  const o = await one<{ done: string | null; verified: boolean | null }>(`select data->>'salesBadgeAt' as done, (data->>'verified')::boolean as verified from organizers where id = $1`, [orgId]);
+  if (!o || o.done || o.verified) return false; // déjà obtenu une fois, ou déjà vérifié (abonnement payé ou offert) : rien à offrir
+  if ((await paidTicketsSold(orgId)) < SALES_BADGE_TICKETS) return false;
+  await grantVerified(orgId, 'Système', `Plus de ${SALES_BADGE_TICKETS} billets vendus : badge offert pour 1 an`);
+  await db().query(`update organizers set data = data || jsonb_build_object('salesBadgeAt', $2::text) where id = $1`, [orgId, new Date().toISOString()]);
+  await tell(orgId, 'Badge vérifié offert', `Bravo : plus de ${SALES_BADGE_TICKETS} billets vendus ! Votre badge vérifié est offert pour 1 an.`, '/organisateur/abonnement');
+  return true;
 }
 
 export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
@@ -513,31 +575,47 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const note = str(c.body.note, 500);
     const o = await one<{ data: { name?: string; city?: string } }>(`select data from organizers where id = $1`, [orgId]);
     if (!o) fail(404, 'Organisation introuvable');
-    const owner = await one<{ email: string; data: { name?: string } }>(`select email, data from users where organizer_id = $1 order by (team_role = 'admin') desc, created_at limit 1`, [orgId]);
-    const base = { name: o!.data.name ?? '', owner: owner?.data.name ?? '', email: owner?.email ?? '', city: o!.data.city ?? '' };
     const cfg = await getConfig();
-    await tx(async (q) => {
-      if (want) {
-        const now = new Date().toISOString();
-        await patchRequest(orgId, { status: 'approved', approvedAt: now, submittedAt: now, note: undefined, directByAdmin: true, checklist: { identity: true, email: true, phone: true, presence: true } }, base, q);
-        await q.query(`update verification_requests set status = 'approved' where organizer_id = $1`, [orgId]);
-        await q.query(
-          `insert into premium_subscriptions (id, organizer_id, plan, status, started_at, expires_at)
-           values ($1, $2, 'yearly', 'active', now(), now() + ($3 || ' days')::interval)
-           on conflict (organizer_id) do update set plan = 'yearly', status = 'active', started_at = now(), expires_at = now() + ($3 || ' days')::interval, cancel_at_period_end = false`,
-          [newId('sub'), orgId, String(cfg.validityDays)]);
-        await logEntry(orgId, actorName(c), 'Vérifié directement par l’administration', note || 'Sans demande ni paiement', false, q);
-      } else {
+    const name = o!.data.name ?? '';
+    if (want) await grantVerified(orgId, actorName(c), note);
+    else {
+      await tx(async (q) => {
         const req = await getReq(orgId, q);
         if (req) await q.query(`update verification_requests set status = 'rejected', data = data || $2::jsonb where id = $1`, [req.id, JSON.stringify({ status: 'rejected', note: note || undefined })]);
         await q.query(`update premium_subscriptions set status = 'canceled', expires_at = now() where organizer_id = $1 and status = 'active'`, [orgId]);
         await logEntry(orgId, actorName(c), 'Vérification retirée par l’administration', note || undefined, false, q);
-      }
-      await recompute(orgId, q);
-    });
-    await audit(c, want ? 'Organisateur vérifié directement' : 'Vérification retirée', base.name);
+        await recompute(orgId, q);
+      });
+    }
+    await audit(c, want ? 'Organisateur vérifié directement' : 'Vérification retirée', name);
     if (cfg.notify.onDecision) await tell(orgId, want ? 'Organisateur vérifié' : 'Vérification retirée', want ? 'Votre organisation est vérifiée par l’administration : votre badge est visible.' : 'La vérification de votre organisation a été retirée.');
     return { verified: want };
+  };
+
+  /** Tous les organisateurs (même sans demande ni paiement), pour que l'administration choisisse librement à qui donner le badge. */
+  const adminOrganizers: Handler = async (c) => {
+    admin(c);
+    const q = str(c.query?.q, 80).toLowerCase();
+    const rows = await all<{ id: string; name: string; city: string | null; verified: boolean | null; since: string | null; sold: string; owner: string | null; sales_at: string | null; sub_until: Date | null; direct: boolean | null }>(
+      `select o.id, o.data->>'name' as name, o.data->>'city' as city, (o.data->>'verified')::boolean as verified, o.data->>'verifiedSince' as since,
+              o.data->>'salesBadgeAt' as sales_at,
+              (select count(*) from tickets t join events e on e.id = t.event_id where e.organizer_id = o.id and t.status in ('valid','used','resale') and coalesce((t.data->>'amount')::numeric, 0) > 0) as sold,
+              (select u.email from users u where u.organizer_id = o.id order by (u.team_role = 'admin') desc, u.created_at limit 1) as owner,
+              (select s.expires_at from premium_subscriptions s where s.organizer_id = o.id and s.status = 'active') as sub_until,
+              (select (r.data->>'directByAdmin')::boolean from verification_requests r where r.organizer_id = o.id limit 1) as direct
+         from organizers o where ($1 = '' or lower(o.data->>'name') like '%' || $1 || '%' or lower(o.id) = $1)
+         order by (o.data->>'verified')::boolean desc nulls last, lower(o.data->>'name') limit 300`, [q]);
+    return rows.map((r) => ({
+      id: r.id, name: r.name, city: r.city ?? '', verified: !!r.verified, since: r.since ?? undefined, owner: r.owner ?? undefined,
+      ticketsSold: Number(r.sold), goal: SALES_BADGE_TICKETS, until: r.sub_until?.toISOString(), gift: !!r.direct, bySales: !!r.sales_at,
+    }));
+  };
+
+  /** Progression de l'organisation vers le badge offert (billets payés vendus / seuil). */
+  const badgeProgress: Handler = async (c) => {
+    const orgId = org(c, 'settings');
+    const o = await one<{ done: string | null }>(`select data->>'salesBadgeAt' as done from organizers where id = $1`, [orgId]);
+    return { sold: await paidTicketsSold(orgId), goal: SALES_BADGE_TICKETS, reached: !!o?.done };
   };
 
   const adminLog: Handler = async (c) => {
@@ -643,6 +721,8 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     ['POST', '/org/premium/resume', setCancel(false)],
     ['GET', '/org/premium/payments/:id/invoice', invoice],
     ['POST', '/admin/organizers/:id/verification', adminSetVerified],
+    ['GET', '/admin/organizers', adminOrganizers],
+    ['GET', '/org/badge-progress', badgeProgress],
     ['GET', '/admin/verifications', adminList],
     ['POST', '/admin/verifications/:id', decide],
     ['GET', '/admin/verifications/:id/log', adminLog],

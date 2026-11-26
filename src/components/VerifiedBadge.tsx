@@ -2,7 +2,7 @@ import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
 
 /**
- * Coche bleue officielle. Elle n'est jamais décidée par l'interface : `verified` vient du serveur, qui le calcule
+ * Coche rouge officielle. Elle n'est jamais décidée par l'interface : `verified` vient du serveur, qui le calcule
  * à partir de l'état réel (demande approuvée, abonnement actif, certification valable).
  */
 export function VerifiedBadge({ className, size = 18 }: { className?: string; size?: number }) {
@@ -13,7 +13,7 @@ export function VerifiedBadge({ className, size = 18 }: { className?: string; si
       <span role="img" aria-label={`${t('Organisateur vérifié')} — ${label}`} className="inline-flex cursor-help">
         <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
           <path
-            fill="#1509F3"
+            fill="#DC2626"
             d="M12 1.5l2.6 1.9 3.2-.2 1 3.1 2.6 1.9-1 3.1 1 3.1-2.6 1.9-1 3.1-3.2-.2L12 22.5l-2.6-1.9-3.2.2-1-3.1L2.6 15.8l1-3.1-1-3.1 2.6-1.9 1-3.1 3.2.2z"
           />
           <path d="M7.6 12.3l3 3 5.8-6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
