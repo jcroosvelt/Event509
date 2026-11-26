@@ -117,8 +117,10 @@ export async function recompute(orgId: string, q: Q = db()) {
   const req = await getReq(orgId, q);
   const sub = await getSub(orgId, q);
   const approvedAt = req?.data.approvedAt ? Date.parse(req.data.approvedAt) : 0;
-  const certValid = approvedAt > 0 && approvedAt + cfg.validityDays * 86_400_000 > Date.now();
-  const active = subActive(sub);
+  // Badge « à vie » (décidé par l'administration, ex. le compte de la plateforme) : ni abonnement ni certification n'expirent
+  const lifetime = (await one<{ l: boolean | null }>(`select (data->>'lifetimeVerified')::boolean as l from organizers where id = $1`, [orgId], q))?.l === true;
+  const certValid = lifetime || (approvedAt > 0 && approvedAt + cfg.validityDays * 86_400_000 > Date.now());
+  const active = lifetime || subActive(sub);
   // Un organisateur approuvé dont l'abonnement ou la certification a pris fin passe « Expiré » ; il redevient « Vérifié » à la reprise
   if (req && req.status === 'approved' && (!active || !certValid) && sub) {
     await q.query(`update verification_requests set status = 'expired', data = data || '{"status":"expired"}'::jsonb where id = $1`, [req.id]);
@@ -202,7 +204,8 @@ export async function premiumMaintenance() {
   const cfg = await getConfig();
   const grace = `${Math.max(0, Math.floor(cfg.renewal.graceDays))} days`;
   const expired = await all<{ organizer_id: string }>(
-    `update premium_subscriptions set status = 'expired' where status = 'active' and expires_at < now() - $1::interval returning organizer_id`, [grace]);
+    `update premium_subscriptions set status = 'expired' where status = 'active' and expires_at < now() - $1::interval
+       and organizer_id not in (select id from organizers where data->>'lifetimeVerified' = 'true') returning organizer_id`, [grace]);
   for (const e of expired) {
     await recompute(e.organizer_id);
     await logEntry(e.organizer_id, 'Système', 'Abonnement expiré', 'Le badge est masqué ; vos données et événements sont conservés.');
@@ -210,7 +213,8 @@ export async function premiumMaintenance() {
   }
   let reminded = 0;
   if (cfg.notify.onExpiry) {
-    const active = await all<SubRow>(`select * from premium_subscriptions where status = 'active' and expires_at > now() and not cancel_at_period_end`);
+    const active = await all<SubRow>(`select * from premium_subscriptions where status = 'active' and expires_at > now() and not cancel_at_period_end
+      and organizer_id not in (select id from organizers where data->>'lifetimeVerified' = 'true')`);
     for (const s of active) {
       const days = Math.ceil((s.expires_at!.getTime() - Date.now()) / 86_400_000);
       for (const d of cfg.renewal.remindDays) {
@@ -258,7 +262,7 @@ export const SALES_BADGE_TICKETS = 500;
  * abonnement offert. Sert à l'administration (choix libre de l'organisateur) et à la règle des 500 billets. Un abonnement déjà payé
  * n'est jamais raccourci. Le badge reste calculé par recompute().
  */
-export async function grantVerified(orgId: string, actor: string, note: string, q0?: Q): Promise<string> {
+export async function grantVerified(orgId: string, actor: string, note: string, q0?: Q, lifetime = false): Promise<string> {
   const o = await one<{ data: { name?: string; city?: string } }>(`select data from organizers where id = $1`, [orgId], q0);
   if (!o) throw new Error('Organisation introuvable');
   const owner = await one<{ email: string; data: { name?: string } }>(`select email, data from users where organizer_id = $1 order by (team_role = 'admin') desc, created_at limit 1`, [orgId], q0);
@@ -274,7 +278,8 @@ export async function grantVerified(orgId: string, actor: string, note: string, 
        on conflict (organizer_id) do update set plan = 'yearly', status = 'active', started_at = now(),
          expires_at = greatest(coalesce(premium_subscriptions.expires_at, now()), now() + ($3 || ' days')::interval), cancel_at_period_end = false`,
       [newId('sub'), orgId, String(cfg.validityDays)]);
-    await logEntry(orgId, actor, 'Vérifié directement par l’administration', note || 'Sans demande ni paiement', false, q);
+    await logEntry(orgId, actor, lifetime ? 'Vérifié à vie par l’administration' : 'Vérifié directement par l’administration', note || 'Sans demande ni paiement', false, q);
+    if (lifetime) await q.query(`update organizers set data = data || '{"lifetimeVerified": true}'::jsonb where id = $1`, [orgId]);
     await recompute(orgId, q);
   };
   if (q0) await run(q0);
@@ -577,11 +582,12 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     if (!o) fail(404, 'Organisation introuvable');
     const cfg = await getConfig();
     const name = o!.data.name ?? '';
-    if (want) await grantVerified(orgId, actorName(c), note);
+    if (want) await grantVerified(orgId, actorName(c), note, undefined, c.body.lifetime === true);
     else {
       await tx(async (q) => {
         const req = await getReq(orgId, q);
         if (req) await q.query(`update verification_requests set status = 'rejected', data = data || $2::jsonb where id = $1`, [req.id, JSON.stringify({ status: 'rejected', note: note || undefined })]);
+        await q.query(`update organizers set data = data - 'lifetimeVerified' where id = $1`, [orgId]);
         await q.query(`update premium_subscriptions set status = 'canceled', expires_at = now() where organizer_id = $1 and status = 'active'`, [orgId]);
         await logEntry(orgId, actorName(c), 'Vérification retirée par l’administration', note || undefined, false, q);
         await recompute(orgId, q);
@@ -596,9 +602,9 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
   const adminOrganizers: Handler = async (c) => {
     admin(c);
     const q = str(c.query?.q, 80).toLowerCase();
-    const rows = await all<{ id: string; name: string; city: string | null; verified: boolean | null; since: string | null; sold: string; owner: string | null; sales_at: string | null; sub_until: Date | null; direct: boolean | null }>(
+    const rows = await all<{ id: string; name: string; city: string | null; verified: boolean | null; since: string | null; sold: string; owner: string | null; sales_at: string | null; sub_until: Date | null; direct: boolean | null; lifetime: boolean | null }>(
       `select o.id, o.data->>'name' as name, o.data->>'city' as city, (o.data->>'verified')::boolean as verified, o.data->>'verifiedSince' as since,
-              o.data->>'salesBadgeAt' as sales_at,
+              o.data->>'salesBadgeAt' as sales_at, (o.data->>'lifetimeVerified')::boolean as lifetime,
               (select count(*) from tickets t join events e on e.id = t.event_id where e.organizer_id = o.id and t.status in ('valid','used','resale') and coalesce((t.data->>'amount')::numeric, 0) > 0) as sold,
               (select u.email from users u where u.organizer_id = o.id order by (u.team_role = 'admin') desc, u.created_at limit 1) as owner,
               (select s.expires_at from premium_subscriptions s where s.organizer_id = o.id and s.status = 'active') as sub_until,
@@ -607,7 +613,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
          order by (o.data->>'verified')::boolean desc nulls last, lower(o.data->>'name') limit 300`, [q]);
     return rows.map((r) => ({
       id: r.id, name: r.name, city: r.city ?? '', verified: !!r.verified, since: r.since ?? undefined, owner: r.owner ?? undefined,
-      ticketsSold: Number(r.sold), goal: SALES_BADGE_TICKETS, until: r.sub_until?.toISOString(), gift: !!r.direct, bySales: !!r.sales_at,
+      ticketsSold: Number(r.sold), goal: SALES_BADGE_TICKETS, until: r.sub_until?.toISOString(), gift: !!r.direct, bySales: !!r.sales_at, lifetime: !!r.lifetime,
     }));
   };
 

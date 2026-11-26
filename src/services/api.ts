@@ -1400,8 +1400,8 @@ export async function decideVerification(
 }
 
 /** L'administrateur vérifie (ou retire la vérification d') une organisation directement, sans demande ni paiement. */
-export async function setOrganizerVerified(organizerId: string, verified: boolean) {
-  if (!DEMO) return void (await http(`/admin/organizers/${organizerId}/verification`, { method: 'POST', body: JSON.stringify({ verified }) }));
+export async function setOrganizerVerified(organizerId: string, verified: boolean, lifetime = false) {
+  if (!DEMO) return void (await http(`/admin/organizers/${organizerId}/verification`, { method: 'POST', body: JSON.stringify({ verified, lifetime }) }));
   await wait(200);
   const o = db.organizers.find((x) => x.id === organizerId);
   if (!o) return;

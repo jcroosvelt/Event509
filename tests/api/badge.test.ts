@@ -127,7 +127,28 @@ describe.skipIf(!DB)('Badge vérifié et boost', () => {
     expect(await verified(o.orgId)).toBe(false);
   });
 
+  it('badge à vie : n’expire jamais (maintenance, recalcul), et le retrait le supprime', async () => {
+    const o = await account('participant', 'lv', true);
+    const admin = await account('admin', 'a4', false);
+    expect((await call('POST', `/admin/organizers/${o.orgId}/verification`, { verified: true, lifetime: true }, admin.token)).status).toBe(200);
+    expect(await verified(o.orgId)).toBe(true);
+    // Abonnement et certification « expirés » : rien ne change
+    await pool.query(`update premium_subscriptions set expires_at = now() - interval '5 years' where organizer_id = $1`, [o.orgId]);
+    await pool.query(`update verification_requests set data = data || jsonb_build_object('approvedAt', '2015-01-01T00:00:00Z') where organizer_id = $1`, [o.orgId]);
+    await premium.premiumMaintenance();
+    await premium.recompute(o.orgId);
+    expect(await verified(o.orgId)).toBe(true);
+    const row = (await call('GET', '/admin/organizers', undefined, admin.token, { q: tag })).body.find((r: { id: string }) => r.id === o.orgId);
+    expect(row).toMatchObject({ verified: true, lifetime: true });
+    // Retrait : plus de badge à vie
+    expect((await call('POST', `/admin/organizers/${o.orgId}/verification`, { verified: false }, admin.token)).status).toBe(200);
+    await premium.recompute(o.orgId);
+    expect(await verified(o.orgId)).toBe(false);
+    expect((await pool.query(`select data->>'lifetimeVerified' as l from organizers where id = $1`, [o.orgId])).rows[0].l).toBeNull();
+  });
+
   it('boost : gratuit pour l’administration (même sans place libre), payant pour les autres', async () => {
+    await pool.query(`delete from event_boosts`); // base de test : places de boost libres au départ
     const admin = await account('admin', 'ab', true);
     await pool.query(`update organizers set data = data || '{"verified": true}'::jsonb where id = $1`, [admin.orgId]);
     const ev = await call('PUT', '/org/events', event(), admin.token);

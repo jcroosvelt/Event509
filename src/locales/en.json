@@ -2290,5 +2290,8 @@
   "Badge offert avec vos ventes": "Badge earned with your sales",
   "Bravo : vous avez dépassé {n} billets vendus, votre badge a été offert pour 1 an.": "Congratulations: you passed {n} tickets sold, your badge was given for 1 year.",
   "Vendez {n} billets au total et recevez le badge vérifié pour 1 an, sans payer.": "Sell {n} tickets in total and get the verified badge for 1 year, free of charge.",
-  "{sold} / {goal} billets payés vendus": "{sold} / {goal} paid tickets sold"
+  "{sold} / {goal} billets payés vendus": "{sold} / {goal} paid tickets sold",
+  "à vie": "lifetime",
+  "À vie": "Lifetime",
+  "Badge à vie donné : {name}": "Lifetime badge given: {name}"
 }

@@ -219,3 +219,4 @@
 - 2026-11-26 : photo de profil pour tous les comptes (participant, organisateur, administrateur) : ajout, remplacement, retrait ; une seule photo par personne, supprimée avec le compte ; affichée dans le profil, la barre flottante et les menus du site.
 - 2026-11-26 : badge vérifié en rouge ; l'administration choisit n'importe quel organisateur (liste complète, sans demande ni paiement, 1 an) ; règle automatique : 500 billets payés vendus = badge offert 1 an (une fois) ; progression visible côté organisateur ; boost gratuit pour l'administration.
 - 2026-11-26 : tests déplacés de api/ vers tests/api/ (Vercel compte chaque fichier de api/ comme une fonction : limite de 12 atteinte, le déploiement échouait).
+- 2026-11-26 : badge « à vie » (jamais expiré) possible par l'administration ; compte Event509 passé à vie.

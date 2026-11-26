@@ -152,7 +152,7 @@ export const deleteWebhook = (id: string) => http<null>(`/org/api/webhooks/${enc
 export const testWebhook = (id: string) => http<{ ok: boolean; code: number | null; error: string | null }>(`/org/api/webhooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
 
 /** Administration : tous les organisateurs (même sans demande ni paiement), pour leur donner ou retirer le badge. */
-export interface AdminOrganizerRow { id: string; name: string; city: string; verified: boolean; since?: string; owner?: string; ticketsSold: number; goal: number; until?: string; gift: boolean; bySales: boolean }
+export interface AdminOrganizerRow { id: string; name: string; city: string; verified: boolean; since?: string; owner?: string; ticketsSold: number; goal: number; until?: string; gift: boolean; bySales: boolean; lifetime: boolean }
 export const getAdminOrganizers = (q = '') => http<AdminOrganizerRow[]>(`/admin/organizers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
 /** Organisation : progression vers le badge offert (billets payés vendus / seuil). */
 export const getBadgeProgress = () => http<{ sold: number; goal: number; reached: boolean }>('/org/badge-progress');

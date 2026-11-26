@@ -27,11 +27,11 @@ export function AdminBadgeGiver() {
     };
   }, [q, tick]);
 
-  const toggle = async (o: AdminOrganizerRow) => {
+  const toggle = async (o: AdminOrganizerRow, lifetime = false) => {
     setBusy(o.id);
     try {
-      await setOrganizerVerified(o.id, !o.verified);
-      toast(o.verified ? t('Badge retiré : {name}', { name: o.name }) : t('Badge donné pour 1 an : {name}', { name: o.name }));
+      await setOrganizerVerified(o.id, !o.verified || lifetime, lifetime);
+      toast(o.verified && !lifetime ? t('Badge retiré : {name}', { name: o.name }) : lifetime ? t('Badge à vie donné : {name}', { name: o.name }) : t('Badge donné pour 1 an : {name}', { name: o.name }));
       setTick((n) => n + 1);
     } catch (e) {
       toast(e instanceof Error ? e.message : t('Action impossible. Réessayez.'), 'error');
@@ -65,10 +65,11 @@ export function AdminBadgeGiver() {
                   <p className="flex items-center gap-1 truncate font-semibold">{o.name} {o.verified && <VerifiedBadge size={16} />}</p>
                   <p className="truncate text-xs text-ink-muted">
                     {[o.owner, t('{n} billets payés vendus', { n: o.ticketsSold })].filter(Boolean).join(' · ')}
-                    {o.verified && o.until ? ` · ${t('jusqu’au {d}', { d: dateShort(o.until, lang) })}` : ''}
+                    {o.verified && o.lifetime ? ` · ${t('à vie')}` : o.verified && o.until ? ` · ${t('jusqu’au {d}', { d: dateShort(o.until, lang) })}` : ''}
                   </p>
                 </div>
-                {o.verified && <Badge tone="green">{o.bySales ? t('Offert (ventes)') : o.gift ? t('Offert') : t('Vérifié')}</Badge>}
+                {o.verified && <Badge tone="green">{o.lifetime ? t('À vie') : o.bySales ? t('Offert (ventes)') : o.gift ? t('Offert') : t('Vérifié')}</Badge>}
+                {!o.lifetime && <Button size="sm" variant="outline" loading={busy === o.id} onClick={() => void toggle(o, true)}>{t('À vie')}</Button>}
                 <Button size="sm" variant={o.verified ? 'outline' : 'primary'} loading={busy === o.id} onClick={() => void toggle(o)}>
                   {o.verified ? t('Retirer') : t('Donner le badge')}
                 </Button>
