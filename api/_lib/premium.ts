@@ -2,7 +2,7 @@ import type {
   PremiumBenefit, PremiumConfig, PremiumPayment, PremiumSubscription, VerificationApplication, VerificationLogEntry, VerificationRequest, VerificationStatus,
 } from '../../src/types.js';
 import { all, db, docs, one, tx, upsert, type Q } from './db.js';
-import { billingCurrencyFor } from './fees.js';
+import { billingCurrencyFor, RATES } from './fees.js';
 import { newId } from './auth.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
 import { claimOnce, notifyUsers, organizerUserIds } from './push.js';
@@ -33,6 +33,8 @@ export interface PremiumDeps {
 export const DEFAULT_PREMIUM: PremiumConfig = {
   enabled: true,
   yearlyPrice: 15000,
+  lifetimeEnabled: true,
+  lifetimePriceUsd: 200,
   validityDays: 365,
   requiredDocs: ['id'],
   processingDays: 3,
@@ -74,14 +76,14 @@ const ORG_TYPES = ['company', 'association', 'institution', 'agency', 'independe
 const ADMIN_STATUSES = ['in_review', 'docs_requested', 'approved', 'rejected', 'suspended', 'revoked', 'reinstated'] as const;
 
 interface SubRow {
-  id: string; organizer_id: string; plan: 'monthly' | 'yearly'; status: PremiumSubscription['status'];
+  id: string; organizer_id: string; plan: 'monthly' | 'yearly' | 'lifetime'; status: PremiumSubscription['status'];
   started_at: Date | null; expires_at: Date | null; cancel_at_period_end: boolean;
 }
 const subOut = (s: SubRow | null): PremiumSubscription | null => s && ({
   id: s.id, organizerId: s.organizer_id, plan: s.plan, status: s.status, cancelAtPeriodEnd: s.cancel_at_period_end,
   startedAt: s.started_at?.toISOString(), expiresAt: s.expires_at?.toISOString(),
 });
-interface PayRow { id: string; plan: 'monthly' | 'yearly'; amount: string; status: PremiumPayment['status']; method: string; created_at: Date; paid_at: Date | null; data: { refundAmount?: number } }
+interface PayRow { id: string; plan: 'monthly' | 'yearly' | 'lifetime'; amount: string; status: PremiumPayment['status']; method: string; created_at: Date; paid_at: Date | null; data: { refundAmount?: number } }
 const payOut = (p: PayRow): PremiumPayment => ({
   id: p.id, plan: p.plan, amount: Number(p.amount), status: p.status, method: p.method === 'transfer' ? 'transfer' : 'online',
   createdAt: p.created_at.toISOString(), paidAt: p.paid_at?.toISOString(), refundAmount: p.data?.refundAmount,
@@ -118,7 +120,8 @@ export async function recompute(orgId: string, q: Q = db()) {
   const sub = await getSub(orgId, q);
   const approvedAt = req?.data.approvedAt ? Date.parse(req.data.approvedAt) : 0;
   // Badge « à vie » (décidé par l'administration, ex. le compte de la plateforme) : ni abonnement ni certification n'expirent
-  const lifetime = (await one<{ l: boolean | null }>(`select (data->>'lifetimeVerified')::boolean as l from organizers where id = $1`, [orgId], q))?.l === true;
+  const lifetime = (await one<{ l: boolean | null }>(`select (data->>'lifetimeVerified')::boolean as l from organizers where id = $1`, [orgId], q))?.l === true
+    || (sub?.plan === 'lifetime' && sub.status === 'active');
   const certValid = lifetime || (approvedAt > 0 && approvedAt + cfg.validityDays * 86_400_000 > Date.now());
   const active = lifetime || subActive(sub);
   // Un organisateur approuvé dont l'abonnement ou la certification a pris fin passe « Expiré » ; il redevient « Vérifié » à la reprise
@@ -154,7 +157,8 @@ async function tell(orgId: string, title: string, body: string, url = '/organisa
   }
 }
 
-const monthsFor = (plan: 'monthly' | 'yearly') => (plan === 'yearly' ? '1 year' : '1 month');
+const monthsFor = (plan: 'monthly' | 'yearly' | 'lifetime') => (plan === 'lifetime' ? '100 years' : plan === 'yearly' ? '1 year' : '1 month');
+const planLabel = (plan: 'monthly' | 'yearly' | 'lifetime') => (plan === 'lifetime' ? 'À vie' : plan === 'yearly' ? 'Annuel' : 'Mensuel');
 
 /** Paiement confirmé (webhook, vérification serveur ou confirmation de l'administration) : l'abonnement est prolongé. */
 export async function applyPaid(paymentId: string, by?: string): Promise<boolean> {
@@ -169,7 +173,7 @@ export async function applyPaid(paymentId: string, by?: string): Promise<boolean
          plan = excluded.plan, status = 'active', started_at = coalesce(premium_subscriptions.started_at, now()),
          expires_at = greatest(coalesce(premium_subscriptions.expires_at, now()), now()) + $4::interval, cancel_at_period_end = false`,
       [newId('sub'), p.organizer_id, p.plan, monthsFor(p.plan)]);
-    await logEntry(p.organizer_id, by ?? 'Système', 'Abonnement payé', `${p.plan === 'yearly' ? 'Annuel' : 'Mensuel'} — ${Number(p.amount)} HTG`, false, q);
+    await logEntry(p.organizer_id, by ?? 'Système', 'Abonnement payé', `${planLabel(p.plan)} — ${Number(p.amount)} HTG`, false, q);
     await recompute(p.organizer_id, q);
     return p;
   });
@@ -307,6 +311,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const c = await getConfig();
     return {
       enabled: c.enabled, yearlyPrice: c.yearlyPrice, validityDays: c.validityDays, requiredDocs: c.requiredDocs,
+      lifetimeEnabled: c.lifetimeEnabled, lifetimePriceUsd: c.lifetimePriceUsd, lifetimePriceHtg: Math.round(c.lifetimePriceUsd * RATES.USD),
       processingDays: c.processingDays, minAge: c.minAge, eligibility: c.eligibility, refund: c.refund, benefits: c.benefits,
       visibilityBoost: c.visibilityBoost, featuredPerOrganizer: c.featuredPerOrganizer,
       onlinePayment: payConfigured(),
@@ -432,9 +437,12 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const orgId = org(c, 'settings');
     const cfg = await getConfig();
     if (!cfg.enabled) fail(403, 'Le programme n’est pas ouvert pour le moment');
-    // Une seule formule : un paiement unique couvre une année (la formule mensuelle n'existe plus)
-    const plan = 'yearly';
-    const amount = cfg.yearlyPrice;
+    // Deux formules : une année (paiement unique) ou à vie (prix en dollars, converti en gourdes au taux du jour). Le mensuel n'existe plus.
+    const plan: 'yearly' | 'lifetime' = c.body.plan === 'lifetime' ? 'lifetime' : 'yearly';
+    if (plan === 'lifetime' && !cfg.lifetimeEnabled) fail(403, 'Le forfait à vie n’est pas proposé pour le moment');
+    const cur = await getSub(orgId);
+    if (cur?.plan === 'lifetime' && cur.status === 'active') fail(409, 'Vous avez déjà le forfait à vie : rien à payer');
+    const amount = plan === 'lifetime' ? Math.round(cfg.lifetimePriceUsd * RATES.USD) : cfg.yearlyPrice;
     const method = str(c.body.method, 20) || 'moncash';
     const online = payConfigured() && amount >= MIN_HTG;
     if (online && !ONLINE_METHODS.includes(method)) fail(422, 'Moyen de paiement invalide');
@@ -443,7 +451,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
       // Une seule demande de paiement en attente à la fois : la précédente est remplacée
       await q.query(`update premium_payments set status = 'failed' where organizer_id = $1 and status = 'pending'`, [orgId]);
       await q.query(`insert into premium_payments (id, organizer_id, plan, amount, status, method) values ($1,$2,$3,$4,'pending',$5)`, [id, orgId, plan, amount, online ? method : 'transfer']);
-      await logEntry(orgId, actorName(c), 'Paiement demandé', `${plan === 'yearly' ? 'Annuel' : 'Mensuel'} — ${amount} HTG`, false, q);
+      await logEntry(orgId, actorName(c), 'Paiement demandé', `${planLabel(plan)} — ${amount} HTG`, false, q);
     });
     if (amount <= 0) {
       await applyPaid(id, 'Gratuit');
@@ -661,6 +669,8 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
     const next: PremiumConfig = {
       enabled: b.enabled !== false,
       yearlyPrice: n(b.yearlyPrice, 0, 100_000_000, cur.yearlyPrice),
+      lifetimeEnabled: typeof b.lifetimeEnabled === 'boolean' ? b.lifetimeEnabled : cur.lifetimeEnabled,
+      lifetimePriceUsd: Math.round(n(b.lifetimePriceUsd, 0, 1_000_000, cur.lifetimePriceUsd) * 100) / 100,
       validityDays: Math.round(n(b.validityDays, 30, 3650, cur.validityDays)), requiredDocs: docsOk,
       processingDays: Math.round(n(b.processingDays, 1, 60, cur.processingDays)), minAge: Math.round(n(b.minAge, 13, 25, cur.minAge)),
       eligibility: Array.isArray(b.eligibility) ? b.eligibility.map((x) => str(x, 200)).filter(Boolean).slice(0, 20) : cur.eligibility,
@@ -678,7 +688,7 @@ export function premiumRoutes(h: PremiumDeps): [string, string, Handler][] {
       visibilityBoost: Math.round(n(b.visibilityBoost, 0, 100, cur.visibilityBoost)), featuredPerOrganizer: Math.round(n(b.featuredPerOrganizer, 0, 10, cur.featuredPerOrganizer)),
     };
     await upsert('settings', { key: 'premium', value: next });
-    await audit(c, 'Réglages du programme vérifié modifiés', `${next.yearlyPrice} HTG par an`);
+    await audit(c, 'Réglages du programme vérifié modifiés', `${next.yearlyPrice} HTG par an · à vie ${next.lifetimePriceUsd} USD (${next.lifetimeEnabled ? 'ouvert' : 'fermé'})`);
     // Un changement de durée de validité ou d'avantages s'applique tout de suite aux badges
     const orgs = await all<{ organizer_id: string }>(`select organizer_id from verification_requests where status in ('approved', 'expired')`);
     for (const o of orgs) await recompute(o.organizer_id);

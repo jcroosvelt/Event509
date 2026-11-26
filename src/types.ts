@@ -385,6 +385,9 @@ export interface PremiumConfig {
   enabled: boolean;
   /** Prix unique du programme, payé en une seule fois pour une année (HTG). */
   yearlyPrice: number;
+  /** Forfait à vie : ouvert ou non, et prix en dollars américains (converti en gourdes au taux du jour au moment du paiement). */
+  lifetimeEnabled: boolean;
+  lifetimePriceUsd: number;
   validityDays: number; // durée de validité de la certification
   requiredDocs: VerificationDocType[];
   processingDays: number;
@@ -402,7 +405,7 @@ export interface PremiumConfig {
 
 export interface PremiumPayment {
   id: string;
-  plan: 'monthly' | 'yearly';
+  plan: 'monthly' | 'yearly' | 'lifetime';
   amount: number;
   status: 'pending' | 'paid' | 'failed' | 'refund_due' | 'refunded';
   method: 'online' | 'transfer';
@@ -414,7 +417,7 @@ export interface PremiumPayment {
 export interface PremiumSubscription {
   id: string;
   organizerId: string;
-  plan: 'monthly' | 'yearly';
+  plan: 'monthly' | 'yearly' | 'lifetime';
   status: 'pending_payment' | 'active' | 'canceled' | 'expired' | 'suspended';
   startedAt?: string;
   expiresAt?: string;

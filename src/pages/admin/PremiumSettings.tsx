@@ -74,9 +74,12 @@ function Content() {
 
       <Card>
         <h2 className="mb-3 font-bold">{t('Général et tarifs')}</h2>
+        <Toggle checked={c.lifetimeEnabled} onChange={(v) => up({ lifetimeEnabled: v })} label={t('Proposer le forfait à vie')} description={t('Un seul paiement, badge sans date d’expiration.')} />
+        <div className="mt-4" />
         <Toggle checked={c.enabled} onChange={(v) => up({ enabled: v })} label={t('Programme ouvert aux nouvelles demandes')} description={t('Désactivé : plus de demande ni de souscription ; les organisateurs déjà certifiés gardent leur badge.')} />
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label={t('Prix unique pour l’année (HTG)')} hint={t('Payé en une seule fois')}><Input type="number" inputMode="numeric" min={0} value={String(c.yearlyPrice)} onChange={(e) => up({ yearlyPrice: num(e.target.value) })} /></Field>
+          <Field label={t('Prix du forfait à vie (USD)')} hint={t('Converti en gourdes au taux du jour au moment du paiement')}><Input type="number" inputMode="decimal" min={0} value={String(c.lifetimePriceUsd)} onChange={(e) => up({ lifetimePriceUsd: num(e.target.value) })} /></Field>
           <Field label={t('Validité de la certification (jours)')}><Input type="number" inputMode="numeric" min={30} value={String(c.validityDays)} onChange={(e) => up({ validityDays: num(e.target.value) })} /></Field>
           <Field label={t('Délai de traitement (jours)')}><Input type="number" inputMode="numeric" min={1} value={String(c.processingDays)} onChange={(e) => up({ processingDays: num(e.target.value) })} /></Field>
         </div>

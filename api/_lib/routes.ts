@@ -22,6 +22,7 @@ import { supportRoutes } from './support.js';
 import { marketingRoutes } from './marketing.js';
 import { financeRoutes } from './finance.js';
 import { boostRoutes, checkBoostPayment } from './boost.js';
+import { notifyFollowers, socialRoutes } from './social.js';
 import { devApiRoutes, fireWebhooks } from './devapi.js';
 import { appReleaseRoutes } from './apprelease.js';
 import { benefitsFor, checkPremiumPayment, checkSalesBadge, patchRequest, premiumMaintenance, premiumRoutes } from './premium.js';
@@ -164,6 +165,8 @@ export const rateAccepted = (next: unknown, current: number) =>
 export async function updateMarketRate(fetchFn: typeof fetch = fetch): Promise<{ updated: boolean; rate: number; reason?: string }> {
   await refreshRate(true);
   const current = RATES.USD;
+  // Taux fixé à la main par l'administration : la mise à jour automatique est suspendue jusqu'au retour en mode automatique
+  if (rateMeta.manual) return { updated: false, rate: current, reason: 'taux fixé à la main' };
   try {
     const res = await fetchFn(process.env.RATE_SOURCE_URL || 'https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(6000), redirect: 'error' });
     if (!res.ok) return { updated: false, rate: current, reason: `source ${res.status}` };
@@ -182,13 +185,17 @@ export async function updateMarketRate(fetchFn: typeof fetch = fetch): Promise<{
 }
 
 /** Relit le taux enregistré (au plus une fois toutes les 30 s par instance) ; s'il date de plus de 2 jours, une mise à jour est tentée en arrière-plan. */
+export const rateMeta: { manual: boolean; source: string; at: string | null } = { manual: false, source: 'défaut', at: null };
 export async function refreshRate(force = false) {
   if (!force && Date.now() - rateLoadedAt < 30_000) return;
-  const r = await one<{ value: { usdToHtg?: number; rates?: Record<string, number>; at?: string } }>(`select value from settings where key = 'rate'`);
+  const r = await one<{ value: { usdToHtg?: number; rates?: Record<string, number>; at?: string; manual?: boolean; source?: string } }>(`select value from settings where key = 'rate'`);
   setRates({ ...DEFAULT_RATES, ...(r?.value?.usdToHtg ? { USD: r.value.usdToHtg } : {}) });
   rateLoadedAt = Date.now();
+  rateMeta.manual = r?.value?.manual === true;
+  rateMeta.source = r?.value?.source ?? 'défaut';
+  rateMeta.at = r?.value?.at ?? null;
   const age = r?.value?.at ? Date.now() - Date.parse(r.value.at) : Infinity;
-  if (!force && age > 2 * 86_400_000 && Date.now() - marketTried > 3_600_000) {
+  if (!force && !rateMeta.manual && age > 2 * 86_400_000 && Date.now() - marketTried > 3_600_000) {
     marketTried = Date.now();
     void updateMarketRate().catch(() => {});
   }
@@ -498,6 +505,9 @@ const bootstrap: Handler = async (c) => {
     [u?.organizer_id ?? '', u?.role === 'admin', u?.id ?? '', (u?.email ?? '').toLowerCase()],
   );
   const organizers = await docs<Organizer>(`select data from organizers order by data->>'name'`);
+  // Abonnés réels (table follows) ; le nombre enregistré dans la fiche ne sert que d'ancien repli
+  const counts = new Map((await all<{ organizer_id: string; n: string }>(`select organizer_id, count(*) as n from follows group by organizer_id`)).map((r) => [r.organizer_id, Number(r.n)]));
+  for (const o of organizers) o.followers = counts.get(o.id) ?? 0;
   return {
     events: events.map((e) => publicEvent(e, u)), organizers,
     fees: await feeSettings(),
@@ -517,6 +527,16 @@ const getEvent: Handler = async (c) => {
   if (e!.private === true && !mine && c.params.id !== e!.slug && !(await holdsTicketFor(u, e!.id))) fail(404, 'Événement introuvable');
   return { ...publicEvent(e!, u), taken: await takenSeats(e!.id) };
 };
+
+/** Événement que la personne a le droit de voir (publié ou terminé ; brouillon pour son équipe ; privé seulement par son adresse secrète, son équipe, l'administration ou un détenteur de billet) ; 404 sinon. */
+async function visibleEvent(c: Ctx, idOrSlug: string): Promise<EventItem> {
+  const e = await eventById(idOrSlug);
+  const u = c.user;
+  const mine = u?.role === 'admin' || (!!u?.organizer_id && u.organizer_id === e?.organizerId);
+  if (!e || (e.status !== 'published' && e.status !== 'ended' && !mine)) fail(404, 'Événement introuvable');
+  if (e!.private === true && !mine && idOrSlug !== e!.slug && !(await holdsTicketFor(u, e!.id))) fail(404, 'Événement introuvable');
+  return e!;
+}
 
 /** La personne connectée a-t-elle une commande ou un billet pour cet événement ? */
 async function holdsTicketFor(u: UserRow | null, eventId: string) {
@@ -853,7 +873,10 @@ async function notifyNearby(ev: EventItem) {
 
 async function notifyEventChange(before: EventItem | undefined, after: EventItem) {
   if (!pushConfigured()) return;
-  if (after.status === 'published' && before?.status !== 'published') await notifyNearby(after);
+  if (after.status === 'published' && before?.status !== 'published') {
+    await notifyNearby(after);
+    await safely(async () => notifyFollowers(after, await orgName(after.organizerId)));
+  }
   if (!before) return;
   await safely(async () => {
     if (after.status === 'cancelled' && before.status !== 'cancelled') {
@@ -2432,6 +2455,34 @@ const reviewState: Handler = async (c) => {
   return { canReview: !mine && over && r.data.status === 'paid', over, review: mine };
 };
 
+/** Taux de change : valeur, origine (automatique ou fixée à la main) et date. Administration seulement. */
+const getRate: Handler = async (c) => {
+  admin(c);
+  await refreshRate(true);
+  return { usdToHtg: RATES.USD, manual: rateMeta.manual, source: rateMeta.source, at: rateMeta.at };
+};
+/** L'administration fixe le taux à la main (mode manuel : plus de mise à jour automatique) ou revient au mode automatique. */
+const putRate: Handler = async (c) => {
+  admin(c);
+  if (c.body.mode === 'auto') {
+    const cur = await one<{ value: Record<string, unknown> }>(`select value from settings where key = 'rate'`);
+    await upsert('settings', { key: 'rate', value: { ...(cur?.value ?? {}), manual: false, source: 'automatique' } });
+    rateLoadedAt = 0;
+    const r = await updateMarketRate();
+    await audit(c, 'Taux de change : retour au mode automatique', `1 USD = ${r.rate} HTG`);
+    await refreshRate(true);
+    return { usdToHtg: RATES.USD, manual: rateMeta.manual, source: rateMeta.source, at: rateMeta.at, updated: r.updated };
+  }
+  const v = Number(c.body.usdToHtg);
+  if (!Number.isFinite(v) || v < 10 || v > 10_000) fail(422, 'Indiquez un taux entre 10 et 10 000 gourdes pour 1 dollar');
+  const rate = Math.round(v * 100) / 100;
+  await upsert('settings', { key: 'rate', value: { usdToHtg: rate, rates: { USD: rate }, source: 'manuel', at: new Date().toISOString(), manual: true } });
+  setRates({ USD: rate });
+  await refreshRate(true);
+  await audit(c, 'Taux de change fixé à la main', `1 USD = ${rate} HTG`);
+  return { usdToHtg: RATES.USD, manual: true, source: rateMeta.source, at: rateMeta.at };
+};
+
 const createReview: Handler = async (c) => {
   const r = await orderAccess(c, str(c.body.orderId, 60), str(c.body.key, 60));
   if (r.data.status !== 'paid') fail(409, 'Seules les commandes payées peuvent être notées');
@@ -2536,6 +2587,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ...marketingRoutes({ fail, str, auth, admin, org, audit, rateLimit }),
   ...financeRoutes({ fail, str, auth, admin, org, audit, balanceOf }),
   ...boostRoutes({ fail, str, auth, admin, org, audit }),
+  ...socialRoutes({ fail, str, auth, org, rateLimit: (k, m, w) => rateLimit(k, m, w), visibleEvent }),
   ...devApiRoutes({ fail, str, auth, admin, org, audit }),
   ['GET', '/health', async () => {
     // Diagnostic : indique seulement si les réglages sont présents, jamais leur valeur
@@ -2564,6 +2616,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/reports', reportEvent],
   ['GET', '/events/:id/reviews', eventReviews],
   ['GET', '/reviews/state', reviewState],
+  ['GET', '/admin/rate', getRate],
+  ['PUT', '/admin/rate', putRate],
   ['POST', '/reviews', createReview],
   ['GET', '/org/reviews', orgReviews],
   ['POST', '/org/reviews/:id/reply', replyReview],

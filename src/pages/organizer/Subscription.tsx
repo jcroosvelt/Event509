@@ -64,10 +64,10 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
   const pendingManual = ov.payments.find((p) => p.status === 'pending');
   const approved = ov.request?.status === 'approved' || ov.request?.status === 'expired';
 
-  const pay = async () => {
+  const pay = async (plan: 'yearly' | 'lifetime' = 'yearly') => {
     setBusy(true);
     try {
-      const r = await subscribePremium(method);
+      const r = await subscribePremium(method, plan);
       if (r.payUrl) { window.location.assign(r.payUrl); return; }
       toast(r.paid ? t('Abonnement activé') : t('Paiement enregistré : il sera confirmé par l’administration dès réception de votre virement.'));
       reload();
@@ -101,15 +101,15 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
         <Card>
           <div className="flex flex-wrap items-center gap-2"><h2 className="font-bold">{t('Abonnement actuel')}</h2><Badge tone={SUB_STATUS[sub.status]!.tone}>{t(SUB_STATUS[sub.status]!.l)}</Badge></div>
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs font-semibold text-ink-muted">{t('Formule')}</dt><dd>{sub.plan === 'yearly' ? t('Annuelle') : t('Mensuelle (ancienne formule)')}</dd></div>
+            <div><dt className="text-xs font-semibold text-ink-muted">{t('Formule')}</dt><dd>{sub.plan === 'lifetime' ? t('À vie') : sub.plan === 'yearly' ? t('Annuelle') : t('Mensuelle (ancienne formule)')}</dd></div>
             {sub.startedAt && <div><dt className="text-xs font-semibold text-ink-muted">{t('Activé le')}</dt><dd>{dateShort(sub.startedAt, lang)}</dd></div>}
-            {sub.expiresAt && <div><dt className="text-xs font-semibold text-ink-muted">{t('Expire le')}</dt><dd>{dateShort(sub.expiresAt, lang)}</dd></div>}
+            {sub.expiresAt && sub.plan !== 'lifetime' && <div><dt className="text-xs font-semibold text-ink-muted">{t('Expire le')}</dt><dd>{dateShort(sub.expiresAt, lang)}</dd></div>}
           </dl>
           <p className="mt-3 text-xs text-ink-muted">{t('Si l’abonnement prend fin, seul le badge est masqué : vos événements et vos données sont conservés.')}</p>
         </Card>
       )}
 
-      {c.enabled && (
+      {c.enabled && sub?.plan !== 'lifetime' && (
         <Card>
           <h2 className="font-bold">{ov.subscriptionActive ? t('Renouveler pour une année de plus') : t('Souscrire pour l’année')}</h2>
           <p className="mt-3 text-3xl font-extrabold">{platformMoney(c.yearlyPrice, ov.billingCurrency, lang)}<span className="text-sm font-semibold text-ink-muted"> / {t('an')}</span></p>
@@ -124,8 +124,18 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
           )}
           {!c.onlinePayment && <p className="mt-3 rounded-2xl bg-canvas p-3 text-sm text-ink-soft">{t('Le paiement en ligne n’est pas encore disponible : votre demande de paiement est enregistrée et l’administration la confirme dès réception de votre virement.')}</p>}
           {pendingManual && <p role="status" className="mt-3 text-sm font-semibold text-amber-700">{t('Un paiement de {amount} est en attente de confirmation.', { amount: moneyRaw(pendingManual.amount, 'HTG', lang) })}</p>}
-          <Button className="mt-4" loading={busy} onClick={pay}><RefreshCw className="h-4 w-4" aria-hidden /> {ov.subscriptionActive ? t('Renouveler') : t('Payer l’abonnement')}</Button>
+          <Button className="mt-4" loading={busy} onClick={() => void pay('yearly')}><RefreshCw className="h-4 w-4" aria-hidden /> {ov.subscriptionActive ? t('Renouveler') : t('Payer l’abonnement')}</Button>
           <p className="mt-3 text-xs text-ink-muted">{t('Le paiement ne suffit pas : le badge est activé seulement après l’approbation de votre demande par un administrateur.')}</p>
+        </Card>
+      )}
+
+      {c.enabled && c.lifetimeEnabled && sub?.plan !== 'lifetime' && (
+        <Card className="ring-2 ring-red-600/20">
+          <h2 className="font-bold">{t('Forfait à vie')}</h2>
+          <p className="mt-3 text-3xl font-extrabold">{platformMoney(c.lifetimePriceHtg, ov.billingCurrency, lang)}<span className="text-sm font-semibold text-ink-muted"> · {t('une seule fois')}</span></p>
+          <p className="mt-1 text-sm text-ink-soft">{t('Payez une fois : votre badge vérifié n’expire jamais, sans renouvellement.')}</p>
+          <Button className="mt-4" loading={busy} onClick={() => void pay('lifetime')}>{t('Prendre le forfait à vie')}</Button>
+          <p className="mt-3 text-xs text-ink-muted">{t('Comme pour l’abonnement annuel, le badge est activé après l’approbation de votre demande par un administrateur.')}</p>
         </Card>
       )}
 
@@ -146,7 +156,7 @@ function Content({ ov, reload }: { ov: PremiumOverview; reload: () => void }) {
               {ov.payments.map((p) => (
                 <tr key={p.id}>
                   <Td>{dateShort(p.paidAt ?? p.createdAt, lang)}</Td>
-                  <Td>{p.plan === 'yearly' ? t('Annuel') : t('Mensuel')}</Td>
+                  <Td>{p.plan === 'lifetime' ? t('À vie') : p.plan === 'yearly' ? t('Annuel') : t('Mensuel')}</Td>
                   <Td className="font-bold">{moneyRaw(p.amount, 'HTG', lang)}</Td>
                   <Td><Badge tone={PAY_STATUS[p.status].tone}>{t(PAY_STATUS[p.status].l)}</Badge></Td>
                   <Td>{['paid', 'refund_due', 'refunded'].includes(p.status) && (

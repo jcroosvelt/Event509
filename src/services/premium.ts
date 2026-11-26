@@ -5,7 +5,7 @@ import type {
 
 /** Programme « Organisateur vérifié » : appels au serveur. Il n'existe pas en démonstration (aucun serveur, aucun paiement). */
 
-export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'yearlyPrice' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits' | 'visibilityBoost' | 'featuredPerOrganizer'> & { onlinePayment: boolean };
+export type PublicPremiumConfig = Pick<PremiumConfig, 'enabled' | 'yearlyPrice' | 'lifetimeEnabled' | 'lifetimePriceUsd' | 'validityDays' | 'requiredDocs' | 'processingDays' | 'minAge' | 'eligibility' | 'refund' | 'benefits' | 'visibilityBoost' | 'featuredPerOrganizer'> & { onlinePayment: boolean; lifetimePriceHtg: number };
 
 export interface PremiumOverview {
   config: PublicPremiumConfig;
@@ -37,8 +37,8 @@ export const saveApplicationDraft = (application: Partial<VerificationApplicatio
   http<{ savedAt: string }>('/org/premium/draft', { method: 'PUT', body: JSON.stringify({ application }) });
 export const submitApplication = () => http<null>('/org/premium/apply', { method: 'POST' });
 export const sendAppeal = (message: string) => http<null>('/org/premium/appeal', { method: 'POST', body: JSON.stringify({ message }) });
-export const subscribePremium = (method: string) =>
-  http<{ paymentId: string; paid: boolean; manual?: boolean; payUrl?: string }>('/org/premium/subscribe', { method: 'POST', body: JSON.stringify({ plan: 'yearly', method }) });
+export const subscribePremium = (method: string, plan: 'yearly' | 'lifetime' = 'yearly') =>
+  http<{ paymentId: string; paid: boolean; manual?: boolean; payUrl?: string }>('/org/premium/subscribe', { method: 'POST', body: JSON.stringify({ plan, method }) });
 export const cancelPremium = () => http<null>('/org/premium/cancel', { method: 'POST' });
 export const resumePremium = () => http<null>('/org/premium/resume', { method: 'POST' });
 export const checkPremiumPayment = (id: string) => http<{ status: 'paid' | 'pending' | 'failed' }>(`/premium/payments/${encodeURIComponent(id)}/check`, { method: 'POST' });
@@ -156,3 +156,9 @@ export interface AdminOrganizerRow { id: string; name: string; city: string; ver
 export const getAdminOrganizers = (q = '') => http<AdminOrganizerRow[]>(`/admin/organizers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
 /** Organisation : progression vers le badge offert (billets payés vendus / seuil). */
 export const getBadgeProgress = () => http<{ sold: number; goal: number; reached: boolean }>('/org/badge-progress');
+
+/** Administration : taux de change (valeur, origine, date) ; le fixer à la main ou revenir au mode automatique. */
+export interface RateInfo { usdToHtg: number; manual: boolean; source: string; at: string | null }
+export const getRateInfo = () => http<RateInfo>('/admin/rate');
+export const setManualRate = (usdToHtg: number) => http<RateInfo>('/admin/rate', { method: 'PUT', body: JSON.stringify({ mode: 'manual', usdToHtg }) });
+export const setAutoRate = () => http<RateInfo>('/admin/rate', { method: 'PUT', body: JSON.stringify({ mode: 'auto' }) });

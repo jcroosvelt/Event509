@@ -220,3 +220,4 @@
 - 2026-11-26 : badge vérifié en rouge ; l'administration choisit n'importe quel organisateur (liste complète, sans demande ni paiement, 1 an) ; règle automatique : 500 billets payés vendus = badge offert 1 an (une fois) ; progression visible côté organisateur ; boost gratuit pour l'administration.
 - 2026-11-26 : tests déplacés de api/ vers tests/api/ (Vercel compte chaque fichier de api/ comme une fonction : limite de 12 atteinte, le déploiement échouait).
 - 2026-11-26 : badge « à vie » (jamais expiré) possible par l'administration ; compte Event509 passé à vie.
+- 2026-11-26 : forfait à vie (200 USD réglable, converti en gourdes au taux du jour) pour les organisateurs ; taux de change réglable à la main par l'administration (retour automatique possible) ; socle serveur du réseau social : abonnements aux organisateurs, commentaires, messages privés (interface à venir).

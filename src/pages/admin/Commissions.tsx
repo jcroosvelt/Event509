@@ -5,6 +5,7 @@ import { useApp } from '@/store/app';
 import { moneyRaw } from '@/lib/format';
 import { computeFees, type FeeSettings } from '@/lib/fees';
 import { useForm, cleanNumber } from '@/lib/form';
+import { RateCard } from '@/components/RateCard';
 import { Button, Card, Field, Input, PageHeader, Toggle } from '@/components/ui';
 
 export default function Commissions() {
@@ -46,11 +47,7 @@ export default function Commissions() {
   return (
     <div className="max-w-4xl">
       <PageHeader title={t('Commissions de service')} subtitle={t('Frais appliqués à chaque billet payant. Les changements valent pour les nouvelles commandes.')} />
-      <Card className="mb-4">
-        <h2 className="font-bold">{t('Taux de change')}</h2>
-        <p className="mt-1 text-sm text-ink-soft">{t('Le site gère deux monnaies : la gourde (HTG) et le dollar américain (USD). Le taux est mis à jour automatiquement chaque jour : vous n’avez rien à régler. Le paiement est toujours prélevé en gourdes ; les commandes déjà passées ne changent pas.')}</p>
-        <p className="mt-3 text-lg font-extrabold">{t('1 USD = {rate} HTG', { rate: String(currentExchangeRates().USD) })}</p>
-      </Card>
+      <RateCard fallback={currentExchangeRates().USD} />
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card>
           <form noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-5">

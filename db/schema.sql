@@ -251,6 +251,11 @@ create table if not exists premium_payments (
   data jsonb not null default '{}'
 );
 create index if not exists premium_payments_org on premium_payments(organizer_id, created_at desc);
+-- Forfait « à vie » : une troisième formule en plus de mensuel et annuel
+alter table premium_subscriptions drop constraint if exists premium_subscriptions_plan_check;
+alter table premium_subscriptions add constraint premium_subscriptions_plan_check check (plan in ('monthly', 'yearly', 'lifetime'));
+alter table premium_payments drop constraint if exists premium_payments_plan_check;
+alter table premium_payments add constraint premium_payments_plan_check check (plan in ('monthly', 'yearly', 'lifetime'));
 
 -- Historique des décisions et commentaires internes (visibles seulement de l'administration quand internal = true).
 create table if not exists verification_log (
@@ -677,3 +682,49 @@ create table if not exists app_chunk (
   data bytea not null,
   primary key (upload_id, idx)
 );
+
+-- Réseau social : abonnements aux organisateurs, commentaires sur les événements, messages privés aux organisateurs.
+create table if not exists follows (
+  user_id text not null references users(id) on delete cascade,
+  organizer_id text not null references organizers(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, organizer_id)
+);
+create index if not exists follows_org on follows(organizer_id);
+
+create table if not exists event_comments (
+  id text primary key,
+  event_id text not null references events(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  parent_id text references event_comments(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 1000),
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists event_comments_event on event_comments(event_id, created_at desc);
+create index if not exists event_comments_parent on event_comments(parent_id);
+create index if not exists event_comments_user on event_comments(user_id, created_at desc);
+
+create table if not exists conversations (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  organizer_id text not null references organizers(id) on delete cascade,
+  event_id text,
+  last_at timestamptz not null default now(),
+  user_unread integer not null default 0,
+  org_unread integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (user_id, organizer_id)
+);
+create index if not exists conversations_org on conversations(organizer_id, last_at desc);
+create index if not exists conversations_user on conversations(user_id, last_at desc);
+
+create table if not exists messages (
+  id text primary key,
+  conversation_id text not null references conversations(id) on delete cascade,
+  sender text not null check (sender in ('user', 'org')),
+  sender_user_id text,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists messages_conv on messages(conversation_id, created_at);

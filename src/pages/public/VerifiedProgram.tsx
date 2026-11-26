@@ -105,6 +105,11 @@ export default function VerifiedProgram() {
             <h3 className="font-bold">{t('Abonnement annuel')}</h3>
             <p className="mt-2 text-4xl font-extrabold">{moneyRaw(c.yearlyPrice, 'HTG', lang)}<span className="text-base font-semibold text-ink-muted"> / {t('an')}</span></p>
             <p className="mt-2 text-sm text-ink-soft">{t('Un seul prix, payé en une seule fois pour toute l’année. Tous les avantages sont inclus.')}</p>
+            {c.lifetimeEnabled && (
+              <p className="mt-4 border-t border-line pt-3 text-sm text-ink-soft">
+                {t('Ou le forfait à vie : {price}, payé une seule fois, sans renouvellement.', { price: `${moneyRaw(c.lifetimePriceUsd, 'USD', lang)} (${moneyRaw(c.lifetimePriceHtg, 'HTG', lang)})` })}
+              </p>
+            )}
           </Card>
         ) : (
           <Card><p className="text-sm text-ink-soft">{premiumAvailable ? t('Le programme n’est pas ouvert aux nouvelles demandes pour le moment.') : t('Les tarifs sont affichés sur le site en ligne.')}</p></Card>
