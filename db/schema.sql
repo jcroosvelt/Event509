@@ -434,6 +434,7 @@ create table if not exists rate_events (
   at timestamptz not null default now()
 );
 create index if not exists rate_events_key on rate_events(key, at);
+create index if not exists rate_events_at on rate_events(at);
 
 -- Codes à usage unique (OTP) envoyés sur WhatsApp : seule l'empreinte du code est gardée.
 -- La limite (3 demandes par 24 h glissantes, tous motifs confondus) se calcule sur cette table, sous verrou consultatif.

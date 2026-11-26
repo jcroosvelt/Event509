@@ -35,14 +35,40 @@ export function restrictedUrl(url: string): string | null {
   }
 }
 
-const poolFor = (url: string) =>
-  new pg.Pool({
+/**
+ * Neon propose deux adresses pour la même base : directe (une connexion de base par connexion du site) et « groupée » (-pooler : des
+ * milliers de clients se partagent peu de connexions). Une fonction serverless qui se multiplie sous la charge sature vite l'adresse
+ * directe ; on utilise donc l'adresse groupée quand c'est une adresse Neon directe (interrupteur de secours DB_POOLER=0).
+ */
+export function pooledUrl(url: string): string {
+  if (process.env.DB_POOLER === '0') return url;
+  try {
+    const u = new URL(url);
+    const m = /^(ep-[a-z0-9-]+?)(-pooler)?(\.[a-z0-9-]+(?:\.[a-z0-9-]+)*\.neon\.tech)$/.exec(u.hostname);
+    if (!m || m[2]) return url; // pas une adresse Neon, ou déjà groupée
+    u.hostname = `${m[1]}-pooler${m[3]}`;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+const isPooled = (url: string) => { try { return /-pooler\./.test(new URL(url).hostname); } catch { return false; } };
+export const dbPooled = () => !!process.env.DATABASE_URL && isPooled(pooledUrl(process.env.DATABASE_URL));
+
+const poolFor = (rawUrl: string) => {
+  const url = pooledUrl(rawUrl);
+  return new pg.Pool({
     connectionString: url,
-    max: 5,
+    // Connexions par instance (réglable) ; attente de connexion et durée d'une requête bornées : une panne se voit tout de suite
+    max: Math.max(1, Number(process.env.DB_POOL_MAX) || 5),
+    connectionTimeoutMillis: 8_000,
+    // Délai côté client (jamais un paramètre de démarrage : le pooler de Neon les refuse)
+    query_timeout: 25_000,
     idleTimeoutMillis: 10_000,
     // Neon exige TLS ; une base locale de test n'en a pas
     ssl: /localhost|127\.0\.0\.1|host=\/tmp/.test(url) ? undefined : { rejectUnauthorized: true },
   });
+};
 
 let owner: pg.Pool | null = null;
 let limited: pg.Pool | null = null;

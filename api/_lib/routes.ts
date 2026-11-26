@@ -2,7 +2,7 @@ import type {
   Ambassador, AppUser, Attendee, AuditEntry, Campaign, Dispute, EventItem, IssuedTicket, Order, Organizer, Payout,
   PlatformTarget, PromoCode, RefundRequest, Report, Review, TeamMember, TeamRole, TicketType, VerificationRequest,
 } from '../../src/types.js';
-import { all, db, dbRestricted, docs, one, tx, upsert, type Q } from './db.js';
+import { all, db, dbPooled, dbRestricted, docs, one, tx, upsert, type Q } from './db.js';
 import { hashPassword, passwordNeedsRehash, newAccessKey, newId, newTicketCode, readPurposeToken, sameKey, signPurposeToken, signToken, verifyPassword } from './auth.js';
 import { mailConfigured, sendNoticeEmail, sendTicketsEmail, sendVerifyEmail, siteUrl } from './mail.js';
 import { createPayment, MIN_HTG, ONLINE_METHODS, payConfigured, verifyPayment, type OnlineMethod, type PayStatus } from './pay.js';
@@ -234,6 +234,7 @@ async function eventById(id: string, q: Q = db()) {
   return (await docs<EventItem>(`select data from events where id = $1 or slug = $1`, [id], q))[0] ?? null;
 }
 async function saveEventRow(e: EventItem, q: Q = db()) {
+  publicBoot = null; // le catalogue public change (quota, statut…) : la copie en mémoire est périmée
   await upsert('events', { id: e.id, slug: e.slug, organizer_id: e.organizerId, status: e.status, start_at: e.start, data: e }, q);
 }
 async function orgName(id: string) {
@@ -270,8 +271,9 @@ async function rateLimit(key: string, max: number, windowMinutes: number, q?: Q)
   const r = await one<{ n: string }>(`select count(*)::text as n from rate_events where key = $1 and at > now() - ($2 || ' minutes')::interval`, [key, String(windowMinutes)], q);
   if (Number(r?.n ?? 0) >= max) fail(429, 'Trop de tentatives. Réessayez plus tard.');
   await (q ?? db()).query(`insert into rate_events (key) values ($1)`, [key]);
-  // Ménage : les anciens événements ne servent plus
-  await (q ?? db()).query(`delete from rate_events where at < now() - interval '2 days'`);
+  // Ménage : les anciens événements ne servent plus. Une fois sur cent seulement (pas à chaque appel : sous forte charge, chaque
+  // requête sensible ferait un balayage de la table) ; l'index sur la date rend la purge rapide.
+  if (Math.random() < 0.01) await (q ?? db()).query(`delete from rate_events where at < now() - interval '2 days'`);
 }
 
 const COMMON_PASSWORDS = new Set(['12345678', '123456789', '1234567890', 'password', 'password1', 'motdepasse', 'azertyuiop', 'qwertyuiop', 'azerty123', 'qwerty123', 'iloveyou1', 'haiti509509']);
@@ -494,7 +496,22 @@ const deleteMe: Handler = async (c) => {
 
 // ---------- Public ----------
 
+/** Catalogue public (visiteur sans compte) gardé en mémoire quelques secondes : des milliers de visiteurs ne font qu'une lecture de la base. */
+let publicBoot: { at: number; value?: unknown; pending?: Promise<unknown> } | null = null;
+const bootCacheMs = () => (process.env.BOOTSTRAP_CACHE_MS !== undefined ? Number(process.env.BOOTSTRAP_CACHE_MS) : process.env.VITEST ? 0 : 5000);
+export const clearPublicBootstrap = () => { publicBoot = null; };
+
 const bootstrap: Handler = async (c) => {
+  const ttl = bootCacheMs();
+  if (c.user || !(ttl > 0)) return bootstrapFor(c);
+  if (publicBoot?.value && Date.now() - publicBoot.at < ttl) return publicBoot.value;
+  if (publicBoot?.pending) return publicBoot.pending; // une lecture déjà en cours : on l'attend au lieu d'en lancer une autre
+  const pending = bootstrapFor(c).then((value) => { publicBoot = { at: Date.now(), value }; return value; }, (e) => { publicBoot = null; throw e; });
+  publicBoot = { at: publicBoot?.at ?? 0, value: publicBoot?.value, pending };
+  return pending;
+};
+
+const bootstrapFor: Handler = async (c) => {
   const u = c.user;
   const events = await docs<EventItem>(
     // Les événements privés ne sont jamais dans le catalogue public : seulement pour leur organisation, l'administration et les personnes
@@ -697,6 +714,7 @@ const createOrder: Handler = async (c) => {
         [order.id, order.eventId, c.user?.id ?? null, buyer.email, order.status, order.createdAt, JSON.stringify(order), accessKey]);
 
       const tickets: IssuedTicket[] = [];
+      const rows: unknown[][] = [];
       for (const l of lines) {
         // Pas de réservation : un billet ne compte comme vendu qu'une fois payé
         if (order.status !== 'pending') l.tt.sold += l.qty;
@@ -709,12 +727,16 @@ const createOrder: Handler = async (c) => {
             phone: buyer.phone, purchasedAt: order.createdAt, amount: unit,
           };
           tickets.push(t);
-          await q.query(
-            `insert into tickets (id, code, event_id, order_id, owner_email, seat, session_label, status, data) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [t.id, t.code, t.eventId, t.orderId, t.holderEmail, t.seat ?? null, t.sessionLabel ?? null, t.status, JSON.stringify(t)],
-          );
+          rows.push([t.id, t.code, t.eventId, t.orderId, t.holderEmail, t.seat ?? null, t.sessionLabel ?? null, t.status, JSON.stringify(t)]);
         }
       }
+      // Une seule requête pour tous les billets (au lieu d'une par billet, sous le verrou de l'événement)
+      if (rows.length)
+        await q.query(
+          `insert into tickets (id, code, event_id, order_id, owner_email, seat, session_label, status, data)
+           select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::jsonb[])`,
+          [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => rows.map((r) => r[i])),
+        );
       await saveEventRow(ev!, q);
       if (order.referral)
         await q.query(
@@ -2595,7 +2617,7 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
     try {
       const ok = !!(await one(`select 1 as ok`));
       // dbLimited : vrai si le site se connecte avec le rôle de base limité (jamais le nom ni le mot de passe)
-      return { ok: true, db: ok, dbLimited: dbRestricted(), env };
+      return { ok: true, db: ok, dbLimited: dbRestricted(), dbPooled: dbPooled(), env };
     } catch {
       return { ok: false, db: false, env };
     }
