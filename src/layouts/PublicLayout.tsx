@@ -16,6 +16,7 @@ import { cx, relative } from '@/lib/format';
 import { languages } from '@/lib/i18n';
 import { can, hasOrganizerAccess } from '@/lib/permissions';
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
+import { PoweredBy } from '@/components/PoweredBy';
 
 /** Ferme un menu au clic extérieur et à Échap, puis rend le focus au bouton. */
 function useMenu() {
@@ -339,6 +340,7 @@ export default function PublicLayout() {
           <Link to="/remboursement" className="hover:text-ink">{t('Remboursement')}</Link>
           <Link to="/telecharger" className="hover:text-ink">{t('Application Android')}</Link>
         </div>
+        <PoweredBy className="pb-6 text-center text-xs text-ink-muted" />
       </footer>
 
       <BottomNav

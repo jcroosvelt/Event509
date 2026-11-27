@@ -80,6 +80,7 @@ describe.skipIf(!DB)('Médias et publications', () => {
     const c = await call('POST', `/events/${id}/comments`, { body: 'Super !', style: 'neon', media: [{ fileId: f.body.fileId }, { kind: 'sticker', sticker: '🔥' }] }, b.token);
     expect(c.status, JSON.stringify(c.body)).toBe(200);
     expect(c.body.media).toHaveLength(2);
+    expect(c.body.style).toBe('plain'); // pas d'effet de texte dans les commentaires
     expect(c.body.media[0]).toMatchObject({ kind: 'image' });
     expect(c.body.media[1]).toMatchObject({ kind: 'sticker', sticker: '🔥' });
     // même fichier réutilisé : refusé ; fichier d'un autre : introuvable
@@ -137,6 +138,16 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect(feedL.body.items.find((i: { post?: { id: string } }) => i.post?.id === p.body.id).post).toMatchObject({ likes: 2, liked: true });
     expect((await call('DELETE', `/posts/${p.body.id}/like`, undefined, fan.token)).body).toEqual({ liked: false, likes: 1 });
     expect((await call('POST', `/posts/${p.body.id}/like`, {})).status).toBe(401);
+    // notes en étoiles : 1 à 5, une par personne (la nouvelle remplace l'ancienne), pas pour l'organisation elle-même
+    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 4 }, fan.token)).body).toEqual({ average: 4, count: 1, mine: 4 });
+    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 }, fan.token)).body).toEqual({ average: 5, count: 1, mine: 5 });
+    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 2 }, m.token)).body).toEqual({ average: 3.5, count: 2, mine: 2 });
+    for (const bad of [0, 6, 2.5, 'x']) expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: bad }, m.token)).status).toBe(422);
+    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 }, o.token)).status).toBe(409);
+    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 })).status).toBe(401);
+    const feedR = await call('GET', '/me/feed', undefined, fan.token);
+    expect(feedR.body.items.find((i: { post?: { id: string } }) => i.post?.id === p.body.id).post.rating).toEqual({ average: 3.5, count: 2, mine: 5 });
+    expect((await call('DELETE', `/posts/${p.body.id}/rating`, undefined, m.token)).body).toEqual({ average: 5, count: 1, mine: 0 });
     // commentaires de membres : texte, autocollant, photo
     const fm = await up(m.token, PNG);
     const c1 = await call('POST', `/posts/${p.body.id}/comments`, { body: 'Hâte !', media: [{ fileId: fm.body.fileId }, { kind: 'sticker', sticker: '🔥' }] }, m.token);

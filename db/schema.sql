@@ -871,3 +871,13 @@ alter table post_media drop constraint if exists post_media_owner_kind_check;
 alter table post_media add constraint post_media_owner_kind_check check (owner_kind in ('comment', 'post', 'pcomment'));
 alter table content_reports drop constraint if exists content_reports_kind_check;
 alter table content_reports add constraint content_reports_kind_check check (kind in ('comment', 'photo', 'message', 'post', 'pcomment'));
+
+-- Notes en étoiles (1 à 5) des publications : une note par personne
+create table if not exists post_ratings (
+  post_id text not null references posts(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  stars integer not null check (stars between 1 and 5),
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+create index if not exists post_ratings_user on post_ratings(user_id);

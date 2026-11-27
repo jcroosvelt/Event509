@@ -7,10 +7,11 @@ import { communityAvailable, getFeed, type FeedItem } from '@/services/community
 import { relative } from '@/lib/format';
 import { Button, Card, EmptyState, Loading } from '@/components/ui';
 import { EventCard } from '@/components/events';
+import { PostCard, PostComposer } from '@/components/PostCard';
 
 /** Fil d'actualité : les nouveaux événements et les photos des organisateurs que l'on suit. */
 export default function Feed() {
-  const { t, lang } = useApp();
+  const { t, lang, user } = useApp();
   useTitle(t('Fil d’actualité'));
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [more, setMore] = useState(false);
@@ -31,13 +32,16 @@ export default function Feed() {
   return (
     <div className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 lg:pt-10">
       <h1 className="mb-4 flex items-center gap-2 text-2xl font-extrabold tracking-tight"><Newspaper className="h-6 w-6" aria-hidden /> {t('Fil d’actualité')}</h1>
+      {user?.organizerId && <PostComposer onDone={load} />}
       {!items.length ? (
         <EmptyState icon={<Newspaper className="h-5 w-5" />} title={t('Rien à voir pour le moment')} body={t('Suivez des organisateurs : leurs nouveaux événements et leurs photos apparaîtront ici.')} action={<Link to="/explorer"><Button>{t('Découvrir des événements')}</Button></Link>} />
       ) : (
         <ul className="space-y-4">
           {items.map((it) => (
-            <li key={`${it.type}-${it.at}-${it.type === 'event' ? it.event.id : it.event.id}`}>
-              {it.type === 'event' ? (
+            <li key={`${it.type}-${it.at}-${it.type === 'post' ? it.post.id : it.event.id}`}>
+              {it.type === 'post' ? (
+                <PostCard post={it.post} onRemoved={load} />
+              ) : it.type === 'event' ? (
                 <div>
                   <p className="mb-1 text-xs text-ink-muted">{t('Nouvel événement')} · {relative(it.at, lang)}</p>
                   <EventCard event={it.event} />

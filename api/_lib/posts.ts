@@ -24,7 +24,7 @@ const shortName = (name: string) => {
 export interface PostRow {
   id: string; user_id: string; organizer_id: string | null; event_id: string | null; body: string; style: string | null; created_at: Date;
   name: string | null; avatar: string | null; org_name: string | null; org_logo: string | null; org_slug: string | null; org_verified: boolean | null;
-  ev_slug: string | null; ev_title: string | null; likes?: string; comments?: string; liked?: boolean;
+  ev_slug: string | null; ev_title: string | null; likes?: string; comments?: string; liked?: boolean; rating_avg?: string | null; rating_count?: string; my_stars?: number | null;
 }
 
 export const POST_SELECT = `select p.id, p.user_id, p.organizer_id, p.event_id, p.body, p.style, p.created_at,
@@ -32,17 +32,21 @@ export const POST_SELECT = `select p.id, p.user_id, p.organizer_id, p.event_id, 
   (o.data->>'verified')::boolean as org_verified, e.slug as ev_slug, e.data->>'title' as ev_title,
   (select count(*) from post_likes l where l.post_id = p.id) as likes,
   (select count(*) from post_comments pc where pc.post_id = p.id and not pc.hidden) as comments,
-  exists (select 1 from post_likes l2 where l2.post_id = p.id and l2.user_id = @VIEWER@) as liked
+  exists (select 1 from post_likes l2 where l2.post_id = p.id and l2.user_id = @VIEWER@) as liked,
+  (select round(avg(r.stars)::numeric, 1) from post_ratings r where r.post_id = p.id) as rating_avg,
+  (select count(*) from post_ratings r where r.post_id = p.id) as rating_count,
+  (select r2.stars from post_ratings r2 where r2.post_id = p.id and r2.user_id = @VIEWER@) as my_stars
   from posts p join users u on u.id = p.user_id left join organizers o on o.id = p.organizer_id left join events e on e.id = p.event_id`;
 
 /** Lecture des publications : @VIEWER@ devient le paramètre SQL qui porte l'identifiant de la personne connectée (ou ''). */
-export const postSelect = (viewerParam: number) => POST_SELECT.replace('@VIEWER@', '$' + String(viewerParam));
+export const postSelect = (viewerParam: number) => POST_SELECT.split('@VIEWER@').join('$' + String(viewerParam));
 
 export function postOut(p: PostRow, media: MediaOut[], viewer: UserRow | null, teamOrgId?: string | null) {
   const asOrg = !!p.organizer_id;
   return {
     id: p.id, body: p.body, style: p.style || 'plain', createdAt: p.created_at.toISOString(), media,
     likes: Number(p.likes ?? 0), commentCount: Number(p.comments ?? 0), liked: p.liked === true,
+    rating: { average: p.rating_avg == null ? 0 : Number(p.rating_avg), count: Number(p.rating_count ?? 0), mine: p.my_stars ?? 0 },
     author: asOrg
       ? { name: p.org_name ?? 'Organisateur', avatarUrl: p.org_logo || undefined, isOrganizer: true, verified: p.org_verified === true, orgSlug: p.org_slug ?? undefined }
       : { name: shortName(p.name ?? ''), avatarUrl: p.avatar || undefined, isOrganizer: false, verified: false },
@@ -143,6 +147,30 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     return { liked: on, likes: n };
   };
 
+  // ---------- Notes (1 à 5 étoiles) ----------
+  const ratingOut = async (postId: string, userId: string) => {
+    const r = await one<{ avg: string | null; n: string }>(`select round(avg(stars)::numeric, 1) as avg, count(*) as n from post_ratings where post_id = $1`, [postId]);
+    const mine = await one<{ stars: number }>(`select stars from post_ratings where post_id = $1 and user_id = $2`, [postId, userId]);
+    return { average: r?.avg == null ? 0 : Number(r.avg), count: Number(r?.n ?? 0), mine: mine?.stars ?? 0 };
+  };
+  /** Une note par personne : la nouvelle remplace l'ancienne ; DELETE la retire. L'organisation ne note pas ses propres publications. */
+  const rate: Handler = async (c) => {
+    const u = auth(c);
+    const p = await visiblePost(c.params.id!);
+    const stars = Number(c.body.stars);
+    if (!Number.isInteger(stars) || stars < 1 || stars > 5) fail(422, 'Choisissez une note de 1 à 5');
+    if (p.organizer_id && u.organizer_id === p.organizer_id) fail(409, 'Vous ne pouvez pas noter vos propres publications');
+    await rateLimit(`prate:${u.id}`, 120, 60);
+    await db().query(`insert into post_ratings (post_id, user_id, stars) values ($1,$2,$3) on conflict (post_id, user_id) do update set stars = excluded.stars, created_at = now()`, [p.id, u.id, stars]);
+    return ratingOut(p.id, u.id);
+  };
+  const unrate: Handler = async (c) => {
+    const u = auth(c);
+    const p = await visiblePost(c.params.id!);
+    await db().query(`delete from post_ratings where post_id = $1 and user_id = $2`, [p.id, u.id]);
+    return ratingOut(p.id, u.id);
+  };
+
   // ---------- Commentaires des publications ----------
   interface PCRow { id: string; post_id: string; user_id: string; body: string; style: string | null; created_at: Date; name: string | null; avatar: string | null; org_id: string | null }
   const pcOut = (r: PCRow, media: MediaOut[], viewer: UserRow | null, postOrg: string | null) => ({
@@ -173,8 +201,7 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     const rawMedia = c.body.media;
     const hasMedia = Array.isArray(rawMedia) && rawMedia.length > 0;
     if (!body && !hasMedia) fail(422, 'Écrivez un commentaire ou ajoutez une photo');
-    const styleIn = str(c.body.style, 20);
-    const style = hasMedia || !(TEXT_STYLES as readonly string[]).includes(styleIn) ? 'plain' : styleIn;
+    const style = 'plain'; // pas d'effet de texte dans les commentaires
     await rateLimit(`pcomment:${u.id}`, 10, 10);
     await rateLimit(`pcomment-day:${u.id}`, 100, 24 * 60);
     if (body && (await one(`select 1 from post_comments where user_id = $1 and post_id = $2 and body = $3 and created_at > now() - interval '1 hour'`, [u.id, p.id, body]))) fail(409, 'Vous avez déjà publié ce commentaire');
@@ -219,6 +246,8 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     ['GET', '/organizers/:id/posts', orgPosts],
     ['POST', '/posts/:id/like', like(true)],
     ['DELETE', '/posts/:id/like', like(false)],
+    ['PUT', '/posts/:id/rating', rate],
+    ['DELETE', '/posts/:id/rating', unrate],
     ['GET', '/posts/:id/comments', listPostComments],
     ['POST', '/posts/:id/comments', addPostComment],
     ['DELETE', '/post-comments/:id', deletePostComment],

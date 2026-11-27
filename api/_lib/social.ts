@@ -2,7 +2,7 @@ import type { EventItem } from '../../src/types.js';
 import { all, db, one, tx } from './db.js';
 import { newId } from './auth.js';
 import { claimOnce, notifyUsers, organizerUserIds } from './push.js';
-import { attachMedia, dropMedia, mediaFor, TEXT_STYLES, type MediaOut } from './media.js';
+import { attachMedia, dropMedia, mediaFor, type MediaOut } from './media.js';
 import type { Ctx, UserRow } from './routes.js';
 
 /**
@@ -125,8 +125,7 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const rawMedia = c.body.media;
     const hasMedia = Array.isArray(rawMedia) && rawMedia.length > 0;
     if (body.length < 1 && !hasMedia) fail(422, 'Écrivez un commentaire ou ajoutez une photo');
-    const styleIn = str(c.body.style, 20);
-    const style = hasMedia || !(TEXT_STYLES as readonly string[]).includes(styleIn) ? 'plain' : styleIn;
+    const style = 'plain'; // pas d'effet de texte dans les commentaires
     await rateLimit(`comment:${u.id}`, 10, 10);
     await rateLimit(`comment-day:${u.id}`, 100, 24 * 60);
     let parent: { id: string; user_id: string } | null = null;

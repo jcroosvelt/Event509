@@ -17,6 +17,7 @@ const NOTIF_KEY = 'e509.notifPrefs';
 const defaultPrefs = { reminders: true, updates: true, reco: true, marketing: false };
 
 import { BlockedMembers } from '@/components/BlockedMembers';
+import { PoweredBy } from '@/components/PoweredBy';
 
 export default function Settings() {
   const { lang, setLang, currency, setCurrency, theme, setTheme, user, updateUser, logout, toast, t, place, tastes } = useApp();
@@ -218,6 +219,7 @@ export default function Settings() {
         </form>
       </Modal>
       <BlockedMembers />
+      <PoweredBy className="mt-8 text-center text-xs text-ink-muted" />
       <PersonalizeModal open={personalize} onClose={() => setPersonalize(false)} />
     </div>
   );
