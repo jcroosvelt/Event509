@@ -77,10 +77,10 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect(ev.status, JSON.stringify(ev.body)).toBe(200);
     const id = ev.body.id as string;
     const f = await up(b.token, PNG);
-    const c = await call('POST', `/events/${id}/comments`, { body: 'Super !', style: 'neon', media: [{ fileId: f.body.fileId, filter: 'sepia' }, { kind: 'sticker', sticker: '🔥' }] }, b.token);
+    const c = await call('POST', `/events/${id}/comments`, { body: 'Super !', style: 'neon', media: [{ fileId: f.body.fileId }, { kind: 'sticker', sticker: '🔥' }] }, b.token);
     expect(c.status, JSON.stringify(c.body)).toBe(200);
     expect(c.body.media).toHaveLength(2);
-    expect(c.body.media[0]).toMatchObject({ kind: 'image', filter: 'sepia' });
+    expect(c.body.media[0]).toMatchObject({ kind: 'image' });
     expect(c.body.media[1]).toMatchObject({ kind: 'sticker', sticker: '🔥' });
     // même fichier réutilisé : refusé ; fichier d'un autre : introuvable
     expect((await call('POST', `/events/${id}/comments`, { body: 'x2', media: [{ fileId: f.body.fileId }] }, b.token)).status).toBe(409);
@@ -106,7 +106,7 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect((await pool.query(`select 1 from files where id = $1`, [f.body.fileId])).rowCount).toBe(0);
   });
 
-  it('publications : organisation (abonnés), membre (événement obligatoire), fil, modération', async () => {
+  it('publications : seules les organisations publient ; les membres aiment et commentent ; fil, modération', async () => {
     const o = await orgAccount('p');
     const m = await account('m');
     const fan = await account('f');
@@ -114,33 +114,53 @@ describe.skipIf(!DB)('Médias et publications', () => {
     const id = ev.body.id as string;
     await call('POST', `/orgs/${o.orgId}/follow`, {}, fan.token);
     const f = await up(o.token, MP4(100));
-    const p = await call('POST', '/posts', { asOrganizer: true, body: 'Nouvelle vidéo', media: [{ fileId: f.body.fileId, duration: 12 }] }, o.token);
+    const p = await call('POST', '/posts', { body: 'Nouvelle vidéo', eventId: id, media: [{ fileId: f.body.fileId, duration: 12 }] }, o.token);
     expect(p.status, JSON.stringify(p.body)).toBe(200);
     expect(p.body.author.isOrganizer).toBe(true);
     expect(p.body.media[0]).toMatchObject({ kind: 'video', duration: 12 });
-    // un membre sans événement : refusé ; membre qui publie au nom d'une organisation : refusé
-    expect((await call('POST', '/posts', { body: 'salut' }, m.token)).status).toBe(422);
+    expect(p.body).toMatchObject({ likes: 0, commentCount: 0, liked: false });
+    // un membre ne peut pas publier (ni en son nom, ni à propos d'un événement)
+    expect((await call('POST', '/posts', { body: 'salut', eventId: id }, m.token)).status).toBeGreaterThanOrEqual(400);
     expect((await call('POST', '/posts', { body: 'salut', asOrganizer: true }, m.token)).status).toBeGreaterThanOrEqual(400);
-    const mp = await call('POST', '/posts', { body: 'Belle soirée', style: 'sunset', eventId: id }, m.token);
-    expect(mp.status, JSON.stringify(mp.body)).toBe(200);
-    expect(mp.body.style).toBe('sunset');
-    expect((await call('POST', '/posts', {}, m.token)).status).toBe(422);
-    // fil de l'abonné : voit les deux publications
+    expect((await call('POST', '/posts', {}, o.token)).status).toBe(422);
+    const t = await call('POST', '/posts', { body: 'Soirée ce samedi', style: 'sunset' }, o.token);
+    expect(t.body.style).toBe('sunset');
+    // fil de l'abonné
     const feed = await call('GET', '/me/feed', undefined, fan.token);
     expect(feed.status, JSON.stringify(feed.body)).toBe(200);
-    const posts = feed.body.items.filter((i: { type: string }) => i.type === 'post');
-    expect(posts).toHaveLength(2);
+    expect(feed.body.items.filter((i: { type: string }) => i.type === 'post')).toHaveLength(2);
+    // j'aime : une fois par personne, retirable
+    expect((await call('POST', `/posts/${p.body.id}/like`, {}, fan.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/posts/${p.body.id}/like`, {}, fan.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/posts/${p.body.id}/like`, {}, m.token)).body.likes).toBe(2);
+    const feedL = await call('GET', '/me/feed', undefined, fan.token);
+    expect(feedL.body.items.find((i: { post?: { id: string } }) => i.post?.id === p.body.id).post).toMatchObject({ likes: 2, liked: true });
+    expect((await call('DELETE', `/posts/${p.body.id}/like`, undefined, fan.token)).body).toEqual({ liked: false, likes: 1 });
+    expect((await call('POST', `/posts/${p.body.id}/like`, {})).status).toBe(401);
+    // commentaires de membres : texte, autocollant, photo
+    const fm = await up(m.token, PNG);
+    const c1 = await call('POST', `/posts/${p.body.id}/comments`, { body: 'Hâte !', media: [{ fileId: fm.body.fileId }, { kind: 'sticker', sticker: '🔥' }] }, m.token);
+    expect(c1.status, JSON.stringify(c1.body)).toBe(200);
+    expect(c1.body.media).toHaveLength(2);
+    expect((await call('POST', `/posts/${p.body.id}/comments`, {}, m.token)).status).toBe(422);
+    const cl = await call('GET', `/posts/${p.body.id}/comments`, undefined, fan.token);
+    expect(cl.body.total).toBe(1);
+    expect(cl.body.items[0].author.name).toMatch(/^Prénom\w+ N\.$/);
     // page publique de l'organisation
-    const pub = await call('GET', `/organizers/${o.orgId}/posts`);
-    expect(pub.body.items).toHaveLength(1);
-    // signalement par 3 personnes : masqué ; l'administration peut supprimer
+    expect((await call('GET', `/organizers/${o.orgId}/posts`)).body.items).toHaveLength(2);
+    // signalement du commentaire par 3 personnes : masqué ; puis suppression par l'organisation
     for (const n of ['r1', 'r2', 'r3']) {
       const r = await account(n);
-      expect((await call('POST', '/reports/content', { kind: 'post', targetId: mp.body.id, reason: 'spam' }, r.token)).status).toBe(200);
+      expect((await call('POST', '/reports/content', { kind: 'pcomment', targetId: c1.body.id, reason: 'spam' }, r.token)).status).toBe(200);
     }
-    const feed2 = await call('GET', '/me/feed', undefined, fan.token);
-    expect(feed2.body.items.filter((i: { type: string }) => i.type === 'post')).toHaveLength(1);
-    // suppression par l'auteur
+    expect((await call('GET', `/posts/${p.body.id}/comments`, undefined, fan.token)).body.total).toBe(0);
+    // signalement d'une publication par 3 personnes : masquée du fil
+    for (const n of ['s1', 's2', 's3']) {
+      const r = await account(n);
+      expect((await call('POST', '/reports/content', { kind: 'post', targetId: t.body.id, reason: 'spam' }, r.token)).status).toBe(200);
+    }
+    expect((await call('GET', '/me/feed', undefined, fan.token)).body.items.filter((i: { type: string }) => i.type === 'post')).toHaveLength(1);
+    // suppression : seule l'organisation ; fichiers supprimés aussi
     expect((await call('DELETE', `/posts/${p.body.id}`, undefined, m.token)).status).toBe(404);
     expect((await call('DELETE', `/posts/${p.body.id}`, undefined, o.token)).status).toBe(200);
     expect((await pool.query(`select 1 from files where id = $1`, [f.body.fileId])).rowCount).toBe(0);

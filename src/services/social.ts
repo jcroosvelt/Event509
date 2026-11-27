@@ -5,8 +5,8 @@ import { blobToBase64, shrinkImage } from '@/lib/image';
 export const socialAvailable = !DEMO;
 
 export interface CommentAuthor { name: string; avatarUrl?: string; isOrganizer: boolean; verified: boolean }
-/** Média d'un commentaire ou d'une publication : photo (avec filtre), GIF, vidéo ou autocollant (émoji). */
-export interface PostMedia { id: string; kind: 'image' | 'gif' | 'video' | 'sticker'; url?: string; sticker?: string; filter?: string; duration?: number }
+/** Média d'un commentaire ou d'une publication : photo, GIF, vidéo ou autocollant (émoji). */
+export interface PostMedia { id: string; kind: 'image' | 'gif' | 'video' | 'sticker'; url?: string; sticker?: string; duration?: number }
 export interface EventComment {
   id: string; eventId: string; parentId: string | null; body: string; style?: string; media?: PostMedia[]; createdAt: string; author: CommentAuthor; mine: boolean; canDelete: boolean;
   replies?: EventComment[];
@@ -19,7 +19,7 @@ export const fetchMyFollows = () => http<string[]>('/me/follows');
 
 export const listComments = (eventId: string, before?: string) =>
   http<CommentList>(`/events/${encodeURIComponent(eventId)}/comments${before ? `?before=${encodeURIComponent(before)}` : ''}`);
-export type MediaIn = { fileId: string; filter?: string; duration?: number } | { kind: 'sticker'; sticker: string };
+export type MediaIn = { fileId: string; duration?: number } | { kind: 'sticker'; sticker: string };
 export const postComment = (eventId: string, body: string, parentId?: string, media?: MediaIn[], style?: string) =>
   http<EventComment>(`/events/${encodeURIComponent(eventId)}/comments`, { method: 'POST', body: JSON.stringify({ body, parentId, style, media: media?.length ? media : undefined }) });
 

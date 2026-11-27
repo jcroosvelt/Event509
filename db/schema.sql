@@ -845,3 +845,29 @@ create table if not exists media_chunks (
 );
 alter table content_reports drop constraint if exists content_reports_kind_check;
 alter table content_reports add constraint content_reports_kind_check check (kind in ('comment', 'photo', 'message', 'post'));
+
+-- Publications réservées aux organisations : mentions « j'aime » et commentaires des membres
+create table if not exists post_likes (
+  post_id text not null references posts(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+create index if not exists post_likes_user on post_likes(user_id);
+
+create table if not exists post_comments (
+  id text primary key,
+  post_id text not null references posts(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  body text not null default '' check (char_length(body) <= 1000),
+  style text,
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists post_comments_post on post_comments(post_id, created_at desc);
+create index if not exists post_comments_user on post_comments(user_id);
+
+alter table post_media drop constraint if exists post_media_owner_kind_check;
+alter table post_media add constraint post_media_owner_kind_check check (owner_kind in ('comment', 'post', 'pcomment'));
+alter table content_reports drop constraint if exists content_reports_kind_check;
+alter table content_reports add constraint content_reports_kind_check check (kind in ('comment', 'photo', 'message', 'post', 'pcomment'));

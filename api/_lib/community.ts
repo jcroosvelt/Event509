@@ -6,7 +6,7 @@ import { notifyUsers, organizerUserIds } from './push.js';
 import { sendNoticeEmail } from './mail.js';
 import { cleanText, type SocialDeps } from './social.js';
 import { dropMedia, mediaFor } from './media.js';
-import { POST_SELECT, postsOut, removePost, type PostRow } from './posts.js';
+import { postSelect, postsOut, removePost, type PostRow } from './posts.js';
 import type { Ctx, UserRow } from './routes.js';
 
 /**
@@ -216,7 +216,7 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
   const reportContent: Handler = async (c) => {
     const u = auth(c);
     const kind = str(c.body.kind, 20);
-    if (!['comment', 'photo', 'message', 'post'].includes(kind)) fail(422, 'Type de contenu invalide');
+    if (!['comment', 'photo', 'message', 'post', 'pcomment'].includes(kind)) fail(422, 'Type de contenu invalide');
     const reason = str(c.body.reason, 20) as (typeof REPORT_REASONS)[number];
     if (!REPORT_REASONS.includes(reason)) fail(422, 'Motif invalide');
     const targetId = str(c.body.targetId, 60);
@@ -229,6 +229,11 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
       await visibleEvent(c, r!.event_id);
       owner = r!.user_id;
       snapshot = { text: r!.body, author: r!.name, eventId: r!.event_id };
+    } else if (kind === 'pcomment') {
+      const r = await one<{ user_id: string; body: string; name: string | null }>(`select c.user_id, c.body, u.data->>'name' as name from post_comments c join users u on u.id = c.user_id where c.id = $1`, [targetId]);
+      if (!r) fail(404, 'Contenu introuvable');
+      owner = r!.user_id;
+      snapshot = { text: r!.body, author: r!.name };
     } else if (kind === 'post') {
       const r = await one<{ user_id: string; organizer_id: string | null; body: string; name: string | null }>(`select p.user_id, p.organizer_id, p.body, u.data->>'name' as name from posts p join users u on u.id = p.user_id where p.id = $1 and not p.hidden`, [targetId]);
       if (!r) fail(404, 'Contenu introuvable');
@@ -267,12 +272,13 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
     // Trois personnes différentes : le contenu est masqué en attendant la décision de l'administration (commentaire, photo)
     const n = Number((await one<{ n: string }>(`select count(*) as n from content_reports where kind = $1 and target_id = $2 and status = 'open'`, [kind, targetId]))?.n ?? 0);
     if (n >= REPORT_HIDE_AT && kind === 'comment') await db().query(`update event_comments set hidden = true where id = $1`, [targetId]);
+    if (n >= REPORT_HIDE_AT && kind === 'pcomment') await db().query(`update post_comments set hidden = true where id = $1`, [targetId]);
     if (n >= REPORT_HIDE_AT && kind === 'post') await db().query(`update posts set hidden = true where id = $1`, [targetId]);
     if (n >= REPORT_HIDE_AT && kind === 'photo') await db().query(`update event_photos set hidden = true where id = $1`, [targetId]);
     if (ins) {
       try {
         const admins = await all<{ id: string }>(`select id from users where role = 'admin' and status = 'active'`);
-        await notifyUsers(admins.map((a) => a.id), { title: 'Contenu signalé', body: `${kind === 'comment' ? 'Commentaire' : kind === 'photo' ? 'Photo' : kind === 'post' ? 'Publication' : 'Message'} signalé (${reason})`, url: '/admin/signalements', channel: 'sales' });
+        await notifyUsers(admins.map((a) => a.id), { title: 'Contenu signalé', body: `${kind === 'comment' ? 'Commentaire' : kind === 'photo' ? 'Photo' : kind === 'post' ? 'Publication' : kind === 'pcomment' ? 'Commentaire de publication' : 'Message'} signalé (${reason})`, url: '/admin/signalements', channel: 'sales' });
       } catch (e) {
         console.error('[community] notification', e);
       }
@@ -299,11 +305,15 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
       if (r!.kind === 'comment') {
         await dropMedia('comment', [r!.target_id]);
         await db().query(`delete from event_comments where id = $1`, [r!.target_id]);
+      } else if (r!.kind === 'pcomment') {
+        await dropMedia('pcomment', [r!.target_id]);
+        await db().query(`delete from post_comments where id = $1`, [r!.target_id]);
       } else if (r!.kind === 'post') await removePost(r!.target_id);
       else if (r!.kind === 'photo') await removePhoto(r!.target_id);
       else await db().query(`delete from messages where id = $1`, [r!.target_id]);
     } else {
       if (r!.kind === 'comment') await db().query(`update event_comments set hidden = false where id = $1`, [r!.target_id]);
+      if (r!.kind === 'pcomment') await db().query(`update post_comments set hidden = false where id = $1`, [r!.target_id]);
       if (r!.kind === 'post') await db().query(`update posts set hidden = false where id = $1`, [r!.target_id]);
       if (r!.kind === 'photo') await db().query(`update event_photos set hidden = false where id = $1`, [r!.target_id]);
     }
@@ -363,11 +373,12 @@ export function communityRoutes(h: CommunityDeps): [string, string, Handler][] {
         where not p.hidden and p.created_at > now() - interval '14 days' and coalesce(e.data->>'private', 'false') <> 'true'
           and ($2::timestamptz is null or p.created_at < $2) and ${blockFilter('p.user_id', 3)}
         group by p.event_id, e.slug, e.data->>'title' order by at desc limit 20`, [u.id, before, u.id]);
+    // Publications des organisations suivies (les membres ne publient pas)
     const posts = await all<PostRow>(
-      `${POST_SELECT}
-        where not p.hidden and coalesce(e.data->>'private', 'false') <> 'true'
-          and (p.user_id = $1 or coalesce(p.organizer_id, e.organizer_id) in (select organizer_id from follows where user_id = $1))
-          and ($2::timestamptz is null or p.created_at < $2) and ${blockFilter('p.user_id', 1)}
+      `${postSelect(1)}
+        where not p.hidden and p.organizer_id is not null
+          and (p.organizer_id in (select organizer_id from follows where user_id = $1) or p.organizer_id = (select organizer_id from users where id = $1))
+          and ($2::timestamptz is null or p.created_at < $2)
         order by p.created_at desc limit 20`, [u.id, before]);
     const postItems = await postsOut(posts, u);
     const items = [

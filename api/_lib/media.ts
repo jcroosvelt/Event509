@@ -18,13 +18,13 @@ export interface MediaDeps {
   rateLimit: (key: string, max: number, windowMin: number) => Promise<void>;
 }
 
+export type MediaOwner = 'comment' | 'post' | 'pcomment';
 export const CHUNK_BYTES = 3 * 1024 * 1024;
 export const MAX_CHUNKS = 8;
 export const MAX_IMAGE = 3 * 1024 * 1024;
 export const MAX_GIF = 6 * 1024 * 1024;
 export const MAX_VIDEO = 20 * 1024 * 1024;
 export const MAX_MEDIA_PER_ITEM = 6;
-export const FILTERS = ['none', 'noir', 'sepia', 'vif', 'froid', 'chaud', 'fondu', 'contraste', 'vintage'] as const;
 export const TEXT_STYLES = ['plain', 'bold', 'italic', 'neon', 'sunset', 'ocean', 'night', 'party', 'mono'] as const;
 export type MediaKind = 'image' | 'gif' | 'video' | 'sticker';
 
@@ -43,20 +43,20 @@ export function sniffMedia(b: Buffer): { mime: string; kind: 'image' | 'gif' | '
 /** Un autocollant est un ou quelques émojis (16 caractères au plus). */
 export const validSticker = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 16 && /^[\p{Extended_Pictographic}\p{Emoji_Component}]+$/u.test(v) && /\p{Extended_Pictographic}/u.test(v);
 
-export interface MediaOut { id: string; kind: MediaKind; url?: string; sticker?: string; filter?: string; mime?: string; duration?: number }
-export interface MediaIn { fileId?: string; kind?: string; sticker?: string; filter?: string; duration?: number }
+export interface MediaOut { id: string; kind: MediaKind; url?: string; sticker?: string; mime?: string; duration?: number }
+export interface MediaIn { fileId?: string; kind?: string; sticker?: string; duration?: number }
 
 /** Médias de plusieurs commentaires / publications, regroupés par propriétaire. */
-export async function mediaFor(kind: 'comment' | 'post', ids: string[]): Promise<Map<string, MediaOut[]>> {
+export async function mediaFor(kind: MediaOwner, ids: string[]): Promise<Map<string, MediaOut[]>> {
   const out = new Map<string, MediaOut[]>();
   if (!ids.length) return out;
-  const rows = await all<{ id: string; owner_id: string; kind: MediaKind; file_id: string | null; sticker: string | null; filter: string | null; duration: number | null }>(
-    `select id, owner_id, kind, file_id, sticker, filter, duration from post_media where owner_kind = $1 and owner_id = any($2) order by position`, [kind, ids]);
+  const rows = await all<{ id: string; owner_id: string; kind: MediaKind; file_id: string | null; sticker: string | null; duration: number | null }>(
+    `select id, owner_id, kind, file_id, sticker, duration from post_media where owner_kind = $1 and owner_id = any($2) order by position`, [kind, ids]);
   for (const r of rows) {
     const list = out.get(r.owner_id) ?? [];
     list.push({
       id: r.id, kind: r.kind, url: r.file_id ? `/api/files/${r.file_id}` : undefined, sticker: r.sticker ?? undefined,
-      filter: r.filter && r.filter !== 'none' ? r.filter : undefined, duration: r.duration ?? undefined,
+      duration: r.duration ?? undefined,
     });
     out.set(r.owner_id, list);
   }
@@ -64,7 +64,7 @@ export async function mediaFor(kind: 'comment' | 'post', ids: string[]): Promise
 }
 
 /** Vérifie et attache les médias envoyés par un client à un commentaire / une publication (dans la transaction de l'appelant). */
-export async function attachMedia(q: Client, fail: MediaDeps['fail'], ownerKind: 'comment' | 'post', ownerId: string, userId: string, raw: unknown, max = MAX_MEDIA_PER_ITEM) {
+export async function attachMedia(q: Client, fail: MediaDeps['fail'], ownerKind: MediaOwner, ownerId: string, userId: string, raw: unknown, max = MAX_MEDIA_PER_ITEM) {
   if (raw === undefined || raw === null) return 0;
   if (!Array.isArray(raw)) fail(422, 'Médias invalides');
   const items = raw as MediaIn[];
@@ -72,7 +72,6 @@ export async function attachMedia(q: Client, fail: MediaDeps['fail'], ownerKind:
   let videos = 0;
   let pos = 0;
   for (const m of items) {
-    const filter = (FILTERS as readonly string[]).includes(String(m.filter ?? 'none')) ? String(m.filter ?? 'none') : 'none';
     if (m.kind === 'sticker') {
       if (!validSticker(m.sticker)) fail(422, 'Autocollant invalide');
       await q.query(`insert into post_media (id, owner_kind, owner_id, position, kind, sticker) values ($1,$2,$3,$4,'sticker',$5)`, [newId('pm'), ownerKind, ownerId, pos++, m.sticker]);
@@ -85,14 +84,14 @@ export async function attachMedia(q: Client, fail: MediaDeps['fail'], ownerKind:
     const kind: MediaKind = f!.mime.startsWith('video/') ? 'video' : f!.mime === 'image/gif' ? 'gif' : 'image';
     if (kind === 'video' && ++videos > 1) fail(422, 'Une seule vidéo à la fois');
     const dur = typeof m.duration === 'number' && m.duration >= 0 && m.duration <= 3600 ? Math.round(m.duration) : null;
-    await q.query(`insert into post_media (id, owner_kind, owner_id, position, kind, file_id, filter, duration) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [newId('pm'), ownerKind, ownerId, pos++, kind, m.fileId, kind === 'image' ? filter : 'none', dur]);
+    await q.query(`insert into post_media (id, owner_kind, owner_id, position, kind, file_id, duration) values ($1,$2,$3,$4,$5,$6,$7)`,
+      [newId('pm'), ownerKind, ownerId, pos++, kind, m.fileId, dur]);
   }
   return pos;
 }
 
 /** Supprime les fichiers d'un commentaire / d'une publication (à appeler avant de supprimer la ligne). */
-export async function dropMedia(ownerKind: 'comment' | 'post', ids: string[]) {
+export async function dropMedia(ownerKind: MediaOwner, ids: string[]) {
   if (!ids.length) return;
   await db().query(
     `delete from files where id in (select file_id from post_media where owner_kind = $1 and owner_id = any($2) and file_id is not null)`, [ownerKind, ids]);

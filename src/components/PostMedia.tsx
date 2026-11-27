@@ -1,18 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { PostMedia } from '@/services/social';
 
-/** Filtres de photo (enregistrés à côté de la photo, jamais dans le fichier) : mêmes noms que l'application. */
-const FILTERS: Record<string, string> = {
-  noir: 'grayscale(1)',
-  sepia: 'sepia(1)',
-  vif: 'saturate(1.5)',
-  froid: 'hue-rotate(10deg) saturate(1.1) brightness(1.02)',
-  chaud: 'sepia(0.35) saturate(1.2)',
-  fondu: 'contrast(0.85) brightness(1.1)',
-  contraste: 'contrast(1.3)',
-  vintage: 'sepia(0.45) contrast(0.9) saturate(0.9)',
-};
-
 /** Effets de texte : fond dégradé pour les textes seuls. */
 const FX: Record<string, { bg?: string; color?: string; weight?: number; italic?: boolean; mono?: boolean; glow?: boolean }> = {
   bold: { weight: 900 },
@@ -55,7 +43,7 @@ export function MediaGrid({ media }: { media?: PostMedia[] }) {
           {files.map((m) => m.kind === 'video'
             // eslint-disable-next-line jsx-a11y/media-has-caption -- vidéos envoyées par les membres : aucune piste de sous-titres
             ? <video key={m.id} src={m.url} controls preload="none" playsInline className="max-h-80 w-full rounded-xl bg-black" />
-            : <img key={m.id} src={m.url} alt="" loading="lazy" className="max-h-80 w-full rounded-xl object-cover" style={{ filter: FILTERS[m.filter ?? ''] }} />)}
+            : <img key={m.id} src={m.url} alt="" loading="lazy" className="max-h-80 w-full rounded-xl object-cover" />)}
         </div>
       )}
       {stickers.length > 0 && <p className="mt-1 text-6xl" aria-hidden>{stickers.map((s) => s.sticker).join(' ')}</p>}
