@@ -2459,6 +2459,52 @@ const reviewState: Handler = async (c) => {
   return { canReview: !mine && over && r.data.status === 'paid', over, review: mine };
 };
 
+/**
+ * Note d'un événement (1 à 5 étoiles) depuis la page de l'événement : toute personne connectée qui a une commande payée pour
+ * cet événement peut le noter une fois terminé. Une note par commande ; la noter à nouveau remplace la précédente.
+ */
+async function myPaidOrder(u: UserRow, eventId: string) {
+  return one<{ id: string; buyer: string | null }>(
+    `select id, data->>'buyerName' as buyer from orders where event_id = $1 and status = 'paid' and (user_id = $2 or lower(buyer_email) = lower($3)) order by created_at limit 1`,
+    [eventId, u.id, u.email ?? '']);
+}
+const myEventRating: Handler = async (c) => {
+  const u = auth(c);
+  const ev = await eventById(c.params.id);
+  if (!ev || (ev.status !== 'published' && ev.status !== 'ended')) fail(404, 'Événement introuvable');
+  const order = await myPaidOrder(u, ev!.id);
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  const over = localMs(ev!.end) < Date.parse(`${nowLocal}Z`);
+  const mine = order ? (await docs<Review>(`select data from reviews where order_id = $1`, [order.id]))[0] ?? null : null;
+  return { canRate: !!order && over, hasTicket: !!order, over, rating: mine?.rating ?? 0, comment: mine?.comment ?? '' };
+};
+const rateEvent: Handler = async (c) => {
+  const u = auth(c);
+  const ev = await eventById(c.params.id);
+  if (!ev || (ev.status !== 'published' && ev.status !== 'ended')) fail(404, 'Événement introuvable');
+  const rating = Number(c.body.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) fail(422, 'Choisissez une note de 1 à 5');
+  await rateLimit(`rate-event:${u.id}`, 30, 60);
+  const order = await myPaidOrder(u, ev!.id);
+  if (!order) fail(403, 'Seules les personnes qui ont un billet peuvent noter cet événement');
+  const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: 'America/Port-au-Prince' }).replace(' ', 'T');
+  if (localMs(ev!.end) >= Date.parse(`${nowLocal}Z`)) fail(409, 'Vous pourrez noter cet événement une fois terminé');
+  const comment = typeof c.body.comment === 'string' ? str(c.body.comment, 1000) : undefined;
+  const cur = (await docs<Review>(`select data from reviews where order_id = $1`, [order!.id]))[0];
+  if (cur) {
+    const next: Review = { ...cur, rating, comment: comment ?? cur.comment };
+    await db().query(`update reviews set rating = $2, data = $3 where id = $1`, [cur.id, rating, JSON.stringify(next)]);
+  } else {
+    const rv: Review = { id: newId('rv'), eventId: ev!.id, rating, comment: comment ?? '', author: shortName(order!.buyer ?? (u.data.name as string) ?? ''), createdAt: new Date().toISOString() };
+    await db().query(`insert into reviews (id, event_id, order_id, rating, created_at, data) values ($1,$2,$3,$4,$5,$6)`, [rv.id, rv.eventId, order!.id, rv.rating, rv.createdAt, JSON.stringify(rv)]);
+    await safely(async () => {
+      const ids = await organizerUserIds(ev!.organizerId);
+      await notifyUsers(ids, { title: 'Nouvel avis', body: `${rv.author} a noté « ${ev!.title} » ${rv.rating}/5`, url: '/organisateur/avis', channel: 'sales' });
+    });
+  }
+  return { ...(await reviewSummary(ev!.id)), rating };
+};
+
 /** Taux de change : valeur, origine (automatique ou fixée à la main) et date. Administration seulement. */
 const getRate: Handler = async (c) => {
   admin(c);
@@ -2625,6 +2671,8 @@ export const routes: [method: string, pattern: string, handler: Handler][] = [
   ['POST', '/reports', reportEvent],
   ['GET', '/events/:id/reviews', eventReviews],
   ['GET', '/reviews/state', reviewState],
+  ['GET', '/events/:id/my-rating', myEventRating],
+  ['PUT', '/events/:id/rating', rateEvent],
   ['GET', '/admin/rate', getRate],
   ['PUT', '/admin/rate', putRate],
   ['POST', '/reviews', createReview],

@@ -2407,7 +2407,6 @@
   "Les commentaires sont désactivés pour cet événement.": "Comments are turned off for this event.",
   "Photos et vidéos": "Photos and videos",
   "Stickers": "Stickers",
-  "Pas encore noté": "Not rated yet",
   "Connectez-vous pour aimer": "Sign in to like",
   "Supprimer cette publication ?": "Delete this post?",
   "Aimer": "Like",
@@ -2424,5 +2423,6 @@
   "Nuit": "Night",
   "Fête": "Party",
   "Machine": "Typewriter",
-  "Vos abonnés sont prévenus.": "Your followers will be notified."
+  "Vos abonnés sont prévenus.": "Your followers will be notified.",
+  "Noter cet événement": "Rate this event"
 }

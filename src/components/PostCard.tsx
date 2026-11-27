@@ -1,45 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ImagePlus, MessageCircle, Smile, Star, Trash2, X } from 'lucide-react';
+import { Heart, ImagePlus, MessageCircle, Smile, Trash2, X } from 'lucide-react';
 import { useApp } from '@/store/app';
-import { addPostComment, createPost, deletePost, deletePostComment, likePost, listPostComments, ratePost, unratePost, type FeedPost, type PostComment } from '@/services/community';
+import { addPostComment, createPost, deletePost, deletePostComment, likePost, listPostComments, type FeedPost, type PostComment } from '@/services/community';
 import { uploadMedia, type MediaIn } from '@/services/social';
 import { ReportContent } from '@/components/ReportContent';
 import { MediaGrid, STICKERS, StyledText, TEXT_STYLES } from '@/components/PostMedia';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { relative, cx } from '@/lib/format';
 import { Avatar, Button, Card, Spinner, Textarea } from '@/components/ui';
-
-/** Cinq étoiles : un clic note de 1 à 5, un second clic sur la même note la retire. */
-function StarRater({ post, onChange, disabled }: { post: FeedPost; onChange: (r: FeedPost['rating']) => void; disabled?: boolean }) {
-  const { t, toast } = useApp();
-  const [busy, setBusy] = useState(false);
-  const r = post.rating;
-  const pick = async (n: number) => {
-    if (busy || disabled) return;
-    setBusy(true);
-    try {
-      onChange(r.mine === n ? await unratePost(post.id) : await ratePost(post.id, n));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : t('Action impossible. Réessayez.'), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const shown = r.mine || r.average;
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span role="radiogroup" aria-label={t('Votre note')} className="inline-flex">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} type="button" role="radio" aria-checked={r.mine === n} aria-label={t('{n} sur 5', { n })} disabled={disabled} onClick={() => void pick(n)} className="p-0.5">
-            <Star className={cx('h-5 w-5', shown >= n - 0.25 ? 'fill-amber-400 text-amber-400' : 'text-ink-muted')} aria-hidden />
-          </button>
-        ))}
-      </span>
-      <span className="text-xs text-ink-muted">{r.count ? `${r.average.toLocaleString()} (${r.count})` : t('Pas encore noté')}</span>
-    </span>
-  );
-}
 
 function CommentComposer({ postId, onDone }: { postId: string; onDone: (c: PostComment) => void }) {
   const { t, toast } = useApp();
@@ -171,7 +140,6 @@ export function PostCard({ post: initial, onRemoved }: { post: FeedPost; onRemov
         <button type="button" aria-expanded={open} className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-ink" onClick={() => setOpen((v) => !v)}>
           <MessageCircle className="h-5 w-5" aria-hidden /> {post.commentCount || t('Commenter')}
         </button>
-        {!post.mine && !post.canDelete ? <StarRater post={post} onChange={(rating) => setPost((p) => ({ ...p, rating }))} disabled={!user} /> : <span className="text-xs text-ink-muted">{post.rating.count ? `★ ${post.rating.average.toLocaleString()} (${post.rating.count})` : ''}</span>}
         <span className="ml-auto flex gap-3 text-xs font-semibold text-ink-muted">
           {user && !post.mine && <ReportContent kind="post" targetId={post.id} />}
           {post.canDelete && <button type="button" className="hover:text-red-600" onClick={() => void remove()}><Trash2 className="mr-1 inline h-3 w-3" aria-hidden />{t('Supprimer')}</button>}

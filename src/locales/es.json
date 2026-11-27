@@ -2407,7 +2407,6 @@
   "Les commentaires sont désactivés pour cet événement.": "Los comentarios están desactivados para este evento.",
   "Photos et vidéos": "Fotos y vídeos",
   "Stickers": "Stickers",
-  "Pas encore noté": "Aún sin valorar",
   "Connectez-vous pour aimer": "Inicia sesión para dar me gusta",
   "Supprimer cette publication ?": "¿Eliminar esta publicación?",
   "Aimer": "Me gusta",
@@ -2424,5 +2423,6 @@
   "Nuit": "Noche",
   "Fête": "Fiesta",
   "Machine": "Máquina",
-  "Vos abonnés sont prévenus.": "Tus seguidores serán avisados."
+  "Vos abonnés sont prévenus.": "Tus seguidores serán avisados.",
+  "Noter cet événement": "Valorar este evento"
 }

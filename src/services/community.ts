@@ -46,7 +46,7 @@ export const decideContentReport = (id: string, action: 'remove' | 'dismiss') =>
 /** Publication d'une organisation (fil d'actualité). */
 export interface FeedPost {
   id: string; body: string; style: string; createdAt: string; media: PostMedia[];
-  likes: number; liked: boolean; commentCount: number; rating: { average: number; count: number; mine: number };
+  likes: number; liked: boolean; commentCount: number;
   author: { name: string; avatarUrl?: string; isOrganizer: boolean; verified: boolean; orgSlug?: string };
   event?: { id: string; slug: string; title: string };
   mine: boolean; canDelete: boolean;
@@ -56,8 +56,6 @@ export const createPost = (body: string, style: string, media: MediaIn[]) =>
   http<FeedPost>('/posts', { method: 'POST', body: JSON.stringify({ body, style, media: media.length ? media : undefined }) });
 export const deletePost = (id: string) => http<null>(`/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const likePost = (id: string, on: boolean) => http<{ liked: boolean; likes: number }>(`/posts/${encodeURIComponent(id)}/like`, { method: on ? 'POST' : 'DELETE', ...(on ? { body: '{}' } : {}) });
-export const ratePost = (id: string, stars: number) => http<FeedPost['rating']>(`/posts/${encodeURIComponent(id)}/rating`, { method: 'PUT', body: JSON.stringify({ stars }) });
-export const unratePost = (id: string) => http<FeedPost['rating']>(`/posts/${encodeURIComponent(id)}/rating`, { method: 'DELETE' });
 export const listPostComments = (id: string, before?: string) =>
   http<{ total: number; hasMore: boolean; items: PostComment[] }>(`/posts/${encodeURIComponent(id)}/comments${before ? `?before=${encodeURIComponent(before)}` : ''}`);
 export const addPostComment = (id: string, body: string, media: MediaIn[]) =>

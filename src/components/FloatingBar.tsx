@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Heart, LogOut, Rocket, Settings, Ticket, User, type LucideIcon } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { User, type LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { useApp } from '@/store/app';
 import { cx } from '@/lib/format';
-import { hasOrganizerAccess, homePath } from '@/lib/permissions';
 
 export interface BarItem { to: string; icon: LucideIcon; label: string; end?: boolean }
 
@@ -22,14 +21,12 @@ const FADE = 'transition-[opacity,transform,filter] duration-300 ease-out motion
  * Les formes se transforment les unes dans les autres (largeurs en ressort) avec fondu et flou.
  */
 export function FloatingBar({ items, label, title, subtitle, onProfile }: { items: BarItem[]; label: string; title: string; subtitle?: string; onProfile?: () => void }) {
-  const { user, logout, t } = useApp();
+  const { user, t } = useApp();
   const { pathname } = useLocation();
-  const nav = useNavigate();
   const [compact, setCompact] = useState(false);
   const [menu, setMenu] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const press = useRef<number>();
-  const longPressed = useRef(false);
   const active = [...items].filter((i) => isOn(pathname, i)).sort((a, b) => b.to.length - a.to.length)[0];
   const ActiveIcon = active?.icon ?? items[0]?.icon ?? User;
   // Avec 5 onglets ou plus, la mini-pilule du contexte laisse sa place aux onglets
@@ -47,15 +44,6 @@ export function FloatingBar({ items, label, title, subtitle, onProfile }: { item
     return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };
   }, [menu]);
 
-  // « Mon espace » ouvre le tableau de bord du compte (administration, organisateur ou personnel) : pas de liens séparés
-  const entries: { to: string; icon: LucideIcon; label: string; tone: string }[] = user ? [
-    { to: homePath(user), icon: User, label: t('Mon espace'), tone: 'bg-brand-grad' },
-    { to: '/billets', icon: Ticket, label: t('Mes billets'), tone: 'bg-emerald-500' },
-    { to: '/favoris', icon: Heart, label: t('Favoris'), tone: 'bg-rose-500' },
-    ...(hasOrganizerAccess(user) ? [] : [{ to: '/compte/devenir-organisateur', icon: Rocket, label: t('Devenir organisateur'), tone: 'bg-violet-600' }]),
-    { to: '/compte/parametres', icon: Settings, label: t('Paramètres'), tone: 'bg-slate-500' },
-  ] : [];
-
   const hidden = 'pointer-events-none scale-90 opacity-0 blur-[4px]';
   const shown = 'scale-100 opacity-100 blur-0';
   const cell = 'relative min-w-0 overflow-hidden rounded-full bg-surface/90 shadow-[0_14px_36px_-12px_rgba(8,8,8,0.45)] ring-1 ring-line backdrop-blur-xl';
@@ -71,42 +59,6 @@ export function FloatingBar({ items, label, title, subtitle, onProfile }: { item
   return (
     <nav aria-label={label} className="fixed inset-x-3 z-30 lg:hidden" style={{ bottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
       <div ref={box} className="relative mx-auto max-w-md">
-        {/* Menu qui surgit de l'avatar : pastilles de couleur */}
-        <div
-          role="menu"
-          aria-hidden={!menu}
-          style={{ transition: `transform ${MS}ms ${SPRING}, opacity 260ms ease-out, filter 320ms ease-out` }}
-          className={cx('absolute bottom-[calc(100%+10px)] right-0 w-64 origin-bottom-right rounded-[28px] bg-surface/95 p-2 shadow-2xl ring-1 ring-line backdrop-blur-xl motion-reduce:transition-none', menu ? 'translate-y-0 scale-100 opacity-100 blur-0' : 'pointer-events-none translate-y-3 scale-75 opacity-0 blur-[6px]')}
-        >
-          {entries.map((e, n) => (
-            <Link
-              key={e.to}
-              to={e.to}
-              role="menuitem"
-              tabIndex={menu ? 0 : -1}
-              onClick={() => setMenu(false)}
-              style={{ transition: `transform ${MS}ms ${SPRING} ${menu ? n * 40 : 0}ms, opacity 240ms ease-out ${menu ? n * 40 : 0}ms, filter 300ms ease-out ${menu ? n * 40 : 0}ms` }}
-              className={cx('flex items-center gap-3 rounded-2xl px-2 py-2 text-sm font-semibold hover:bg-canvas motion-reduce:transition-none', menu ? 'translate-y-0 opacity-100 blur-0' : 'translate-y-3 opacity-0 blur-[4px]')}
-            >
-              <span className={cx('grid h-9 w-9 place-items-center rounded-full text-white', e.tone)}><e.icon className="h-[18px] w-[18px]" aria-hidden /></span>
-              {e.label}
-            </Link>
-          ))}
-          {user && (
-            <button
-              type="button"
-              role="menuitem"
-              tabIndex={menu ? 0 : -1}
-              onClick={() => { setMenu(false); logout(); nav('/'); }}
-              style={{ transition: `transform ${MS}ms ${SPRING} ${menu ? entries.length * 40 : 0}ms, opacity 240ms ease-out ${menu ? entries.length * 40 : 0}ms, filter 300ms ease-out ${menu ? entries.length * 40 : 0}ms` }}
-              className={cx('flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-500/10 motion-reduce:transition-none', menu ? 'translate-y-0 opacity-100 blur-0' : 'translate-y-3 opacity-0 blur-[4px]')}
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-red-500 text-white"><LogOut className="h-[18px] w-[18px]" aria-hidden /></span>
-              {t('Déconnexion')}
-            </button>
-          )}
-        </div>
-
         <div className="grid h-[60px] gap-2" style={grid}>
           {/* Cellule 1 : pilule d'onglets ⇄ bouton rond de l'onglet actif */}
           <div className={cell}>
@@ -162,13 +114,8 @@ export function FloatingBar({ items, label, title, subtitle, onProfile }: { item
             <button
               type="button"
               aria-label={t('Menu du compte')}
-              aria-haspopup="menu"
-              aria-expanded={menu}
-              onClick={() => { if (longPressed.current) { longPressed.current = false; return; } if (onProfile) { setMenu(false); onProfile(); return; } setMenu((m) => !m); }}
-              onPointerDown={() => { longPressed.current = false; press.current = window.setTimeout(() => { longPressed.current = true; setMenu(true); }, 380); }}
-              onPointerUp={() => window.clearTimeout(press.current)}
-              onPointerLeave={() => window.clearTimeout(press.current)}
-              onContextMenu={(e) => e.preventDefault()}
+              aria-haspopup="dialog"
+              onClick={() => onProfile?.()}
               className={cx(cell, 'grid place-items-center transition active:scale-90')}
             >
               <Avatar name={user.name} src={user.avatarUrl} size={46} />

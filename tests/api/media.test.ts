@@ -138,16 +138,7 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect(feedL.body.items.find((i: { post?: { id: string } }) => i.post?.id === p.body.id).post).toMatchObject({ likes: 2, liked: true });
     expect((await call('DELETE', `/posts/${p.body.id}/like`, undefined, fan.token)).body).toEqual({ liked: false, likes: 1 });
     expect((await call('POST', `/posts/${p.body.id}/like`, {})).status).toBe(401);
-    // notes en étoiles : 1 à 5, une par personne (la nouvelle remplace l'ancienne), pas pour l'organisation elle-même
-    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 4 }, fan.token)).body).toEqual({ average: 4, count: 1, mine: 4 });
-    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 }, fan.token)).body).toEqual({ average: 5, count: 1, mine: 5 });
-    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 2 }, m.token)).body).toEqual({ average: 3.5, count: 2, mine: 2 });
-    for (const bad of [0, 6, 2.5, 'x']) expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: bad }, m.token)).status).toBe(422);
-    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 }, o.token)).status).toBe(409);
-    expect((await call('PUT', `/posts/${p.body.id}/rating`, { stars: 5 })).status).toBe(401);
-    const feedR = await call('GET', '/me/feed', undefined, fan.token);
-    expect(feedR.body.items.find((i: { post?: { id: string } }) => i.post?.id === p.body.id).post.rating).toEqual({ average: 3.5, count: 2, mine: 5 });
-    expect((await call('DELETE', `/posts/${p.body.id}/rating`, undefined, m.token)).body).toEqual({ average: 5, count: 1, mine: 0 });
+    expect(p.body.rating).toBeUndefined(); // les notes concernent les événements, pas les publications
     // commentaires de membres : texte, autocollant, photo
     const fm = await up(m.token, PNG);
     const c1 = await call('POST', `/posts/${p.body.id}/comments`, { body: 'Hâte !', media: [{ fileId: fm.body.fileId }, { kind: 'sticker', sticker: '🔥' }] }, m.token);
@@ -175,6 +166,33 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect((await call('DELETE', `/posts/${p.body.id}`, undefined, m.token)).status).toBe(404);
     expect((await call('DELETE', `/posts/${p.body.id}`, undefined, o.token)).status).toBe(200);
     expect((await pool.query(`select 1 from files where id = $1`, [f.body.fileId])).rowCount).toBe(0);
+  });
+
+  it('note d’un événement en étoiles (1 à 5) : billet payé et événement terminé requis, une note par personne, moyenne publique', async () => {
+    const o = await orgAccount('e');
+    const b = await account('rb');
+    const other = await account('rc');
+    const ev = await call('PUT', '/org/events', event(), o.token);
+    const id = ev.body.id as string;
+    await pool.query(`insert into orders (id, event_id, user_id, buyer_email, status, data) values ($1,$2,$3,$4,'paid',$5)`, [`or_${tag}`, id, b.id, `${b.id}@media.test`, JSON.stringify({ buyerName: 'Marie Joseph' })]);
+    // avant la fin : pas encore
+    const st0 = await call('GET', `/events/${id}/my-rating`, undefined, b.token);
+    expect(st0.body).toMatchObject({ hasTicket: true, over: false, canRate: false });
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 5 }, b.token)).status).toBe(409);
+    await pool.query(`update events set start_at = '2020-01-01', data = jsonb_set(jsonb_set(data, '{start}', '"2020-01-01T10:00:00"'), '{end}', '"2020-01-01T12:00:00"') where id = $1`, [id]);
+    expect((await call('GET', `/events/${id}/my-rating`, undefined, b.token)).body).toMatchObject({ canRate: true, rating: 0 });
+    // sans billet, sans compte, note invalide : refusés
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 5 }, other.token)).status).toBe(403);
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 5 })).status).toBe(401);
+    for (const bad of [0, 6, 2.5, 'x']) expect((await call('PUT', `/events/${id}/rating`, { rating: bad }, b.token)).status).toBe(422);
+    // note, puis nouvelle note : remplace (une seule note par personne)
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 4 }, b.token)).body).toMatchObject({ average: 4, count: 1, rating: 4 });
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 5, comment: 'Superbe' }, b.token)).body).toMatchObject({ average: 5, count: 1, rating: 5 });
+    expect((await call('GET', `/events/${id}/my-rating`, undefined, b.token)).body).toMatchObject({ rating: 5, comment: 'Superbe' });
+    const list = await call('GET', `/events/${id}/reviews`);
+    expect(list.body).toMatchObject({ average: 5, count: 1 });
+    expect(list.body.items[0].author).toBe('Marie J.');
+    await pool.query(`delete from orders where id = $1`, [`or_${tag}`]);
   });
 
   it('vidéo servie par morceaux (Range) sans dépasser la limite d’une réponse', async () => {

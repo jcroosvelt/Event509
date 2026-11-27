@@ -881,3 +881,6 @@ create table if not exists post_ratings (
   primary key (post_id, user_id)
 );
 create index if not exists post_ratings_user on post_ratings(user_id);
+
+-- Les notes en étoiles concernent les événements (table reviews), pas les publications
+drop table if exists post_ratings;

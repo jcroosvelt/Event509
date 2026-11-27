@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Star } from 'lucide-react';
 import { Button, Card, Field, Textarea } from '@/components/ui';
 import { useApp } from '@/store/app';
 import { cx, dateShort } from '@/lib/format';
-import { createReview } from '@/services/api';
+import { createReview, getMyEventRating, rateEvent, type MyEventRating } from '@/services/api';
 import type { Review } from '@/types';
 import type { Lang } from '@/types';
 
@@ -95,5 +95,40 @@ export function ReviewItem({ r, lang, children }: { r: Review; lang: Lang; child
       )}
       {children}
     </li>
+  );
+}
+
+/**
+ * Note de l'événement en étoiles (1 à 5), depuis la page de l'événement : pour les personnes connectées qui ont un billet,
+ * une fois l'événement terminé. Toucher une autre étoile change la note.
+ */
+export function EventRating({ eventId, onRated }: { eventId: string; onRated?: () => void }) {
+  const { t, user, toast } = useApp();
+  const [state, setState] = useState<MyEventRating | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!user) { setState(null); return; }
+    getMyEventRating(eventId).then(setState).catch(() => setState(null));
+  }, [eventId, user]);
+  if (!user || !state?.canRate) return null;
+  const pick = async (n: number) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await rateEvent(eventId, n);
+      setState({ ...state, rating: n });
+      toast(t('Merci pour votre avis !'));
+      onRated?.();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t('L’avis n’a pas pu être envoyé. Réessayez.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="mb-4">
+      <p className="mb-2 font-bold">{t('Noter cet événement')}</p>
+      <RatingPicker value={state.rating} onChange={(n) => void pick(n)} />
+    </Card>
   );
 }

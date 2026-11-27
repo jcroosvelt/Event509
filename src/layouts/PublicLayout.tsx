@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Bell, Compass, Download, Heart, Home, LayoutDashboard, LogOut, Megaphone, Moon, Receipt, Repeat2, Search, Settings, ShieldCheck, Sun, Ticket, User, WifiOff,
+  Bell, Compass, Heart, Home, Moon, Search, Sun, Ticket, User, WifiOff,
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { Avatar } from '@/components/ui';
 import { FloatingBar, type BarItem } from '@/components/FloatingBar';
-import { ApkMenuLink, InstallButton } from '@/components/AppInstall';
+import { InstallButton } from '@/components/AppInstall';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lookupReferral } from '@/services/api';
 import { useApp } from '@/store/app';
@@ -14,9 +14,10 @@ import { useOnline } from '@/lib/hooks';
 import { captureTrackingCode } from '@/lib/tracking';
 import { cx, relative } from '@/lib/format';
 import { languages } from '@/lib/i18n';
-import { can, hasOrganizerAccess } from '@/lib/permissions';
 import { DISPLAY_CURRENCIES, type DisplayCurrency, type Lang } from '@/types';
 import { PoweredBy } from '@/components/PoweredBy';
+import { hasOrganizerAccess } from '@/lib/permissions';
+import { AccountSheet } from '@/components/AccountSheet';
 
 /** Ferme un menu au clic extérieur et à Échap, puis rend le focus au bouton. */
 function useMenu() {
@@ -107,57 +108,16 @@ export function NotificationsMenu() {
   );
 }
 
-function UserMenu() {
-  const { user, logout, t } = useApp();
-  const { open, setOpen, ref, btn } = useMenu();
-  const nav = useNavigate();
-  const id = useId();
+/** Photo de profil (ordinateur) : ouvre le menu du compte, le même que partout (voir AccountSheet). */
+function UserMenu({ onOpen }: { onOpen: () => void }) {
+  const { user, t } = useApp();
   // Visiteur : pas de bouton en haut (la connexion organisateur se trouve via « Créer un événement »)
   if (!user) return null;
-  const items = [
-    { to: '/compte', icon: User, label: t('Profil') },
-    { to: '/billets', icon: Ticket, label: t('Mes billets') },
-    { to: '/compte/achats', icon: Receipt, label: t('Historique des achats') },
-    { to: '/favoris', icon: Heart, label: t('Favoris') },
-    { to: '/revente', icon: Repeat2, label: t('Billets en revente') },
-    { to: '/ambassadeurs', icon: Megaphone, label: t('Ambassadeurs') },
-    ...(hasOrganizerAccess(user) ? [{ to: '/organisateur', icon: LayoutDashboard, label: t('Espace organisateur') }] : []),
-    ...(can(user, 'admin') ? [{ to: '/admin', icon: ShieldCheck, label: t('Administration') }] : []),
-    { to: '/compte/parametres', icon: Settings, label: t('Paramètres') },
-  ];
   return (
-    <div className="relative hidden lg:block" ref={ref}>
-      <button ref={btn} type="button" aria-expanded={open} aria-controls={id} aria-label={t('Menu du compte')} onClick={() => setOpen((o) => !o)} className="rounded-full ring-2 ring-surface transition hover:ring-brand-200">
+    <div className="relative hidden lg:block">
+      <button type="button" aria-haspopup="dialog" aria-label={t('Menu du compte')} onClick={onOpen} className="rounded-full ring-2 ring-surface transition hover:ring-brand-200">
         <Avatar name={user.name} src={user.avatarUrl} size={44} />
       </button>
-      {open && (
-        <div id={id} className="absolute right-0 z-40 mt-2 w-64 rounded-3xl bg-surface p-2 shadow-2xl ring-1 ring-line">
-          <div className="px-3 py-2">
-            <div className="font-bold">{user.name}</div>
-            <div className="truncate text-xs text-ink-muted">{user.email}</div>
-          </div>
-          <nav aria-label={t('Menu du compte')}>
-            {items.map((i) => (
-              <Link key={i.to} to={i.to} onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium hover:bg-canvas">
-                <i.icon className="h-4 w-4 text-ink-soft" aria-hidden /> {i.label}
-              </Link>
-            ))}
-          </nav>
-          <ApkMenuLink className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium hover:bg-canvas">
-            {(label) => <><Download className="h-4 w-4 text-ink-soft" aria-hidden /> {label}</>}
-          </ApkMenuLink>
-          <button
-            type="button"
-            onClick={() => {
-              logout();
-              nav('/');
-            }}
-            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
-          >
-            <LogOut className="h-4 w-4" aria-hidden /> {t('Déconnexion')}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -233,6 +193,7 @@ function useReferralCapture() {
 }
 
 export default function PublicLayout() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const { t, user } = useApp();
   const loc = useLocation();
   const nav = useNavigate();
@@ -295,7 +256,7 @@ export default function PublicLayout() {
             <InstallButton />
             <Prefs />
             {user && <NotificationsMenu />}
-            <UserMenu />
+            <UserMenu onOpen={() => setMenuOpen(true)} />
           </div>
         </div>
       </header>
@@ -353,7 +314,9 @@ export default function PublicLayout() {
           ...(user ? [{ to: '/favoris', icon: Heart, label: t('Favoris') }, { to: '/compte', icon: User, label: t('Profil') }] : []),
         ]}
         center={user ? { to: '/billets', icon: Ticket, label: t('Mes billets') } : undefined}
+        onProfile={user ? () => setMenuOpen(true) : undefined}
       />
+      <AccountSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   );
 }

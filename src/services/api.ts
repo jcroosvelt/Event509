@@ -1352,6 +1352,9 @@ export async function reviewState(orderId: string, key: string) {
 export async function createReview(input: { orderId: string; key: string; rating: number; comment: string }) {
   return http<Review>('/reviews', { method: 'POST', body: JSON.stringify(input) });
 }
+export interface MyEventRating { canRate: boolean; hasTicket: boolean; over: boolean; rating: number; comment: string }
+export const getMyEventRating = (eventId: string) => http<MyEventRating>(`/events/${encodeURIComponent(eventId)}/my-rating`);
+export const rateEvent = (eventId: string, rating: number) => http<{ average: number; count: number; rating: number }>(`/events/${encodeURIComponent(eventId)}/rating`, { method: 'PUT', body: JSON.stringify({ rating }) });
 export async function listOrgReviews(): Promise<(Review & { eventTitle: string })[]> {
   if (DEMO) return [];
   return http('/org/reviews');

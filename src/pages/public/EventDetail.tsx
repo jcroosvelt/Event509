@@ -17,7 +17,7 @@ import { useAsync, useTitle } from '@/lib/hooks';
 import { useApp } from '@/store/app';
 import { convert, cx, dateLong, dateShort, money, num, time } from '@/lib/format';
 import { downloadICS } from '@/lib/export';
-import { ReviewItem, Stars } from '@/components/Reviews';
+import { EventRating, ReviewItem, Stars } from '@/components/Reviews';
 import { Avatar, Badge, Button, Card, Field, IconBadge, IconButton, Loading, Modal, ProgressBar, SectionHeader, Select, Textarea, type Tone } from '@/components/ui';
 import { CategoryIcon, EventCard, EventCover, FavoriteButton, categoryOf } from '@/components/events';
 import { useSessionLabel } from '@/components/TicketCard';
@@ -441,11 +441,14 @@ export default function EventDetail() {
 /** Note moyenne et avis des participants (visible dès qu'il y en a). */
 function ReviewsSection({ eventId }: { eventId: string }) {
   const { t, lang } = useApp();
-  const { data } = useAsync(() => listReviews(eventId), [eventId]);
-  if (!data || !data.count) return null;
+  const [tick, setTick] = useState(0);
+  const { data } = useAsync(() => listReviews(eventId), [eventId, tick]);
+  if (!data) return null;
+  if (!data.count) return <section><EventRating eventId={eventId} onRated={() => setTick((n) => n + 1)} /></section>;
   return (
     <section aria-labelledby="h-reviews">
       <SectionHeader id="h-reviews" title={t('Avis des participants')} />
+      <EventRating eventId={eventId} onRated={() => setTick((n) => n + 1)} />
       <div className="mb-3 flex items-center gap-3">
         <span className="text-3xl font-extrabold">{data.average.toLocaleString(intlLocale(lang))}</span>
         <Stars value={data.average} size={20} label={t('{n} sur 5', { n: data.average })} />

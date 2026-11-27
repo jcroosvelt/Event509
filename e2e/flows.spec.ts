@@ -577,17 +577,6 @@ test.describe('barre flottante (mobile)', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    // L'appui long sur l'avatar ouvre la liste rapide de pastilles
-    const box = (await avatar.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(600);
-    await page.mouse.up();
-    const menu = bar.getByRole('menu');
-    await expect(menu.getByRole('menuitem', { name: 'Mes billets' })).toBeVisible();
-    await expect(menu.getByRole('menuitem', { name: 'Devenir organisateur' })).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(menu.getByRole('menuitem', { name: 'Mes billets' })).toBeHidden();
     // Le bouton rond redéploie les onglets
     await bar.getByRole('button', { name: 'Afficher les onglets' }).click();
     await expect(bar.getByRole('link', { name: 'Explorer' })).toBeVisible();
@@ -596,6 +585,15 @@ test.describe('barre flottante (mobile)', () => {
     const pub = page.getByRole('navigation', { name: 'Navigation principale' }).last();
     await expect(pub.getByRole('link', { name: 'Explorer' })).toBeVisible();
     await expect(pub.getByRole('button', { name: 'Menu du compte' })).toBeVisible();
+    // UN SEUL menu : sur les pages publiques l'avatar ouvre le même volet (pastilles de couleur, mêmes entrées) ; pas de seconde liste
+    await pub.getByRole('button', { name: 'Menu du compte' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Menu du compte' });
+    await expect(sheet.getByRole('link', { name: 'Mes billets' }).first()).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Devenir organisateur' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Déconnexion' })).toBeVisible();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
   });
 });
 
