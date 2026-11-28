@@ -89,11 +89,14 @@ describe.skipIf(!DB)('Réseau social', () => {
     const r = await call('POST', path, { body: 'Merci !', parentId: c1.body.id }, org.token);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.author).toMatchObject({ isOrganizer: true, verified: true });
-    expect((await call('POST', path, { body: 'Répondre à une réponse', parentId: r.body.id }, b.token)).status).toBe(404); // un seul niveau
+    // répondre à une réponse est permis (comme sur Facebook) : elle reste rangée sous le commentaire principal (un seul niveau d'affichage)
+    const rr = await call('POST', path, { body: 'Répondre à une réponse', parentId: r.body.id }, b.token);
+    expect(rr.status).toBe(200);
+    expect(rr.body.parentId).toBe(r.body.parentId);
     const list = await call('GET', path);
-    expect(list.body.total).toBe(3);
+    expect(list.body.total).toBe(4);
     const top = list.body.items.find((i: { id: string }) => i.id === c1.body.id);
-    expect(top.replies).toHaveLength(1);
+    expect(top.replies).toHaveLength(2);
     expect(top.mine).toBe(false);
     // Suppression
     expect((await call('DELETE', `/comments/${c1.body.id}`, undefined, b.token)).status).toBe(404); // un autre membre ne peut pas

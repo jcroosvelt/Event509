@@ -125,6 +125,10 @@
 
 ## À faire ensuite
 
+**Feuille de route validée par Joseph (27-28 novembre 2026)** — voir aussi CLAUDE.md « Mémoire » :
+tarifs dégressifs · note d'événement à tout moment · réponses et « j'aime » sur les commentaires · invitations par billets groupés · rappels automatiques (notifications ; e-mail après l'achat du domaine) · stories (publiables à tout moment) · badge de fidélité (5 événements, 3 mois renouvelable) · contrôle d'entrée en équipe sans connexion · rapport après événement · page publique d'événement plus complète · QR dynamique · détection de fraude à la carte · parrainage récompensé · calendrier à ajouter · PWA iPhone.
+Reporté : Apple Wallet / Google Wallet, WhatsApp. À rappeler à Joseph : acheter le domaine, puis Resend (e-mails).
+
 0. **À faire par vous** : créer un compte Resend, vérifier un domaine d'envoi, puis ajouter `RESEND_API_KEY` et `MAIL_FROM` dans Vercel (Production) pour que les billets partent par email.
 
 1. Paiement PayPal (MonCash, NatCash, KashPaw et carte sont actifs)
@@ -231,3 +235,4 @@
 - 2026-11-27 : plus d'effet de texte dans les commentaires (réservé aux publications des organisations) ; publications notées de 1 à 5 étoiles (une note par personne, retirable) ; le fil avec les publications (j'aime, étoiles, commentaires, publier pour les organisations) est aussi sur le site ; mention « Powered by JC Multimedia » (lien vers https://jcmultimedia.online) dans le pied de page du site (ordinateur) et en bas des réglages du compte (site et application).
 - 2026-11-27 : correction : les notes en étoiles (1 à 5) concernent les événements, plus les publications. Toute personne connectée avec un billet payé note l'événement depuis sa page (site et application) une fois terminé ; une note par personne, la nouvelle remplace l'ancienne ; moyenne et avis publics (table reviews).
 - 2026-11-27 : UN SEUL menu du compte, le même design coloré (pastilles de couleur, « Déconnexion » en rouge) partout : site (public, espace acheteur, organisateur, administration) via src/components/AccountSheet.tsx et src/lib/spaces.tsx (entrées partagées), application (volet E5SpaceDrawer ouvert par la photo de profil, aussi sur l'accueil). Les anciennes petites listes de l'avatar sont supprimées.
+- 2026-11-28 : mémoire des décisions de Joseph (CLAUDE.md) ; on peut noter un événement à tout moment, même avant qu'il ait lieu (une note par compte) ; « j'aime » sur les commentaires (événements et publications) ; réponses directes sous un commentaire (organisateur ou autre membre, y compris à une réponse, rattachée au commentaire principal), sur le site et dans l'application.

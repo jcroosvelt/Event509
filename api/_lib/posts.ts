@@ -2,7 +2,7 @@ import type { EventItem } from '../../src/types.js';
 import { all, db, one, tx } from './db.js';
 import { newId } from './auth.js';
 import { notifyUsers } from './push.js';
-import { cleanText, type SocialDeps } from './social.js';
+import { cleanText, likesFor, type SocialDeps } from './social.js';
 import { attachMedia, dropMedia, mediaFor, TEXT_STYLES, type MediaOut } from './media.js';
 import type { Ctx, UserRow } from './routes.js';
 
@@ -144,25 +144,35 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
   };
 
   // ---------- Commentaires des publications ----------
-  interface PCRow { id: string; post_id: string; user_id: string; body: string; style: string | null; created_at: Date; name: string | null; avatar: string | null; org_id: string | null }
-  const pcOut = (r: PCRow, media: MediaOut[], viewer: UserRow | null, postOrg: string | null) => ({
-    id: r.id, postId: r.post_id, body: r.body, style: r.style || 'plain', createdAt: r.created_at.toISOString(), media,
+  interface PCRow { id: string; post_id: string; user_id: string; parent_id: string | null; body: string; style: string | null; created_at: Date; name: string | null; avatar: string | null; org_id: string | null }
+  const pcOut = (r: PCRow, media: MediaOut[], viewer: UserRow | null, postOrg: string | null, lk: Map<string, { n: number; liked: boolean }>) => ({
+    id: r.id, postId: r.post_id, parentId: r.parent_id, body: r.body, style: r.style || 'plain', createdAt: r.created_at.toISOString(), media,
+    likes: lk.get(r.id)?.n ?? 0, liked: lk.get(r.id)?.liked ?? false,
     author: { name: shortName(r.name ?? ''), avatarUrl: r.avatar || undefined, isOrganizer: !!r.org_id && r.org_id === postOrg },
     mine: viewer?.id === r.user_id,
     canDelete: !!viewer && (viewer.id === r.user_id || viewer.role === 'admin' || (!!postOrg && viewer.organizer_id === postOrg)),
   });
-  const PC_SELECT = `select c.id, c.post_id, c.user_id, c.body, c.style, c.created_at, u.data->>'name' as name, u.data->>'avatarUrl' as avatar, u.organizer_id as org_id
+  const PC_SELECT = `select c.id, c.post_id, c.user_id, c.parent_id, c.body, c.style, c.created_at, u.data->>'name' as name, u.data->>'avatarUrl' as avatar, u.organizer_id as org_id
       from post_comments c join users u on u.id = c.user_id`;
 
   const listPostComments: Handler = async (c) => {
     const p = await visiblePost(c.params.id!);
+    const viewer = c.user?.id ?? '';
     const before = c.query.before && !Number.isNaN(Date.parse(c.query.before)) ? new Date(c.query.before).toISOString() : null;
-    const rows = await all<PCRow>(
-      `${PC_SELECT} where c.post_id = $1 and not c.hidden and ($2::timestamptz is null or c.created_at < $2)
-         and c.user_id not in (select blocked_id from user_blocks where blocker_id = $3) order by c.created_at desc limit 30`, [p.id, before, c.user?.id ?? '']);
-    const media = await mediaFor('pcomment', rows.map((r) => r.id));
+    const top = await all<PCRow>(
+      `${PC_SELECT} where c.post_id = $1 and c.parent_id is null and not c.hidden and ($2::timestamptz is null or c.created_at < $2)
+         and c.user_id not in (select blocked_id from user_blocks where blocker_id = $3) order by c.created_at desc limit 30`, [p.id, before, viewer]);
+    const ids = top.map((r) => r.id);
+    const replies = ids.length ? await all<PCRow>(
+      `${PC_SELECT} where c.parent_id = any($1) and not c.hidden and c.user_id not in (select blocked_id from user_blocks where blocker_id = $2) order by c.created_at limit 600`, [ids, viewer]) : [];
+    const everyId = [...top, ...replies].map((r) => r.id);
+    const media = await mediaFor('pcomment', everyId);
+    const lk = await likesFor('pcomment', everyId, viewer);
     const total = Number((await one<{ n: string }>(`select count(*) as n from post_comments where post_id = $1 and not hidden`, [p.id]))?.n ?? 0);
-    return { total, hasMore: rows.length === 30, items: rows.map((r) => pcOut(r, media.get(r.id) ?? [], c.user, p.organizer_id)) };
+    return {
+      total, hasMore: top.length === 30,
+      items: top.map((r) => ({ ...pcOut(r, media.get(r.id) ?? [], c.user, p.organizer_id, lk), replies: replies.filter((x) => x.parent_id === r.id).map((x) => pcOut(x, media.get(x.id) ?? [], c.user, p.organizer_id, lk)) })),
+    };
   };
 
   const addPostComment: Handler = async (c) => {
@@ -176,19 +186,45 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     const style = 'plain'; // pas d'effet de texte dans les commentaires
     await rateLimit(`pcomment:${u.id}`, 10, 10);
     await rateLimit(`pcomment-day:${u.id}`, 100, 24 * 60);
+    // Réponse : à un commentaire principal ou à une réponse (rattachée alors au commentaire principal, comme sur Facebook)
+    let parentId: string | null = null;
+    let targetUser: string | null = null;
+    const ref = str(c.body.parentId, 60);
+    if (ref) {
+      const hit = await one<{ id: string; user_id: string; parent_id: string | null }>(`select id, user_id, parent_id from post_comments where id = $1 and post_id = $2 and not hidden`, [ref, p.id]);
+      if (!hit) fail(404, 'Commentaire introuvable');
+      parentId = hit!.parent_id ?? hit!.id;
+      targetUser = hit!.user_id;
+    }
     if (body && (await one(`select 1 from post_comments where user_id = $1 and post_id = $2 and body = $3 and created_at > now() - interval '1 hour'`, [u.id, p.id, body]))) fail(409, 'Vous avez déjà publié ce commentaire');
     const id = newId('pc');
     await tx(async (q) => {
-      await q.query(`insert into post_comments (id, post_id, user_id, body, style) values ($1,$2,$3,$4,$5)`, [id, p.id, u.id, body, style]);
+      await q.query(`insert into post_comments (id, post_id, user_id, parent_id, body, style) values ($1,$2,$3,$4,$5,$6)`, [id, p.id, u.id, parentId, body, style]);
       await attachMedia(q, fail, 'pcomment', id, u.id, rawMedia, 4);
     });
     try {
-      if (p.user_id !== u.id) await notifyUsers([p.user_id], { title: 'Nouveau commentaire', body: `${shortName((u.data.name as string) ?? '')} : ${(body || 'Photo').slice(0, 100)}`, url: '/fil', channel: 'updates' });
+      const name = shortName((u.data.name as string) ?? '');
+      const blockers = new Set((await all<{ blocker_id: string }>(`select blocker_id from user_blocks where blocked_id = $1`, [u.id])).map((r) => r.blocker_id));
+      const notify = [...new Set([targetUser ?? p.user_id, ...(targetUser ? [p.user_id] : [])])].filter((x) => x !== u.id && !blockers.has(x));
+      if (notify.length) await notifyUsers(notify, { title: targetUser ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} : ${(body || 'Photo').slice(0, 100)}`, url: '/fil', channel: 'updates' });
     } catch (e) {
       console.error('[posts] notification', e);
     }
     const row = (await all<PCRow>(`${PC_SELECT} where c.id = $1`, [id]))[0]!;
-    return pcOut(row, (await mediaFor('pcomment', [id])).get(id) ?? [], u, p.organizer_id);
+    return { ...pcOut(row, (await mediaFor('pcomment', [id])).get(id) ?? [], u, p.organizer_id, new Map()), replies: [] };
+  };
+
+  /** « J'aime » d'un commentaire de publication (ou d'une réponse). */
+  const likePostComment = (on: boolean): Handler => async (c) => {
+    const u = auth(c);
+    const r = await one<{ post_id: string }>(`select post_id from post_comments where id = $1 and not hidden`, [c.params.id]);
+    if (!r) fail(404, 'Commentaire introuvable');
+    await visiblePost(r!.post_id);
+    await rateLimit(`clike:${u.id}`, 200, 60);
+    if (on) await db().query(`insert into comment_likes (kind, comment_id, user_id) values ('pcomment', $1, $2) on conflict do nothing`, [c.params.id, u.id]);
+    else await db().query(`delete from comment_likes where kind = 'pcomment' and comment_id = $1 and user_id = $2`, [c.params.id, u.id]);
+    const n = Number((await one<{ n: string }>(`select count(*) as n from comment_likes where kind = 'pcomment' and comment_id = $1`, [c.params.id]))?.n ?? 0);
+    return { liked: on, likes: n };
   };
 
   const deletePostComment: Handler = async (c) => {
@@ -197,7 +233,9 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     if (!r) fail(404, 'Commentaire introuvable');
     const allowed = u.id === r!.user_id || u.role === 'admin' || (!!r!.organizer_id && u.organizer_id === r!.organizer_id);
     if (!allowed) fail(404, 'Commentaire introuvable');
-    await dropMedia('pcomment', [c.params.id!]);
+    const ids = [c.params.id!, ...(await all<{ id: string }>(`select id from post_comments where parent_id = $1`, [c.params.id])).map((x) => x.id)];
+    await dropMedia('pcomment', ids);
+    await db().query(`delete from comment_likes where kind = 'pcomment' and comment_id = any($1)`, [ids]);
     await db().query(`delete from post_comments where id = $1`, [c.params.id]);
     return null;
   };
@@ -221,6 +259,8 @@ export function postRoutes(h: SocialDeps): [string, string, Handler][] {
     ['GET', '/posts/:id/comments', listPostComments],
     ['POST', '/posts/:id/comments', addPostComment],
     ['DELETE', '/post-comments/:id', deletePostComment],
+    ['POST', '/post-comments/:id/like', likePostComment(true)],
+    ['DELETE', '/post-comments/:id/like', likePostComment(false)],
     ['POST', '/post-comments/:id/block', blockPostCommenter],
   ];
 }

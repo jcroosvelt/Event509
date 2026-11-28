@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ImagePlus, MessageCircle, Smile, Trash2, X } from 'lucide-react';
 import { useApp } from '@/store/app';
-import { addPostComment, createPost, deletePost, deletePostComment, likePost, listPostComments, type FeedPost, type PostComment } from '@/services/community';
+import { addPostComment, createPost, deletePost, deletePostComment, likePost, likePostComment, listPostComments, type FeedPost, type PostComment } from '@/services/community';
 import { uploadMedia, type MediaIn } from '@/services/social';
 import { ReportContent } from '@/components/ReportContent';
 import { MediaGrid, STICKERS, StyledText, TEXT_STYLES } from '@/components/PostMedia';
@@ -10,9 +10,9 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { relative, cx } from '@/lib/format';
 import { Avatar, Button, Card, Spinner, Textarea } from '@/components/ui';
 
-function CommentComposer({ postId, onDone }: { postId: string; onDone: (c: PostComment) => void }) {
+function CommentComposer({ postId, onDone, parentId, initial = '', autoFocus }: { postId: string; onDone: (c: PostComment) => void; parentId?: string; initial?: string; autoFocus?: boolean }) {
   const { t, toast } = useApp();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initial);
   const [files, setFiles] = useState<File[]>([]);
   const [stickers, setStickers] = useState<string[]>([]);
   const [picker, setPicker] = useState(false);
@@ -24,7 +24,7 @@ function CommentComposer({ postId, onDone }: { postId: string; onDone: (c: PostC
       const media: MediaIn[] = [];
       for (const f of files) media.push({ fileId: (await uploadMedia(f)).fileId });
       for (const s of stickers) media.push({ kind: 'sticker', sticker: s });
-      onDone(await addPostComment(postId, text, media));
+      onDone(await addPostComment(postId, text, media, parentId));
       setText(''); setFiles([]); setStickers([]);
     } catch (e) {
       toast(e instanceof Error ? e.message : t('Le commentaire n’a pas pu être publié. Réessayez.'), 'error');
@@ -34,7 +34,7 @@ function CommentComposer({ postId, onDone }: { postId: string; onDone: (c: PostC
   };
   return (
     <div>
-      <Textarea rows={2} value={text} maxLength={1000} placeholder={t('Écrire un commentaire…')} aria-label={t('Écrire un commentaire…')} onChange={(e) => setText(e.target.value)} />
+      <Textarea rows={2} value={text} autoFocus={autoFocus} maxLength={1000} placeholder={parentId ? t('Votre réponse…') : t('Écrire un commentaire…')} aria-label={t('Écrire un commentaire…')} onChange={(e) => setText(e.target.value)} />
       {(files.length > 0 || stickers.length > 0) && (
         <ul className="mt-2 flex flex-wrap gap-2">
           {files.map((f, i) => <li key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full bg-canvas px-3 py-1 text-xs font-semibold">{f.name.slice(0, 24)}<button type="button" aria-label={t('Retirer')} onClick={() => setFiles(files.filter((_, j) => j !== i))}><X className="h-3 w-3" aria-hidden /></button></li>)}
@@ -60,8 +60,50 @@ function CommentComposer({ postId, onDone }: { postId: string; onDone: (c: PostC
   );
 }
 
-function Comments({ post, onCount }: { post: FeedPost; onCount: (n: number) => void }) {
+function PostCommentItem({ c, topId, isReply, onChanged, onRemove }: { c: PostComment; topId?: string; isReply?: boolean; onChanged: () => void; onRemove: (c: PostComment) => void }) {
   const { t, lang, user, toast } = useApp();
+  const [liked, setLiked] = useState(c.liked);
+  const [likes, setLikes] = useState(c.likes);
+  const [replying, setReplying] = useState(false);
+  const like = async () => {
+    if (!user) { toast(t('Connectez-vous pour aimer'), 'error'); return; }
+    const on = !liked;
+    setLiked(on);
+    setLikes((n) => n + (on ? 1 : -1));
+    try { const r = await likePostComment(c.id, on); setLiked(r.liked); setLikes(r.likes); } catch { setLiked(!on); setLikes((n) => n + (on ? -1 : 1)); toast(t('Action impossible. Réessayez.'), 'error'); }
+  };
+  return (
+    <li className={isReply ? 'mt-3' : ''}>
+      <div className="flex gap-3">
+        <Avatar name={c.author.name} src={c.author.avatarUrl} size={isReply ? 28 : 32} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm"><b>{c.author.name}</b> {c.author.isOrganizer && <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-bold text-brand-ink">{t('Organisateur')}</span>} <span className="text-xs text-ink-muted">{relative(c.createdAt, lang)}</span></p>
+          {c.body && <StyledText text={c.body} />}
+          <MediaGrid media={c.media} />
+          <div className="mt-1 flex flex-wrap gap-3 text-xs font-semibold text-ink-muted">
+            <button type="button" aria-pressed={liked} className={cx('hover:text-ink', liked && 'text-red-600')} onClick={() => void like()}><Heart className={cx('mr-1 inline h-3 w-3', liked && 'fill-red-500')} aria-hidden />{likes > 0 ? `${t('Aimer')} · ${likes}` : t('Aimer')}</button>
+            {user && <button type="button" className="hover:text-ink" onClick={() => setReplying((r) => !r)}>{t('Répondre')}</button>}
+            {user && !c.mine && <ReportContent kind="pcomment" targetId={c.id} />}
+            {c.canDelete && <button type="button" className="hover:text-red-600" onClick={() => onRemove(c)}><Trash2 className="mr-1 inline h-3 w-3" aria-hidden />{t('Supprimer')}</button>}
+          </div>
+          {replying && (
+            <div className="mt-2">
+              <CommentComposer postId={c.postId} parentId={topId ?? c.id} initial={isReply ? `@${c.author.name} ` : ''} autoFocus onDone={() => { setReplying(false); onChanged(); }} />
+            </div>
+          )}
+          {!isReply && c.replies && c.replies.length > 0 && (
+            <ul className="mt-2 border-l-2 border-line pl-3">
+              {c.replies.map((r) => <PostCommentItem key={r.id} c={r} topId={c.id} isReply onChanged={onChanged} onRemove={onRemove} />)}
+            </ul>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function Comments({ post, onCount }: { post: FeedPost; onCount: (n: number) => void }) {
+  const { t, user, toast } = useApp();
   const [items, setItems] = useState<PostComment[] | null>(null);
   const load = () => { listPostComments(post.id).then((d) => { setItems(d.items); onCount(d.total); }).catch(() => setItems([])); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,20 +119,7 @@ function Comments({ post, onCount }: { post: FeedPost; onCount: (n: number) => v
         : <p className="text-sm text-ink-soft"><Link to={`/connexion?next=${encodeURIComponent('/fil')}`} className="font-semibold text-brand-ink">{t('Connectez-vous')}</Link> {t('pour commenter cet événement.')}</p>}
       {items === null ? <div className="grid place-items-center py-3"><Spinner /></div> : (
         <ul className="mt-4 space-y-4">
-          {items.map((c) => (
-            <li key={c.id} className="flex gap-3">
-              <Avatar name={c.author.name} src={c.author.avatarUrl} size={32} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm"><b>{c.author.name}</b> <span className="text-xs text-ink-muted">{relative(c.createdAt, lang)}</span></p>
-                {c.body && <StyledText text={c.body} />}
-                <MediaGrid media={c.media} />
-                <div className="mt-1 flex gap-3 text-xs font-semibold text-ink-muted">
-                  {user && !c.mine && <ReportContent kind="pcomment" targetId={c.id} />}
-                  {c.canDelete && <button type="button" className="hover:text-red-600" onClick={() => void remove(c)}><Trash2 className="mr-1 inline h-3 w-3" aria-hidden />{t('Supprimer')}</button>}
-                </div>
-              </div>
-            </li>
-          ))}
+          {items.map((c) => <PostCommentItem key={c.id} c={c} onChanged={load} onRemove={(x) => void remove(x)} />)}
         </ul>
       )}
     </div>

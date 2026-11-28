@@ -24,6 +24,16 @@ export interface SocialDeps {
 }
 
 export const MAX_COMMENT = 1000;
+
+/** Nombre de « j'aime » et état pour la personne connectée, pour une liste de commentaires. */
+export async function likesFor(kind: 'comment' | 'pcomment', ids: string[], viewerId: string): Promise<Map<string, { n: number; liked: boolean }>> {
+  const out = new Map<string, { n: number; liked: boolean }>();
+  if (!ids.length) return out;
+  const rows = await all<{ comment_id: string; n: string; liked: boolean }>(
+    `select comment_id, count(*) as n, bool_or(user_id = $3) as liked from comment_likes where kind = $1 and comment_id = any($2) group by comment_id`, [kind, ids, viewerId]);
+  for (const r of rows) out.set(r.comment_id, { n: Number(r.n), liked: r.liked });
+  return out;
+}
 export const MAX_MESSAGE = 2000;
 
 /** Caractères de contrôle et marques invisibles de direction/largeur nulle (écrits en séquences d'échappement : aucun caractère invisible dans ce fichier). */
@@ -84,7 +94,8 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
 
   // ---------- Commentaires ----------
   interface CommentRow { id: string; event_id: string; user_id: string; parent_id: string | null; body: string; style: string | null; created_at: Date; data: UserBits; org_id: string | null }
-  const commentOut = (r: CommentRow, ev: EventItem, viewer: UserRow | null, verified: boolean, media: Map<string, MediaOut[]>) => ({
+  const commentOut = (r: CommentRow, ev: EventItem, viewer: UserRow | null, verified: boolean, media: Map<string, MediaOut[]>, lk: Map<string, { n: number; liked: boolean }> = new Map()) => ({
+    likes: lk.get(r.id)?.n ?? 0, liked: lk.get(r.id)?.liked ?? false,
     id: r.id, eventId: r.event_id, parentId: r.parent_id, body: r.body, style: r.style || 'plain', media: media.get(r.id) ?? [], createdAt: r.created_at.toISOString(),
     author: { name: shortName(r.data.name ?? ''), avatarUrl: r.data.avatarUrl || undefined, isOrganizer: r.org_id === ev.organizerId, verified: r.org_id === ev.organizerId && verified },
     mine: viewer?.id === r.user_id,
@@ -108,11 +119,12 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     const verified = (await one<{ v: boolean | null }>(`select (data->>'verified')::boolean as v from organizers where id = $1`, [ev.organizerId]))?.v === true;
     const total = Number((await one<{ n: string }>(`select count(*) as n from event_comments where event_id = $1 and not hidden`, [ev.id]))?.n ?? 0);
     const media = await mediaFor('comment', [...top, ...replies].map((r) => r.id));
+    const lk = await likesFor('comment', [...top, ...replies].map((r) => r.id), c.user?.id ?? '');
     return {
       total,
       hasMore: top.length === 30,
       enabled: ev.commentsEnabled !== false,
-      items: top.map((t) => ({ ...commentOut(t, ev, c.user, verified, media), replies: replies.filter((r) => r.parent_id === t.id).map((r) => commentOut(r, ev, c.user, verified, media)) })),
+      items: top.map((t) => ({ ...commentOut(t, ev, c.user, verified, media, lk), replies: replies.filter((r) => r.parent_id === t.id).map((r) => commentOut(r, ev, c.user, verified, media, lk)) })),
     };
   };
 
@@ -129,9 +141,14 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     await rateLimit(`comment:${u.id}`, 10, 10);
     await rateLimit(`comment-day:${u.id}`, 100, 24 * 60);
     let parent: { id: string; user_id: string } | null = null;
+    let target: { user_id: string } | null = null; // la personne à qui on répond (peut être l'auteur d'une réponse)
     const parentId = str(c.body.parentId, 60);
     if (parentId) {
-      parent = await one<{ id: string; user_id: string }>(`select id, user_id from event_comments where id = $1 and event_id = $2 and parent_id is null and not hidden`, [parentId, ev.id]);
+      const hit = await one<{ id: string; user_id: string; parent_id: string | null }>(`select id, user_id, parent_id from event_comments where id = $1 and event_id = $2 and not hidden`, [parentId, ev.id]);
+      if (!hit) fail(404, 'Commentaire introuvable');
+      target = { user_id: hit!.user_id };
+      // Une réponse à une réponse reste sous le commentaire principal (un seul niveau d'imbrication)
+      parent = hit!.parent_id ? await one<{ id: string; user_id: string }>(`select id, user_id from event_comments where id = $1`, [hit!.parent_id]) : { id: hit!.id, user_id: hit!.user_id };
       if (!parent) fail(404, 'Commentaire introuvable');
     }
     // Même texte déjà publié par la même personne il y a peu : on ne le republie pas (anti-répétition)
@@ -146,8 +163,8 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
       // Les personnes qui ont bloqué l'auteur ne reçoivent aucune alerte de sa part
       const blockers = new Set((await all<{ blocker_id: string }>(`select blocker_id from user_blocks where blocked_id = $1`, [u.id])).map((r) => r.blocker_id));
       const team = (await organizerUserIds(ev.organizerId)).filter((t) => !blockers.has(t));
-      if (parent && parent.user_id !== u.id && !blockers.has(parent.user_id)) await notifyUsers([parent.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body || 'Photo')}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
-      const others = team.filter((t) => t !== u.id && t !== parent?.user_id);
+      if (target && target.user_id !== u.id && !blockers.has(target.user_id)) await notifyUsers([target.user_id], { title: 'Réponse à votre commentaire', body: `${name} : ${preview(body || 'Photo')}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
+      const others = team.filter((t) => t !== u.id && t !== target?.user_id);
       if (others.length) await notifyUsers(others, { title: parent ? 'Nouvelle réponse' : 'Nouveau commentaire', body: `${name} sur « ${ev.title} » : ${preview(body || 'Photo')}`, url: `/e/${ev.slug || ev.id}`, channel: 'updates' });
     } catch (e) {
       console.error('[social] notification', e);
@@ -165,9 +182,24 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     if (!r) fail(404, 'Commentaire introuvable');
     const allowed = u.id === r!.user_id || u.role === 'admin' || (!!u.organizer_id && u.organizer_id === r!.organizer_id);
     if (!allowed) fail(404, 'Commentaire introuvable');
-    await dropMedia('comment', [c.params.id!, ...(await all<{ id: string }>(`select id from event_comments where parent_id = $1`, [c.params.id])).map((x) => x.id)]);
+    const ids = [c.params.id!, ...(await all<{ id: string }>(`select id from event_comments where parent_id = $1`, [c.params.id])).map((x) => x.id)];
+    await dropMedia('comment', ids);
+    await db().query(`delete from comment_likes where kind = 'comment' and comment_id = any($1)`, [ids]);
     await db().query(`delete from event_comments where id = $1`, [c.params.id]);
     return null;
+  };
+
+  /** « J'aime » d'un commentaire d'événement (ou d'une réponse) : une fois par personne, retirable. */
+  const likeComment = (on: boolean): Handler => async (c) => {
+    const u = auth(c);
+    const r = await one<{ event_id: string }>(`select event_id from event_comments where id = $1 and not hidden`, [c.params.id]);
+    if (!r) fail(404, 'Commentaire introuvable');
+    await visibleEvent(c, r!.event_id);
+    await rateLimit(`clike:${u.id}`, 200, 60);
+    if (on) await db().query(`insert into comment_likes (kind, comment_id, user_id) values ('comment', $1, $2) on conflict do nothing`, [c.params.id, u.id]);
+    else await db().query(`delete from comment_likes where kind = 'comment' and comment_id = $1 and user_id = $2`, [c.params.id, u.id]);
+    const n = Number((await one<{ n: string }>(`select count(*) as n from comment_likes where kind = 'comment' and comment_id = $1`, [c.params.id]))?.n ?? 0);
+    return { liked: on, likes: n };
   };
 
   // ---------- Messages privés ----------
@@ -323,6 +355,8 @@ export function socialRoutes(h: SocialDeps): [string, string, Handler][] {
     ['GET', '/events/:id/comments', listComments],
     ['POST', '/events/:id/comments', addComment],
     ['DELETE', '/comments/:id', deleteComment],
+    ['POST', '/comments/:id/like', likeComment(true)],
+    ['DELETE', '/comments/:id/like', likeComment(false)],
     ['POST', '/messages', startConversation],
     ['GET', '/me/conversations', myConversations],
     ['GET', '/me/conversations/:id', myThread],

@@ -8,7 +8,7 @@ export interface CommentAuthor { name: string; avatarUrl?: string; isOrganizer: 
 /** Média d'un commentaire ou d'une publication : photo, GIF, vidéo ou autocollant (émoji). */
 export interface PostMedia { id: string; kind: 'image' | 'gif' | 'video' | 'sticker'; url?: string; sticker?: string; duration?: number }
 export interface EventComment {
-  id: string; eventId: string; parentId: string | null; body: string; style?: string; media?: PostMedia[]; createdAt: string; author: CommentAuthor; mine: boolean; canDelete: boolean;
+  id: string; eventId: string; parentId: string | null; body: string; style?: string; media?: PostMedia[]; createdAt: string; author: CommentAuthor; mine: boolean; canDelete: boolean; likes?: number; liked?: boolean;
   replies?: EventComment[];
 }
 export interface CommentList { total: number; hasMore: boolean; enabled?: boolean; items: EventComment[] }
@@ -41,6 +41,7 @@ export async function uploadMedia(file: File): Promise<{ fileId: string; kind: '
   }
   throw new Error('envoi incomplet');
 }
+export const likeComment = (id: string, on: boolean) => http<{ liked: boolean; likes: number }>(`/comments/${encodeURIComponent(id)}/like`, { method: on ? 'POST' : 'DELETE', ...(on ? { body: '{}' } : {}) });
 export const deleteComment = (id: string) => http<null>(`/comments/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export interface ConversationItem {

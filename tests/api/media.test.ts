@@ -95,6 +95,20 @@ describe.skipIf(!DB)('Médias et publications', () => {
     const list = await call('GET', `/events/${id}/comments`, undefined, b.token);
     expect(list.body.enabled).toBe(true);
     expect(list.body.items[1].media[0].url).toMatch(/^\/api\/files\//);
+    // réponse à un commentaire, puis à la réponse (rattachée au commentaire principal) ; j'aime sur un commentaire et sur une réponse
+    const r1 = await call('POST', `/events/${id}/comments`, { body: 'Merci Prénomb', parentId: c.body.id }, o.token);
+    expect(r1.status, JSON.stringify(r1.body)).toBe(200);
+    const r2 = await call('POST', `/events/${id}/comments`, { body: 'Avec plaisir', parentId: r1.body.id }, b.token);
+    expect(r2.body.parentId).toBe(c.body.id);
+    expect((await call('POST', `/comments/${c.body.id}/like`, {}, other.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/comments/${c.body.id}/like`, {}, other.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/comments/${r1.body.id}/like`, {}, b.token)).body.likes).toBe(1);
+    expect((await call('POST', `/comments/${c.body.id}/like`, {})).status).toBe(401);
+    const th = await call('GET', `/events/${id}/comments`, undefined, other.token);
+    const top = th.body.items.find((i: { id: string }) => i.id === c.body.id);
+    expect(top).toMatchObject({ likes: 1, liked: true });
+    expect(top.replies.map((r: { body: string }) => r.body)).toEqual(['Merci Prénomb', 'Avec plaisir']);
+    expect((await call('DELETE', `/comments/${c.body.id}/like`, undefined, other.token)).body).toEqual({ liked: false, likes: 0 });
     // désactivation par l'organisateur
     const off = await call('PUT', '/org/events', { ...ev.body, commentsEnabled: false }, o.token);
     expect(off.status, JSON.stringify(off.body)).toBe(200);
@@ -150,12 +164,27 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect(cl.body.items[0].author.name).toMatch(/^Prénom\w+ N\.$/);
     // page publique de l'organisation
     expect((await call('GET', `/organizers/${o.orgId}/posts`)).body.items).toHaveLength(2);
+    // réponses (comme sur Facebook) : à un commentaire, puis à une réponse (rattachée au commentaire principal) ; j'aime sur chaque commentaire
+    const rep = await call('POST', `/posts/${p.body.id}/comments`, { body: 'Merci !', parentId: c1.body.id }, o.token);
+    expect(rep.status, JSON.stringify(rep.body)).toBe(200);
+    expect(rep.body.parentId).toBe(c1.body.id);
+    expect(rep.body.author.isOrganizer).toBe(true);
+    const rep2 = await call('POST', `/posts/${p.body.id}/comments`, { body: 'Avec plaisir', parentId: rep.body.id }, fan.token);
+    expect(rep2.body.parentId).toBe(c1.body.id);
+    expect((await call('POST', `/post-comments/${c1.body.id}/like`, {}, fan.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/post-comments/${c1.body.id}/like`, {}, fan.token)).body).toEqual({ liked: true, likes: 1 });
+    expect((await call('POST', `/post-comments/${rep.body.id}/like`, {}, m.token)).body.likes).toBe(1);
+    expect((await call('POST', `/post-comments/${c1.body.id}/like`, {})).status).toBe(401);
+    const thread = await call('GET', `/posts/${p.body.id}/comments`, undefined, fan.token);
+    expect(thread.body.items[0]).toMatchObject({ likes: 1, liked: true });
+    expect(thread.body.items[0].replies.map((r: { body: string }) => r.body)).toEqual(['Merci !', 'Avec plaisir']);
+    expect((await call('DELETE', `/post-comments/${c1.body.id}/like`, undefined, fan.token)).body).toEqual({ liked: false, likes: 0 });
     // signalement du commentaire par 3 personnes : masqué ; puis suppression par l'organisation
     for (const n of ['r1', 'r2', 'r3']) {
       const r = await account(n);
       expect((await call('POST', '/reports/content', { kind: 'pcomment', targetId: c1.body.id, reason: 'spam' }, r.token)).status).toBe(200);
     }
-    expect((await call('GET', `/posts/${p.body.id}/comments`, undefined, fan.token)).body.total).toBe(0);
+    expect((await call('GET', `/posts/${p.body.id}/comments`, undefined, fan.token)).body.items).toHaveLength(0);
     // signalement d'une publication par 3 personnes : masquée du fil
     for (const n of ['s1', 's2', 's3']) {
       const r = await account(n);
@@ -168,30 +197,27 @@ describe.skipIf(!DB)('Médias et publications', () => {
     expect((await pool.query(`select 1 from files where id = $1`, [f.body.fileId])).rowCount).toBe(0);
   });
 
-  it('note d’un événement en étoiles (1 à 5) : billet payé et événement terminé requis, une note par personne, moyenne publique', async () => {
+  it('note d’un événement en étoiles (1 à 5) : à tout moment, même avant l’événement, une note par compte, moyenne publique', async () => {
     const o = await orgAccount('e');
     const b = await account('rb');
     const other = await account('rc');
     const ev = await call('PUT', '/org/events', event(), o.token);
-    const id = ev.body.id as string;
-    await pool.query(`insert into orders (id, event_id, user_id, buyer_email, status, data) values ($1,$2,$3,$4,'paid',$5)`, [`or_${tag}`, id, b.id, `${b.id}@media.test`, JSON.stringify({ buyerName: 'Marie Joseph' })]);
-    // avant la fin : pas encore
-    const st0 = await call('GET', `/events/${id}/my-rating`, undefined, b.token);
-    expect(st0.body).toMatchObject({ hasTicket: true, over: false, canRate: false });
-    expect((await call('PUT', `/events/${id}/rating`, { rating: 5 }, b.token)).status).toBe(409);
-    await pool.query(`update events set start_at = '2020-01-01', data = jsonb_set(jsonb_set(data, '{start}', '"2020-01-01T10:00:00"'), '{end}', '"2020-01-01T12:00:00"') where id = $1`, [id]);
+    const id = ev.body.id as string; // événement à venir : on peut déjà le noter
     expect((await call('GET', `/events/${id}/my-rating`, undefined, b.token)).body).toMatchObject({ canRate: true, rating: 0 });
-    // sans billet, sans compte, note invalide : refusés
-    expect((await call('PUT', `/events/${id}/rating`, { rating: 5 }, other.token)).status).toBe(403);
     expect((await call('PUT', `/events/${id}/rating`, { rating: 5 })).status).toBe(401);
     for (const bad of [0, 6, 2.5, 'x']) expect((await call('PUT', `/events/${id}/rating`, { rating: bad }, b.token)).status).toBe(422);
-    // note, puis nouvelle note : remplace (une seule note par personne)
     expect((await call('PUT', `/events/${id}/rating`, { rating: 4 }, b.token)).body).toMatchObject({ average: 4, count: 1, rating: 4 });
+    // nouvelle note : remplace (une seule note par compte)
     expect((await call('PUT', `/events/${id}/rating`, { rating: 5, comment: 'Superbe' }, b.token)).body).toMatchObject({ average: 5, count: 1, rating: 5 });
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 2 }, other.token)).body).toMatchObject({ average: 3.5, count: 2, rating: 2 });
     expect((await call('GET', `/events/${id}/my-rating`, undefined, b.token)).body).toMatchObject({ rating: 5, comment: 'Superbe' });
     const list = await call('GET', `/events/${id}/reviews`);
-    expect(list.body).toMatchObject({ average: 5, count: 1 });
-    expect(list.body.items[0].author).toBe('Marie J.');
+    expect(list.body).toMatchObject({ average: 3.5, count: 2 });
+    expect(list.body.items.map((i: { author: string }) => i.author)).toContain('Prénomrb N.');
+    // un acheteur qui a déjà noté avec le lien de sa commande garde une seule note
+    await pool.query(`insert into orders (id, event_id, user_id, buyer_email, status, data) values ($1,$2,$3,$4,'paid',$5)`, [`or_${tag}`, id, other.id, `${other.id}@media.test`, JSON.stringify({ buyerName: 'Paul P' })]);
+    await pool.query(`update reviews set order_id = $2 where event_id = $1 and (data->>'rating')::int = 2`, [id, `or_${tag}`]);
+    expect((await call('PUT', `/events/${id}/rating`, { rating: 3 }, other.token)).body).toMatchObject({ count: 2, rating: 3 });
     await pool.query(`delete from orders where id = $1`, [`or_${tag}`]);
   });
 

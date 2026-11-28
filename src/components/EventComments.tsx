@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CornerDownRight, ImagePlus, MessageCircle, Smile, Trash2, UserX, X } from 'lucide-react';
+import { CornerDownRight, Heart, ImagePlus, MessageCircle, Smile, Trash2, UserX, X } from 'lucide-react';
 import { useApp } from '@/store/app';
-import { deleteComment, listComments, postComment, socialAvailable, uploadMedia, type CommentList, type EventComment, type MediaIn } from '@/services/social';
+import { deleteComment, likeComment, listComments, postComment, socialAvailable, uploadMedia, type CommentList, type EventComment, type MediaIn } from '@/services/social';
 import { MediaGrid, STICKERS, StyledText } from '@/components/PostMedia';
 import { blockAuthor } from '@/services/community';
 import { ReportContent } from '@/components/ReportContent';
-import { relative } from '@/lib/format';
+import { cx, relative } from '@/lib/format';
 import { Avatar, Badge, Button, Card, Spinner, Textarea } from '@/components/ui';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 const MAX = 1000;
 
-function Composer({ eventId, parentId, onDone, autoFocus, placeholder }: { eventId: string; parentId?: string; onDone: (c: EventComment) => void; autoFocus?: boolean; placeholder?: string }) {
+function Composer({ eventId, parentId, onDone, autoFocus, placeholder, initial = '' }: { eventId: string; parentId?: string; onDone: (c: EventComment) => void; autoFocus?: boolean; placeholder?: string; initial?: string }) {
   const { t, toast } = useApp();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [stickers, setStickers] = useState<string[]>([]);
@@ -81,8 +81,17 @@ function Composer({ eventId, parentId, onDone, autoFocus, placeholder }: { event
   );
 }
 
-function Item({ c, eventId, onReply, onRemove, isReply }: { c: EventComment; eventId: string; onReply: (c: EventComment) => void; onRemove: (c: EventComment) => void; isReply?: boolean }) {
+function Item({ c, eventId, onReply, onRemove, isReply, topId }: { c: EventComment; eventId: string; onReply: (c: EventComment) => void; onRemove: (c: EventComment) => void; isReply?: boolean; topId?: string }) {
   const { t, lang, user, toast } = useApp();
+  const [liked, setLiked] = useState(c.liked === true);
+  const [likes, setLikes] = useState(c.likes ?? 0);
+  const like = async () => {
+    if (!user) { toast(t('Connectez-vous pour aimer'), 'error'); return; }
+    const on = !liked;
+    setLiked(on);
+    setLikes((n) => n + (on ? 1 : -1));
+    try { const r = await likeComment(c.id, on); setLiked(r.liked); setLikes(r.likes); } catch { setLiked(!on); setLikes((n) => n + (on ? -1 : 1)); toast(t('Action impossible. Réessayez.'), 'error'); }
+  };
   const block = async () => {
     if (!window.confirm(t('Bloquer ce membre ? Vous ne verrez plus ses commentaires ni ses photos.'))) return;
     try { await blockAuthor('comment', c.id); toast(t('Membre bloqué')); onReply(c); } catch { toast(t('Action impossible. Réessayez.'), 'error'); }
@@ -102,19 +111,20 @@ function Item({ c, eventId, onReply, onRemove, isReply }: { c: EventComment; eve
           {c.body && <StyledText text={c.body} style={c.style} />}
           <MediaGrid media={c.media} />
           <div className="mt-1 flex gap-3 text-xs font-semibold text-ink-muted">
-            {!isReply && user && <button type="button" className="hover:text-ink" onClick={() => setReplying((r) => !r)}><CornerDownRight className="mr-1 inline h-3 w-3" aria-hidden />{t('Répondre')}</button>}
+            <button type="button" aria-pressed={liked} className={cx('hover:text-ink', liked && 'text-red-600')} onClick={() => void like()}><Heart className={cx('mr-1 inline h-3 w-3', liked && 'fill-red-500')} aria-hidden />{likes > 0 ? `${t('Aimer')} · ${likes}` : t('Aimer')}</button>
+            {user && <button type="button" className="hover:text-ink" onClick={() => setReplying((r) => !r)}><CornerDownRight className="mr-1 inline h-3 w-3" aria-hidden />{t('Répondre')}</button>}
             {user && !c.mine && <ReportContent kind="comment" targetId={c.id} />}
             {user && !c.mine && <button type="button" className="hover:text-red-600" onClick={() => void block()}><UserX className="mr-1 inline h-3 w-3" aria-hidden />{t('Bloquer')}</button>}
             {c.canDelete && <button type="button" className="hover:text-red-600" onClick={() => onRemove(c)}><Trash2 className="mr-1 inline h-3 w-3" aria-hidden />{t('Supprimer')}</button>}
           </div>
           {replying && (
             <div className="mt-2">
-              <Composer eventId={eventId} parentId={c.id} autoFocus placeholder={t('Votre réponse…')} onDone={(r) => { setReplying(false); onReply(r); }} />
+              <Composer eventId={eventId} parentId={topId ?? c.id} initial={isReply ? `@${c.author.name} ` : ''} autoFocus placeholder={t('Votre réponse…')} onDone={(r) => { setReplying(false); onReply(r); }} />
             </div>
           )}
           {!isReply && c.replies && c.replies.length > 0 && (
             <ul className="mt-2 border-l-2 border-line pl-3">
-              {c.replies.map((r) => <Item key={r.id} c={r} eventId={eventId} onReply={onReply} onRemove={onRemove} isReply />)}
+              {c.replies.map((r) => <Item key={r.id} c={r} eventId={eventId} onReply={onReply} onRemove={onRemove} isReply topId={c.id} />)}
             </ul>
           )}
         </div>

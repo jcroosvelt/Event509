@@ -884,3 +884,15 @@ create index if not exists post_ratings_user on post_ratings(user_id);
 
 -- Les notes en étoiles concernent les événements (table reviews), pas les publications
 drop table if exists post_ratings;
+
+-- « J'aime » des commentaires (commentaires d'événement et commentaires de publication) ; réponses aux commentaires de publication
+create table if not exists comment_likes (
+  kind text not null check (kind in ('comment', 'pcomment')),
+  comment_id text not null,
+  user_id text not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (kind, comment_id, user_id)
+);
+create index if not exists comment_likes_user on comment_likes(user_id);
+alter table post_comments add column if not exists parent_id text references post_comments(id) on delete cascade;
+create index if not exists post_comments_parent on post_comments(parent_id);

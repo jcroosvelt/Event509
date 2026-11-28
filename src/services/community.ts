@@ -51,15 +51,16 @@ export interface FeedPost {
   event?: { id: string; slug: string; title: string };
   mine: boolean; canDelete: boolean;
 }
-export interface PostComment { id: string; postId: string; body: string; createdAt: string; media: PostMedia[]; author: { name: string; avatarUrl?: string; isOrganizer: boolean }; mine: boolean; canDelete: boolean }
+export interface PostComment { id: string; postId: string; parentId?: string | null; body: string; createdAt: string; media: PostMedia[]; likes: number; liked: boolean; author: { name: string; avatarUrl?: string; isOrganizer: boolean }; mine: boolean; canDelete: boolean; replies?: PostComment[] }
 export const createPost = (body: string, style: string, media: MediaIn[]) =>
   http<FeedPost>('/posts', { method: 'POST', body: JSON.stringify({ body, style, media: media.length ? media : undefined }) });
 export const deletePost = (id: string) => http<null>(`/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const likePost = (id: string, on: boolean) => http<{ liked: boolean; likes: number }>(`/posts/${encodeURIComponent(id)}/like`, { method: on ? 'POST' : 'DELETE', ...(on ? { body: '{}' } : {}) });
 export const listPostComments = (id: string, before?: string) =>
   http<{ total: number; hasMore: boolean; items: PostComment[] }>(`/posts/${encodeURIComponent(id)}/comments${before ? `?before=${encodeURIComponent(before)}` : ''}`);
-export const addPostComment = (id: string, body: string, media: MediaIn[]) =>
-  http<PostComment>(`/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify({ body, media: media.length ? media : undefined }) });
+export const addPostComment = (id: string, body: string, media: MediaIn[], parentId?: string) =>
+  http<PostComment>(`/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify({ body, parentId, media: media.length ? media : undefined }) });
+export const likePostComment = (id: string, on: boolean) => http<{ liked: boolean; likes: number }>(`/post-comments/${encodeURIComponent(id)}/like`, { method: on ? 'POST' : 'DELETE', ...(on ? { body: '{}' } : {}) });
 export const deletePostComment = (id: string) => http<null>(`/post-comments/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export type FeedItem =
